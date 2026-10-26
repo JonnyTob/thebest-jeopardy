@@ -4,7 +4,8 @@ A locally hosted, sequential multiplayer buzzer quiz. The gamemaster runs the
 show on a laptop, a separate TV displays clues, and players buzz from their
 phones. Answers are spoken aloud and scored only by the gamemaster.
 
-The new app lives entirely under [src/](./src/). It is separate from the archived
+The application source lives under [src/](./src/), with standalone development
+helpers in [script/](./script/). It is separate from the archived
 Jeopardy project; there is no category/tile board.
 
 ## Run locally
@@ -138,6 +139,43 @@ implementation can replace JSON without changing the game engine.
 
 ## Validation
 
+### Populate the screens with test players
+
+The helper and its tests live in [script/](./script/), separate from the
+application source and production build.
+
+Start the app normally (`npm run dev` or `npm start`), then open a **second
+terminal** in the repository root:
+
+```sh
+npm run players
+```
+
+This joins **12 randomly named players with random avatars** and keeps them
+online while you inspect `/display` and `/admin`. Names have a unique batch
+suffix so repeated runs can coexist. The TV shows the top eight by default;
+admin lists every player.
+
+To change the count or target server:
+
+```sh
+npm run players -- --count 24
+npm run players -- --count 8 --url http://localhost:3001
+npm run players -- --help
+```
+
+The count must be between 1 and 100 per run. Use the server origin for `--url`,
+not the `/play` page. These are simulated socket clients, not browser windows.
+They do **not** buzz, answer, or change scores automatically. Use the host's
+manual score adjustments to test different rankings and negative scores.
+
+Keep the helper running while testing. **Ctrl+C disconnects its players but
+does not delete them or their scores.** Remove them in admin between questions,
+or restart the server to clear the entire session. A lost connection or removed
+test player stops the batch with an explicit message; rerun to create a new batch.
+
+### Automated checks
+
 ```sh
 npm test
 npm run typecheck
@@ -147,6 +185,8 @@ npm run build
 Tests cover exact scoring boundaries, first-buzz arbitration, frozen clocks,
 wrong-answer lockouts, undo, duplicate/stale commands, private-answer filtering,
 12-player ordering, reconnects, host authorization, and deterministic reveals.
+The layout-player helper is also tested for argument validation, joining 12
+distinct online players, and clean disconnection on Ctrl+C.
 
 ## POC limits / next steps
 
