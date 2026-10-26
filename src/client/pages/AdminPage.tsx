@@ -113,7 +113,8 @@ function PlayerTable({ state }: { state: Snapshot }) {
         <td className={player.score < 0 ? 'negative score-cell' : 'score-cell'}>{player.score.toLocaleString()}</td>
         <td><span className={player.connected ? 'positive' : 'muted'}>{player.connected ? 'Online' : 'Offline'}</span></td>
         <td><span className={`eligibility ${player.id === state.activePlayerId ? 'amber' : ''}`}>
-          {player.id === state.activePlayerId ? 'Answering' : state.lockedOutIds.includes(player.id) && activeClue ? 'Locked out' :
+          {player.id === state.activePlayerId ? 'Answering' : state.lockedOutIds.includes(player.id) && activeClue
+            ? `Locked out${state.lockoutRemainingMs[player.id] === undefined ? '' : ` (${Math.ceil(state.lockoutRemainingMs[player.id] / 1000)}s)`}` :
             state.phase === 'QUESTION_OPEN' && !state.paused && player.connected ? 'Ready' : 'Waiting'}</span></td>
         <td><ScoreAdjustment player={player} /></td><td><button className="quiet small" disabled={pending || !connected || activeClue}
           onClick={() => setRemoveId(player.id)}>Remove</button></td></tr>)}</tbody></table>
@@ -157,11 +158,13 @@ function Setup({ state }: { state: Snapshot }) {
         ['minimumPoints', 'Minimum points', 1, 10000],
         ['dropPoints', 'Points dropped per step', 1, 10000],
         ['dropEverySeconds', 'Seconds between drops', 1, 120],
+        ['lockoutSeconds', 'Wrong-answer lockout seconds (0 = entire question)', 0, 300],
       ] as const).map(([key, label, min, max]) => <label key={key}>{label}<input type="number" required min={min} max={max} step="1"
         value={settings[key]} onChange={(event) => setSettings({ ...settings, [key]: Number(event.target.value) })} /></label>)}</div>
       <button className="primary" type="submit">Save setup</button></fieldset>
     {message && <p role="status">{message}</p>}
     <p className="muted">Wrong answers always lose the frozen point value. The minimum value is not a deadline.</p>
+    <p className="muted">Timed lockouts start at the wrong-answer ruling and keep counting down during pauses and other players' answers. Players can buzz again when the timer ends and buzzers are open.</p>
   </form><section className="panel setup-guide"><h2>Before you start</h2><ol><li>Connect the TV and choose <strong>Extend</strong>, not Duplicate.</li>
     <li>Open <a href="/display" target="_blank" rel="noreferrer">the TV display</a> there and press F11.</li><li>Keep this private console on the laptop.</li>
     <li>Join phones on the same Wi-Fi. Allow the server port through the firewall.</li><li>For audio/video clues, enable playback in the TV browser.</li></ol>

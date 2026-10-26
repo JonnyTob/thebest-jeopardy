@@ -105,6 +105,13 @@ sharing the QR code.
 - Server-arbitrated first buzz, a frozen points-at-buzz value, and no answer
   countdown. Correct awards the frozen value; wrong deducts it, locks that player
   out, and resumes the clue for everyone else.
+- In **Game setup**, set **Wrong-answer lockout seconds** to 1-300 to allow
+  retries on the same question. The player's phone shows a countdown, and the
+  host's player table shows the remaining seconds. The timer starts when the
+  host rules an answer wrong and continues during pauses, other players' answers,
+  and disconnections. Once it expires, the player can buzz when buzzers are open.
+  The default, **0**, preserves one attempt per question. Setup is locked after
+  starting; resetting or advancing a question clears all lockouts.
 - Configurable starting/minimum points and decay steps. Defaults are
   **500 -> 400 -> 300 -> 200 -> 100**, every five seconds. Minimum value and media
   ending never auto-close a question.

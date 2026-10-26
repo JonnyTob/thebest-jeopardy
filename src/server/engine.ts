@@ -12,6 +12,7 @@ interface ClueState {
   startedAt: number | null;
   paused: boolean;
   lockedOutIds: string[];
+  lockedOutUntil: Record<string, number>;
   activePlayerId: string | null;
   pointsAtBuzz: number | null;
   mediaOffsetSeconds: number;
@@ -35,13 +36,13 @@ export class GameEngine {
   private processed = new Set<string>();
   private clue: ClueState = {
     phase: 'LOBBY', questionIndex: -1, elapsedMs: 0, startedAt: null,
-    paused: false, lockedOutIds: [], activePlayerId: null, pointsAtBuzz: null,
+    paused: false, lockedOutIds: [], lockedOutUntil: {}, activePlayerId: null, pointsAtBuzz: null,
     mediaOffsetSeconds: 0, mediaVersion: 0,
   };
 
   constructor(readonly quiz: Quiz, private readonly now: () => number = () => performance.now()) {
     this.settings = { title: quiz.title, leaderboardCount: 8, startPoints: 500,
-      minimumPoints: 100, dropPoints: 100, dropEverySeconds: 5 };
+      minimumPoints: 100, dropPoints: 100, dropEverySeconds: 5, lockoutSeconds: 0 };
   }
 
   private require(condition: unknown, message: string): asserts condition {
@@ -63,6 +64,11 @@ export class GameEngine {
 
   private isActive() {
     return this.clue.phase === 'QUESTION_OPEN' || this.clue.phase === 'ANSWERING';
+  }
+
+  private isLockedOut(playerId: string) {
+    const until = this.clue.lockedOutUntil[playerId];
+    return this.clue.lockedOutIds.includes(playerId) && (until === undefined || this.now() < until);
   }
 
   join(request: JoinRequest): Player {
@@ -87,7 +93,8 @@ export class GameEngine {
   buzz(playerId: string) {
     this.require(this.players.get(playerId)?.connected, 'Join the game before buzzing.');
     this.require(this.clue.phase === 'QUESTION_OPEN' && !this.clue.paused, 'Buzzers are not open.');
-    this.require(!this.clue.lockedOutIds.includes(playerId), 'You are locked out for this question.');
+    this.require(!this.isLockedOut(playerId), this.settings.lockoutSeconds > 0
+      ? 'You are locked out until your countdown ends.' : 'You are locked out for this question.');
     this.freeze();
     this.clue.activePlayerId = playerId;
     this.clue.pointsAtBuzz = pointsAt(this.clue.elapsedMs, this.settings);
@@ -100,7 +107,7 @@ export class GameEngine {
     this.history = [];
     this.clue = {
       phase: 'QUESTION_OPEN', questionIndex: index, elapsedMs: 0, startedAt: this.now(),
-      paused: false, lockedOutIds: [], activePlayerId: null, pointsAtBuzz: null,
+      paused: false, lockedOutIds: [], lockedOutUntil: {}, activePlayerId: null, pointsAtBuzz: null,
       mediaOffsetSeconds: 0, mediaVersion: this.clue.mediaVersion + 1,
     };
   }
@@ -186,7 +193,10 @@ export class GameEngine {
           `${player.name}: ${action.correct ? 'correct' : 'wrong'}`);
         if (action.correct) this.close();
         else {
-          this.clue.lockedOutIds.push(player.id);
+          if (!this.clue.lockedOutIds.includes(player.id)) this.clue.lockedOutIds.push(player.id);
+          if (this.settings.lockoutSeconds > 0) {
+            this.clue.lockedOutUntil[player.id] = this.now() + this.settings.lockoutSeconds * 1000;
+          }
           this.clue.activePlayerId = null;
           this.clue.pointsAtBuzz = null;
           this.clue.phase = 'QUESTION_OPEN';
@@ -232,6 +242,7 @@ export class GameEngine {
   snapshot(host = false): Snapshot {
     const question = this.quiz.questions[this.clue.questionIndex];
     const elapsed = this.elapsed();
+    const now = this.now();
     const publicQuestion = question ? {
       id: question.id, type: question.type, question: question.question, text: question.text,
       media: question.media, reveal: question.reveal, playback: question.playback, visualizer: question.visualizer,
@@ -244,7 +255,10 @@ export class GameEngine {
       revealedAnswer: this.clue.phase === 'ANSWER_REVEALED' ? question.answer : null,
       ...(host && question ? { privateAnswer: question.answer } : {}),
       players: [...this.players.values()].map((p) => ({ ...p })),
-      leaderboardIds: [...this.leaderboardIds], lockedOutIds: [...this.clue.lockedOutIds],
+      leaderboardIds: [...this.leaderboardIds],
+      lockedOutIds: this.clue.lockedOutIds.filter((id) => this.isLockedOut(id)),
+      lockoutRemainingMs: Object.fromEntries(Object.entries(this.clue.lockedOutUntil)
+        .filter(([, until]) => until > now).map(([id, until]) => [id, until - now])),
       activePlayerId: this.clue.activePlayerId, pointsAtBuzz: this.clue.pointsAtBuzz,
       currentPoints: this.clue.pointsAtBuzz ?? pointsAt(elapsed, this.settings),
       clueElapsedMs: elapsed, clockRunning: this.clue.startedAt !== null, paused: this.clue.paused,

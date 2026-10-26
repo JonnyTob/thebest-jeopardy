@@ -11,6 +11,7 @@ export function PlayPage() {
   const player = state?.players.find((p) => p.id === playerId);
   const rank = state && player ? rankPlayers(state.players).findIndex((p) => p.id === playerId) + 1 : 0;
   const lockedOut = !!playerId && !!state?.lockedOutIds.includes(playerId);
+  const lockoutRemaining = playerId ? state?.lockoutRemainingMs[playerId] : undefined;
   const answering = !!playerId && state?.activePlayerId === playerId;
   const open = state?.phase === 'QUESTION_OPEN' && !state.paused;
   const canBuzz = connected && open && !lockedOut && !!player && !pending;
@@ -19,7 +20,11 @@ export function PlayPage() {
   if (!connected) { status = 'Reconnecting'; detail = 'Your score and place are saved on the server.'; }
   else if (state?.phase === 'GAME_FINISHED') { status = 'That is a wrap!'; detail = 'Thanks for playing. See the TV for the final scores.'; }
   else if (answering) { status = 'You buzzed first!'; detail = 'Say your answer out loud. The host will make the call.'; }
-  else if (lockedOut && (state?.phase === 'QUESTION_OPEN' || state?.phase === 'ANSWERING')) { status = 'Locked out'; detail = 'You have used your attempt. You are back in next question.'; }
+  else if (lockedOut && (state?.phase === 'QUESTION_OPEN' || state?.phase === 'ANSWERING')) {
+    status = lockoutRemaining === undefined ? 'Locked out' : `Locked out: ${Math.ceil(lockoutRemaining / 1000)}s`;
+    detail = lockoutRemaining === undefined ? 'You have used your attempt. You are back in next question.'
+      : 'You can try again when the countdown ends and buzzers are open.';
+  }
   else if (state?.phase === 'ANSWERING') { status = 'Someone is answering'; detail = 'Hold tight. Buzzers may reopen after the ruling.'; }
   else if (state?.paused) { status = 'Host paused'; detail = 'Take a breath. We will be right back.'; }
   else if (open) { status = 'Buzz open'; detail = 'Know it? Buzz, then answer out loud.'; }
@@ -52,11 +57,14 @@ export function PlayPage() {
         <span className="eyebrow">{state?.phase === 'LOBBY' ? 'LOBBY' : `QUESTION ${(state?.questionIndex ?? 0) + 1} / ${state?.questionCount}`}</span>
         <h2 role="status">{status}</h2><p>{detail}</p>
         <button className="buzz-button" disabled={!canBuzz} onClick={() => { void buzz(); }}>
-          <span>{answering ? 'FIRST!' : 'BUZZ'}</span><small>{canBuzz ? `${state?.currentPoints} points at stake` : 'Eyes on the big screen'}</small>
+          <span>{answering ? 'FIRST!' : lockedOut && lockoutRemaining !== undefined && (open || state?.phase === 'ANSWERING')
+            ? `${Math.ceil(lockoutRemaining / 1000)}s` : 'BUZZ'}</span><small>{canBuzz ? `${state?.currentPoints} points at stake` : 'Eyes on the big screen'}</small>
         </button>
         {answering && <p className="frozen-points">{state?.pointsAtBuzz} points at stake / no answer countdown</p>}
       </section>
-      <p className="footnote">Correct +points / Wrong -points<br />One attempt per question. Make it count.</p>
+      <p className="footnote">Correct +points / Wrong -points<br />{state?.settings.lockoutSeconds
+        ? `Wrong answer: ${state.settings.lockoutSeconds}s lockout, then try again.`
+        : 'One attempt per question. Make it count.'}</p>
     </>}
   </main>;
 }

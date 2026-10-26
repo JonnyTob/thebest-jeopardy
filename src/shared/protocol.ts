@@ -54,6 +54,7 @@ export const settingsSchema = z.object({
   minimumPoints: z.number().int().min(1).max(10000),
   dropPoints: z.number().int().min(1).max(10000),
   dropEverySeconds: z.number().min(1).max(120),
+  lockoutSeconds: z.number().int().min(0).max(300).default(0),
 }).refine((s) => s.minimumPoints <= s.startPoints,
   'Minimum points cannot exceed starting points');
 export type Settings = z.infer<typeof settingsSchema>;
@@ -86,6 +87,7 @@ export interface Snapshot {
   players: Player[];
   leaderboardIds: string[];
   lockedOutIds: string[];
+  lockoutRemainingMs: Record<string, number>;
   activePlayerId: string | null;
   pointsAtBuzz: number | null;
   currentPoints: number;

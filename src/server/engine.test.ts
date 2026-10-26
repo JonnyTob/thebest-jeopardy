@@ -180,3 +180,95 @@ test('disconnects retain identity, score and eligibility; reset clears lockout b
   game.buzz(alice.id);
   assert.equal(alice.score, -500);
 });
+
+test('timed lockouts reject early buzzes, expire at the exact boundary and restart after another wrong answer', () => {
+  const { game, alice, command, advance } = setup();
+  command({ type: 'setup', settings: { ...game.settings, lockoutSeconds: 10 } });
+  command({ type: 'start' });
+  game.buzz(alice.id);
+  advance(20000);
+  command({ type: 'judge', correct: false });
+  assert.equal(game.snapshot().lockoutRemainingMs[alice.id], 10000);
+  assert.equal(alice.score, -500);
+  advance(9999);
+  assert.equal(game.snapshot().lockoutRemainingMs[alice.id], 1);
+  assert.throws(() => game.buzz(alice.id), /locked out/);
+  advance(1);
+  assert.deepEqual(game.snapshot().lockedOutIds, []);
+  assert.deepEqual(game.snapshot().lockoutRemainingMs, {});
+  game.buzz(alice.id);
+  assert.equal(game.snapshot().pointsAtBuzz, 300);
+  command({ type: 'judge', correct: false });
+  assert.equal(alice.score, -800);
+  assert.deepEqual(game.snapshot().lockedOutIds, [alice.id]);
+  assert.equal(game.snapshot().lockoutRemainingMs[alice.id], 10000);
+});
+
+test('timed lockouts continue while paused, answering or disconnected, without reopening buzzers', () => {
+  const { game, alice, bob, command, advance } = setup();
+  command({ type: 'setup', settings: { ...game.settings, lockoutSeconds: 10 } });
+  command({ type: 'start' });
+  game.buzz(alice.id);
+  command({ type: 'judge', correct: false });
+  game.setConnected(alice.id, false);
+  command({ type: 'pause' });
+  advance(10000);
+  game.setConnected(alice.id, true);
+  assert.deepEqual(game.snapshot().lockedOutIds, []);
+  assert.throws(() => game.buzz(alice.id), /not open/);
+  command({ type: 'resume' });
+  game.buzz(alice.id);
+  command({ type: 'judge', correct: false });
+  game.buzz(bob.id);
+  advance(10000);
+  assert.deepEqual(game.snapshot().lockedOutIds, []);
+  assert.throws(() => game.buzz(alice.id), /not open/);
+  command({ type: 'judge', correct: false });
+  game.buzz(alice.id);
+});
+
+test('default lockouts last the whole question; timed lockouts clear on reset and advance', () => {
+  const { game, alice, command, advance } = setup();
+  command({ type: 'start' });
+  game.buzz(alice.id);
+  command({ type: 'judge', correct: false });
+  advance(1000000);
+  assert.deepEqual(game.snapshot().lockedOutIds, [alice.id]);
+  assert.deepEqual(game.snapshot().lockoutRemainingMs, {});
+  assert.throws(() => game.buzz(alice.id), /locked out/);
+
+  const timed = setup();
+  timed.command({ type: 'setup', settings: { ...timed.game.settings, lockoutSeconds: 10 } });
+  timed.command({ type: 'start' });
+  timed.game.buzz(timed.alice.id);
+  timed.command({ type: 'judge', correct: false });
+  timed.command({ type: 'reset' });
+  assert.deepEqual(timed.game.snapshot().lockoutRemainingMs, {});
+  timed.game.buzz(timed.alice.id);
+  timed.command({ type: 'judge', correct: false });
+  timed.command({ type: 'close' });
+  timed.command({ type: 'next' });
+  assert.deepEqual(timed.game.snapshot().lockedOutIds, []);
+  assert.deepEqual(timed.game.snapshot().lockoutRemainingMs, {});
+});
+
+test('undo restores timed eligibility and prior deadlines without resetting another player countdown', () => {
+  const { game, alice, bob, command, advance } = setup();
+  command({ type: 'setup', settings: { ...game.settings, lockoutSeconds: 10 } });
+  command({ type: 'start' });
+  game.buzz(alice.id);
+  command({ type: 'judge', correct: false });
+  advance(2000);
+  game.buzz(bob.id);
+  command({ type: 'judge', correct: false });
+  advance(3000);
+  command({ type: 'undo' });
+  assert.equal(bob.score, 0);
+  assert.equal(game.snapshot().activePlayerId, bob.id);
+  assert.deepEqual(game.snapshot().lockedOutIds, [alice.id]);
+  assert.equal(game.snapshot().lockoutRemainingMs[alice.id], 5000);
+  command({ type: 'undo' });
+  assert.equal(alice.score, 0);
+  assert.equal(game.snapshot().activePlayerId, alice.id);
+  assert.deepEqual(game.snapshot().lockoutRemainingMs, {});
+});

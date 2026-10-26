@@ -1,10 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { pointsAt, tileOrder, valueWindowMs } from './game.js';
-import { quizSchema } from './protocol.js';
+import { quizSchema, settingsSchema } from './protocol.js';
 
 test('default points hit exact boundaries and stay at minimum indefinitely', () => {
-  const settings = { title: 'Test', leaderboardCount: 8, startPoints: 500, minimumPoints: 100, dropPoints: 100, dropEverySeconds: 5 };
+  const settings = { title: 'Test', leaderboardCount: 8, startPoints: 500, minimumPoints: 100, dropPoints: 100, dropEverySeconds: 5, lockoutSeconds: 0 };
   for (const [elapsed, expected] of [[0, 500], [4999, 500], [5000, 400], [10000, 300], [15000, 200], [20000, 100], [999999, 100]]) {
     assert.equal(pointsAt(elapsed, settings), expected);
   }
@@ -19,6 +19,17 @@ test('tile order is a deterministic permutation, including seed zero', () => {
     assert.deepEqual([...order].sort((a, b) => a - b), Array.from({ length: 48 }, (_, i) => i));
   }
   assert.notDeepEqual(tileOrder(48, 814), tileOrder(48, 815));
+});
+
+test('lockout settings preserve the default and validate whole seconds from 0 to 300', () => {
+  const settings = { title: 'Test', leaderboardCount: 8, startPoints: 500, minimumPoints: 100, dropPoints: 100, dropEverySeconds: 5 };
+  assert.equal(settingsSchema.parse(settings).lockoutSeconds, 0);
+  for (const lockoutSeconds of [0, 1, 10, 300]) {
+    assert.equal(settingsSchema.parse({ ...settings, lockoutSeconds }).lockoutSeconds, lockoutSeconds);
+  }
+  for (const lockoutSeconds of [-1, 0.5, 301, '10']) {
+    assert.equal(settingsSchema.safeParse({ ...settings, lockoutSeconds }).success, false);
+  }
 });
 
 test('quiz validation rejects missing media, duplicate IDs and invalid playback ranges', () => {
