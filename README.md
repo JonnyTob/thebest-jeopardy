@@ -1,140 +1,176 @@
-# Jeopardy
+# Quiz Night
 
-A self-hosted, fully customizable Jeopardy game platform. Build your own boards, host game nights in person or online, and let players buzz in from their phones — no app install required.
+A locally hosted, sequential multiplayer buzzer quiz. The gamemaster runs the
+show on a laptop, a separate TV displays clues, and players buzz from their
+phones. Answers are spoken aloud and scored only by the gamemaster.
 
----
+The new app lives entirely under [src/](./src/). It is separate from the archived
+Jeopardy project; there is no category/tile board.
 
-## Features
+## Run locally
 
-- **Board Editor** — Create unlimited Jeopardy boards with up to 6 categories and 5 clues each per round. Supports text, images, and video clues.
-- **Multi-Round Boards** — A board can hold several rounds (Jeopardy!, Double Jeopardy!, and beyond). Players, scores, and stats all carry over when the host advances to the next round — no need to start a new game.
-- **Real-time Buzzer System** — Players connect on any device via a browser. First buzz wins, ties are impossible. A configurable lockout (250/500/1000ms, or off) penalizes buzzing before the host opens it, so mashing the button no longer beats reacting to it.
-- **Daily Doubles with Wagering** — Mark any clue as a Daily Double. The host reveals it and the game automatically prompts the right player to wager on their phone (with a host override, and a manual picker for the rare case no player has answered correctly yet) — scoring then uses their wager instead of the clue's face value.
-- **Final Jeopardy** — A full wager-clue-reveal round with live wagers, a synced countdown timer, ambient music during the countdown, a dramatic per-contestant reveal, and a final scoreboard with a podium and stats.
-- **End-Game Lifecycle** — The game ends automatically once the last round is finished (if the board has no Final Jeopardy), or the host can end it manually at any point, including mid-Final-Jeopardy. A shared leaderboard — with tie handling — shows on every screen, and the host can resume or close the room from there.
-- **Projection View** — A fullscreen board view designed for a TV or shared screen.
-- **Host Control Panel** — Score tracking, manual score adjustments, game history log, per-player stats (including early buzzes), and roll-back support.
-- **Sound Effects** — Synthesized audio cues for buzz-ins, Daily Doubles, Final Jeopardy, and more, played on the board/TV so the room hears them. No audio files needed.
-- **Persistent Storage** — Boards are saved as JSON files on disk. No database required. Older single-round board files are migrated automatically.
-- **Works Everywhere** — Run it on your laptop for an in-person game night, or deploy it to the cloud for a remote game night. Players connect from anywhere with a link.
+Requires **Node.js 22+** and npm. Run these commands from the repository root:
 
----
-
-## How It Works
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                        One Server                           │
-│                                                             │
-│   ┌──────────────┐   ┌──────────────┐   ┌──────────────┐    │
-│   │  Host Panel  │   │ Board (TV)   │   │Player Buzzer │    │
-│   │ /host/:room  │   │/board/:room  │   │/buzzer/:room │    │
-│   └──────────────┘   └──────────────┘   └──────────────┘    │
-│          │                  │                  │            │
-│          └──────────────────┴──────────────────┘            │
-│                        Socket.io                            │
-└─────────────────────────────────────────────────────────────┘
-```
-
-The host runs the game from the Host Panel. The board display goes on the main screen (TV/projector). Players connect to the Buzzer page from their phones — no account, no install, just a URL and a name.
-
----
-
-## Quick Start (Local)
-
-**Prerequisites:** Node.js 18+
-
-```bash
-# 1. Clone and install
-git clone https://github.com/Surge-Tech/jeopardy.git
-cd jeopardy
-npm run install:all
-
-# 2. Start development servers
+```sh
+npm install
 npm run dev
 ```
 
-- **Dashboard / Editor:** http://localhost:5173
-- **Share with players (LAN):** http://YOUR_LAN_IP:5173
+Open `http://localhost:3000`. The terminal prints a randomly generated **host
+passcode** for the private console. Do not share it with players.
 
-> For a full local + deployment guide, see [SETUP.md](SETUP.md). For the REST API and Socket.io event reference, see [ARCHITECTURE.md](ARCHITECTURE.md).
+| Route | Purpose |
+| --- | --- |
+| `/` | Screen chooser and LAN join link / QR code |
+| `/admin` | Authenticated host console, setup, rulings, scores, and full player list |
+| `/display` | TV clue, buzzer sidebar, and a single-row top-player leaderboard |
+| `/play` | Phone nickname/avatar selection, personal score/rank, and buzzer |
 
----
+For a production build (recommended for quiz night):
 
-## Deployment (Fly.io — Free Tier)
-
-```bash
-fly launch          # first time setup
-fly deploy          # deploy or redeploy
+```sh
+npm run build
+npm start
 ```
 
-Players connect to your `https://your-app.fly.dev` URL from anywhere. Full instructions in [SETUP.md](SETUP.md).
+Both modes serve the app and Socket.IO from **one port**, default `3000`, on all
+network interfaces. Set `PORT` to change it. Optionally set `HOST_PASSCODE` to a
+private value of at least eight characters; otherwise one is generated at launch.
+For example, in PowerShell:
 
----
-
-## Project Structure
-
-```
-jeopardy/
-├── backend/
-│   ├── src/
-│   │   ├── index.ts            # Express server + static file serving
-│   │   ├── routes/
-│   │   │   ├── boards.ts       # Board CRUD API
-│   │   │   └── media.ts        # Image/video upload
-│   │   ├── socket/
-│   │   │   ├── gameManager.ts    # In-memory game sessions
-│   │   │   ├── socketHandler.ts  # Core game + buzzer + Daily Double events
-│   │   │   └── finalJeopardy.ts  # Final Jeopardy state machine + events
-│   │   └── storage/
-│   │       └── boardStorage.ts # JSON file persistence
-│   └── package.json
-├── frontend/
-│   └── src/
-│       ├── pages/
-│       │   ├── Dashboard.tsx   # Board list + create/delete
-│       │   ├── Editor.tsx      # Board editor
-│       │   ├── Host.tsx        # Host control panel
-│       │   ├── BoardView.tsx   # Projection screen
-│       │   └── Buzzer.tsx      # Player buzzer / wager (phone)
-│       ├── components/
-│       │   ├── final/          # Final Jeopardy: board screens, host panel, editor
-│       │   ├── dailydouble/    # Daily Double: host panel, player wager screen
-│       │   └── shared/         # WagerInput, Leaderboard — reused across FJ and end-game
-│       ├── store/
-│       │   └── gameStore.ts    # Zustand state (game log, etc.)
-│       └── utils/
-│           ├── sounds.ts       # Web Audio API sound effects
-│           └── rounds.ts       # Round-aware board helpers (getRound, isRoundComplete)
-├── Dockerfile
-├── docker-compose.yml
-├── fly.toml
-└── SETUP.md
+```powershell
+$env:PORT = "3000"
+npm start
 ```
 
----
+### Laptop, TV, and phones
 
-## Tech Stack
+1. On Windows, use **Win+P -> Extend**. Move `/display` to the TV and press F11.
+   Keep `/admin` on the laptop.
+2. Connect phones to the same Wi-Fi. Allow the server port through the laptop's
+   firewall; disable wireless client isolation if devices cannot reach each other.
+3. Share the **LAN** `/play` address or QR code shown in the lobby. `localhost`
+   on a phone refers to the phone, not the laptop. If the laptop has multiple
+   network interfaces, select the Wi-Fi/LAN address rather than a VPN or virtual
+   adapter. For remote VS Code environments, use an address reachable by players.
+4. Only the TV renders audio/video. If autoplay is blocked, use its
+   **Enable TV playback/audio** button; the host can pause the clue while doing so.
+   Use one active TV playback tab to avoid duplicate audio.
 
-| Layer | Technology |
-|---|---|
-| Backend | Node.js, Express, Socket.io |
-| Frontend | React, Vite, Tailwind CSS, Zustand |
-| Realtime | Socket.io (WebSockets) |
-| Storage | JSON files on disk (no database) |
-| Deployment | Docker, Fly.io |
+Use a trusted private LAN, not an exposed public internet deployment: this POC
+uses HTTP without TLS. The host passcode and player reconnect tokens are bearer
+credentials. A player's token is stored in that browser's local storage; host
+credentials are scoped to the admin browser tab's session storage.
 
----
+## Implemented core flow
 
-## Documentation
+- Authenticated host commands; server-filtered public snapshots never contain the
+  private answer until the host explicitly reveals it.
+- Server-arbitrated first buzz, a frozen points-at-buzz value, and no answer
+  countdown. Correct awards the frozen value; wrong deducts it, locks that player
+  out, and resumes the clue for everyone else.
+- Configurable starting/minimum points and decay steps. Defaults are
+  **500 -> 400 -> 300 -> 200 -> 100**, every five seconds. Minimum value and media
+  ending never auto-close a question.
+- Pause/resume, close/skip, reveal, next, question reset, media restart, manual
+  positive/negative adjustments, and undo. Commands have idempotency IDs and stale
+  revision checks.
+- Six original inline SVG avatars; token-based reconnect preserves score,
+  identity, and lockout. Reopening multiple tabs with the same token still counts
+  as one player. An offline answering player remains active until the host rules
+  or closes the clue.
+- Stable leaderboard ordering during active clues, reranking between questions;
+  up to eight TV cards by default, all players in a sortable/searchable host table.
+- Text and image clues, deterministic random tile reveals, and TV-only native
+  audio/video rendering with an audio frequency-spectrum visualizer.
 
-| Doc | For |
-|---|---|
-| [SETUP.md](SETUP.md) | Running a game night — local, LAN, Fly.io, or Docker. |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | Contributors — data model, REST API, and the full Socket.io event protocol. |
+**Undo semantics:** Undo restores the latest score operation and its saved
+question state, elapsed time, scores, and eligibility. Undoing a ruling restores
+the answering player so the host can judge again. It never restores stale
+connection status. Undo history is cleared on next/reset or player removal.
+Reset reopens the current question at full value and clears lockouts, but does
+not erase previously awarded/deducted scores. Media restart restarts playback /
+image reveal without resetting the point clock.
 
----
+## Questions and media
 
-## License
+Edit [src/data/questions.json](./src/data/questions.json), then restart the server.
+The starter quiz has two text clues and an original tiled-image clue. Questions
+are validated on startup; invalid data fails explicitly. The raw JSON is
+**server-only** and is not exposed as a public HTTP resource.
 
-MIT — free to use, modify, and distribute. See [LICENSE](LICENSE).
+Place local media in [src/public/media/](./src/public/media/) and reference it as
+`/media/your-file.ext`. Rebuild after changing public assets for production.
+Use the fields described in the [project specification](./QUIZ_NIGHT_PROJECT_SPEC.md);
+the first image effects supported are `static` and `tiles`.
+
+An audio clue can use:
+
+```json
+{
+  "id": "audio-1",
+  "type": "audio",
+  "question": "Name this sound",
+  "media": "/media/your-audio.mp3",
+  "answer": "Your private answer",
+  "visualizer": { "enabled": true, "style": "spectrum" },
+  "playback": { "startSeconds": 0, "endSeconds": 20 }
+}
+```
+
+For a video, set `type` to `video` and use a browser-compatible local video file.
+Only use media you have permission to use. The sample illustration and avatar
+vectors are original to this implementation; no external avatar library is used.
+
+## Source structure
+
+```text
+src/
+  client/       React pages, shared UI, media rendering, and styles
+  server/       HTTP/Socket.IO server, authoritative engine, storage, and tests
+  shared/       Runtime validation, typed protocol, scoring/reveal helpers and tests
+  data/         Private question JSON
+  public/media/ Locally served clue assets
+```
+
+The server loads quizzes through a `QuizStorage` interface so a future storage
+implementation can replace JSON without changing the game engine.
+
+## Validation
+
+```sh
+npm test
+npm run typecheck
+npm run build
+```
+
+Tests cover exact scoring boundaries, first-buzz arbitration, frozen clocks,
+wrong-answer lockouts, undo, duplicate/stale commands, private-answer filtering,
+12-player ordering, reconnects, host authorization, and deterministic reveals.
+
+## POC limits / next steps
+
+- Session state is in memory. **Stopping/restarting the server loses all players,
+  scores, and active progress.** Restart to begin a fresh session.
+- No editor, uploads, database, archive, additional reveal modes, or alternate
+  themes yet.
+- Audio/video positions are synchronized to the server clue clock with periodic
+  browser seeking. Actual TV playback-position reporting, buffering feedback, and
+  frame-accurate recovery are follow-up work; validate supplied media codecs and
+  autoplay behavior on the target TV browser before hosting.
+- The automated tests and browser smoke checks cover the core text/image flow;
+  real phones, Windows firewall configuration, audio hardware, and loaded-network
+  behavior still need a LAN playtest.
+
+## Reference project
+
+The original Surge Jeopardy project is archived in [surge-jeopardy/](./surge-jeopardy/)
+for reference. Its source code, documentation, license, and build and deployment
+configuration are preserved there.
+
+See the [original README](./surge-jeopardy/README.md) and
+[setup guide](./surge-jeopardy/SETUP.md) for details. Run any commands from those
+guides inside `surge-jeopardy/`, not the repository root.
+
+See [QUIZ_NIGHT_PROJECT_SPEC.md](./QUIZ_NIGHT_PROJECT_SPEC.md) for the full product
+baseline and future acceptance criteria.

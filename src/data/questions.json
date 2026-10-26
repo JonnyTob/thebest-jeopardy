@@ -1,0 +1,33 @@
+{
+  "title": "Friday Night Quiz",
+  "questions": [
+    {
+      "id": "warm-up",
+      "type": "text",
+      "question": "Let's start with a little space travel.",
+      "text": "Which planet in our solar system is known as the Red Planet?",
+      "answer": "Mars"
+    },
+    {
+      "id": "mystery-image",
+      "type": "image",
+      "question": "What is hiding behind the tiles?",
+      "media": "/media/mystery.svg",
+      "answer": "A rocket",
+      "reveal": {
+        "effect": "tiles",
+        "durationSeconds": 20,
+        "columns": 8,
+        "rows": 6,
+        "seed": 814
+      }
+    },
+    {
+      "id": "last-call",
+      "type": "text",
+      "question": "One last question. Make it count!",
+      "text": "How many sides does a hexagon have?",
+      "answer": "Six"
+    }
+  ]
+}
