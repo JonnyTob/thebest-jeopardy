@@ -1,5 +1,5 @@
 import { useAnimatedState, useSession } from '../session';
-import { Avatar, Brand, Connection, JoinLink, PointBar, SessionError, buzzerLabel } from '../components/Common';
+import { Avatar, Brand, Connection, JoinLink, PointBar, QuizName, SessionError, buzzerLabel } from '../components/Common';
 import { Media } from '../components/Media';
 
 export function DisplayPage() {
@@ -15,14 +15,14 @@ export function DisplayPage() {
   const winner = finished ? players[0] : null;
 
   return <main className="tv-shell">
-    <header className="tv-header"><Brand /><span>{state.settings.title}</span>
+    <header className="tv-header"><Brand /><QuizName title={state.settings.title} id={state.quizId} />
       <span className="question-counter">{lobby ? 'WELCOME TO THE SHOW' : finished ? 'THAT IS A WRAP' :
         `QUESTION ${String(state.questionIndex + 1).padStart(2, '0')} / ${state.questionCount}`}</span></header>
     {!connected && <div className="tv-offline" role="alert">Connection lost. Buzzing is unavailable while reconnecting.</div>}
     <div className="tv-errors"><SessionError /></div>
     <section className="tv-stage">
       <div className="panel clue-panel">
-        {lobby ? <div className="tv-welcome"><span className="eyebrow">WELCOME TO</span><h1>{state.settings.title}</h1>
+        {lobby ? <div className="tv-welcome"><span className="eyebrow">WELCOME TO</span><h1><QuizName title={state.settings.title} id={state.quizId} /></h1>
           <p>Quick thinking. Big risks. Bragging rights.</p><JoinLink /></div>
           : finished ? <div className="tv-welcome"><span className="eyebrow">OUR QUIZ NIGHT CHAMPION</span>
             {winner ? <><Avatar id={winner.avatarId} /><h1>{winner.name}</h1><strong className="winner-score">{winner.score.toLocaleString()} points</strong></>

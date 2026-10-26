@@ -100,6 +100,30 @@ The starter quiz has two text clues and an original tiled-image clue. Questions
 are validated on startup; invalid data fails explicitly. The raw JSON is
 **server-only** and is not exposed as a public HTTP resource.
 
+Each quiz must have a permanent numeric `id` at the top level, alongside `title`
+and `questions`. The starter quiz uses:
+
+```json
+{
+  "id": 100001,
+  "title": "Friday Night Quiz",
+  "questions": []
+}
+```
+
+The empty array above illustrates the structure only; a playable quiz requires
+at least one question. Existing quiz files must add the `id` field.
+Use a unique positive safe integer for each quiz (1 to 9007199254740991).
+Keep the ID when renaming or editing that quiz; assign a different ID when
+creating a separate quiz. Future library entries should use this ID as their
+identifier rather than the title. There is no multi-quiz library or automatic
+cross-file uniqueness check yet.
+
+The ID is shown as **Quiz #100001** beside the quiz name on TV, phone, and admin
+live/setup screens. It survives server restarts because it is stored in the quiz
+file, and it cannot be changed through session setup. This is a quiz/library ID,
+not a temporary join PIN or the private host passcode.
+
 Place local media in [src/public/media/](./src/public/media/) and reference it as
 `/media/your-file.ext`. Rebuild after changing public assets for production.
 Use the fields described in the [project specification](./QUIZ_NIGHT_PROJECT_SPEC.md);

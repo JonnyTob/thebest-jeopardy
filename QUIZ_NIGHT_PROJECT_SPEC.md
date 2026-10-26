@@ -133,6 +133,14 @@ Phone UI: large BUZZ button, own avatar, name, current score and rank, states **
 
 ## 7. Gamemaster/admin interface
 
+**Quiz identity:** Every quiz template has a permanent positive integer `id`,
+stored beside `title` and `questions` in the quiz JSON. Use this ID, not the
+editable title, to identify quizzes in the future library. Keep it unchanged
+across edits and played sessions; a separate quiz must receive a different ID.
+Display it as `Quiz #100001` beside the quiz name on TV, phone join/play, and
+admin live/setup screens. It is a library identifier, not a temporary join PIN
+or host credential.
+
 **Live Game** includes: current question and private answer; media preview and play/pause/restart; current point value and elapsed clue time; active buzzing player and **frozen points-at-buzz**; prominent `CORRECT +N` / `WRONG −N` buttons; host-controlled reveal/close/next; undo/manual score adjustment; complete compact sortable player table. The admin sees every player even if the TV shows only top 8. Include connection and lockout indicators and player-management controls.
 
 **Game Setup (POC):** quiz title, JSON source, default point schedule, leaderboard visible count (default 8), avatar choices and optional theme. **Future Quiz Library/Editor:** create/edit/duplicate/reorder questions, upload media, configure reveal effect/start position, choose audio visualizer, preview, save reusable quiz templates. **Future History:** separate played-session archives with question outcomes, players, rankings, scores and event audit log. Keep templates distinct from historical playthroughs.

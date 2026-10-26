@@ -30,6 +30,11 @@ export function Brand({ subtitle }: { subtitle?: string }) {
     <span>QUIZ NIGHT{subtitle && <small>{subtitle}</small>}</span></Link>;
 }
 
+export function QuizName({ title, id }: { title: string; id: number }) {
+  return <span className="quiz-name"><span className="quiz-name-text" title={title}>{title}</span>
+    <span className="quiz-id">Quiz #{id}</span></span>;
+}
+
 export function Connection({ connected }: { connected: boolean }) {
   return <span className={`connection ${connected ? 'online' : 'offline'}`} role="status">
     <span className="status-dot" />{connected ? 'Connected' : 'Reconnecting'}

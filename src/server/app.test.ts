@@ -8,7 +8,7 @@ import type { ClientEvents, ServerEvents, Snapshot, Result } from '../shared/pro
 
 test('socket flow enforces host authorization, answer privacy, one winner and token reconnection', async () => {
   const application = await createApp({
-    storage: { load: async () => ({ title: 'Socket Quiz', questions: [{ id: 'one', type: 'text', question: 'Public clue', answer: 'PRIVATE ANSWER' }] }) },
+    storage: { load: async () => ({ id: 100001, title: 'Socket Quiz', questions: [{ id: 'one', type: 'text', question: 'Public clue', answer: 'PRIVATE ANSWER' }] }) },
     passcode: 'test-host-passcode',
     serveClient: false,
   });
@@ -56,6 +56,9 @@ test('socket flow enforces host authorization, answer privacy, one winner and to
     assert.equal(publicPayloads.some((p) => p.includes('PRIVATE ANSWER')), false);
     assert.equal(snapshots.get(host)?.privateAnswer, 'PRIVATE ANSWER');
     assert.equal(snapshots.get(display)?.privateAnswer, undefined);
+    for (const client of [host, display, alice, bob]) {
+      assert.equal(snapshots.get(client)?.quizId, 100001);
+    }
     const resumed = await connect({ role: 'player', token: first.data.token });
     const identity = application.engine.players.get(first.data.playerId);
     assert.ok(identity?.connected);
@@ -74,7 +77,7 @@ test('socket flow enforces host authorization, answer privacy, one winner and to
 
 test('development serves all pages, modules and public media without exposing server files', async () => {
   const application = await createApp({
-    storage: { load: async () => ({ title: 'Development Quiz', questions: [{ id: 'one', type: 'text', question: 'Public clue', answer: 'Private answer' }] }) },
+    storage: { load: async () => ({ id: 100002, title: 'Development Quiz', questions: [{ id: 'one', type: 'text', question: 'Public clue', answer: 'Private answer' }] }) },
     passcode: 'test-host-passcode',
   });
   await new Promise<void>((resolve) => application.httpServer.listen(0, '127.0.0.1', resolve));

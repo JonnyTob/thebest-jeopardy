@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { avatars, type AvatarId } from '../../shared/protocol';
 import { rankPlayers } from '../../shared/game';
 import { useSession } from '../session';
-import { Avatar, Brand, Connection, SessionError } from '../components/Common';
+import { Avatar, Brand, Connection, QuizName, SessionError } from '../components/Common';
 
 export function PlayPage() {
   const { state, connected, playerId, join, buzz, pending } = useSession();
@@ -32,6 +32,7 @@ export function PlayPage() {
 
   return <main className="phone-shell">
     <header className="phone-header"><Brand /><Connection connected={connected} /></header>
+    {state && <div className="phone-quiz"><QuizName title={state.settings.title} id={state.quizId} /></div>}
     <SessionError />
     {!player ? <form className="panel join-form" onSubmit={submit}>
       <span className="eyebrow">YOUR BUZZER AWAITS</span><h1>Join the game</h1>

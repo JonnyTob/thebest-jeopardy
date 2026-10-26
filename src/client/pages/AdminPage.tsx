@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { rankPlayers } from '../../shared/game';
 import { settingsSchema, type Player, type Settings, type Snapshot } from '../../shared/protocol';
 import { SessionProvider, useSession } from '../session';
-import { Avatar, Brand, Connection, JoinLink, PointBar, SessionError, buzzerLabel } from '../components/Common';
+import { Avatar, Brand, Connection, JoinLink, PointBar, QuizName, SessionError, buzzerLabel } from '../components/Common';
 import { Media } from '../components/Media';
 
 const passcodeKey = 'quiz-night-host-passcode';
@@ -47,7 +47,7 @@ function AdminConsole({ logout }: { logout: () => void }) {
     {!state ? <section className="panel"><h1>Connecting to the game...</h1></section>
       : tab === 'setup' ? <Setup state={state} /> : <>
         <section className="panel game-heading"><div><span className="eyebrow">{state.phase === 'LOBBY' ? "LET'S GET EVERYONE IN" : 'YOU CALL THE SHOTS'}</span>
-          <h1>{state.settings.title}</h1><p>{state.phase === 'LOBBY' ? 'Lobby open / waiting for players' :
+          <h1><QuizName title={state.settings.title} id={state.quizId} /></h1><p>{state.phase === 'LOBBY' ? 'Lobby open / waiting for players' :
             state.phase === 'GAME_FINISHED' ? 'Game finished / final standings' :
               `Question ${state.questionIndex + 1} of ${state.questionCount} / ${buzzerLabel(state).toLowerCase()}`}</p></div>
           <div className={`phase-pill ${answering ? 'amber' : ''}`}>{state.phase.replaceAll('_', ' ')}</div></section>
@@ -147,6 +147,7 @@ function Setup({ state }: { state: Snapshot }) {
     void command({ type: 'setup', settings: parsed.data }).then((ok) => { if (ok) setMessage('Game setup saved.'); });
   }
   return <div className="setup-grid"><form className="panel setup-form" onSubmit={save}><span className="eyebrow">MAKE IT YOUR NIGHT</span><h1>Game setup</h1>
+    <QuizName title={settings.title} id={state.quizId} />
     {!editable && <p className="notice">Setup is locked once the quiz starts.</p>}
     <fieldset disabled={!editable || !connected || pending}>
       <label>Quiz title<input required maxLength={100} value={settings.title} onChange={(event) => setSettings({ ...settings, title: event.target.value })} /></label>

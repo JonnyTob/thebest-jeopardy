@@ -237,7 +237,7 @@ export class GameEngine {
       media: question.media, reveal: question.reveal, playback: question.playback, visualizer: question.visualizer,
     } : null;
     return {
-      revision: this.revision, settings: { ...this.settings }, phase: this.clue.phase,
+      revision: this.revision, quizId: this.quiz.id, settings: { ...this.settings }, phase: this.clue.phase,
       questionIndex: this.clue.questionIndex, questionCount: this.quiz.questions.length,
       question: publicQuestion,
       revealedAnswer: this.clue.phase === 'ANSWER_REVEALED' ? question.answer : null,

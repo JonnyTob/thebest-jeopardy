@@ -39,6 +39,7 @@ export const questionSchema = z.object({
 export type Question = z.infer<typeof questionSchema>;
 export type PublicQuestion = Omit<Question, 'answer'>;
 export const quizSchema = z.object({
+  id: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
   title: z.string().trim().min(1).max(100),
   questions: z.array(questionSchema).min(1).max(500),
 }).refine((quiz) => new Set(quiz.questions.map((q) => q.id)).size === quiz.questions.length,
@@ -72,6 +73,7 @@ export interface ScoreEvent {
 }
 export interface Snapshot {
   revision: number;
+  quizId: number;
   settings: Settings;
   phase: Phase;
   questionIndex: number;

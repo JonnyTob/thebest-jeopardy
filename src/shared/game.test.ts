@@ -23,7 +23,18 @@ test('tile order is a deterministic permutation, including seed zero', () => {
 
 test('quiz validation rejects missing media, duplicate IDs and invalid playback ranges', () => {
   const question = { id: 'one', type: 'text', question: 'Question', answer: 'Answer' };
-  assert.equal(quizSchema.safeParse({ title: 'Quiz', questions: [question, question] }).success, false);
-  assert.equal(quizSchema.safeParse({ title: 'Quiz', questions: [{ ...question, type: 'image' }] }).success, false);
-  assert.equal(quizSchema.safeParse({ title: 'Quiz', questions: [{ ...question, type: 'audio', media: '/media/sound.mp3', playback: { startSeconds: 30, endSeconds: 10 } }] }).success, false);
+  assert.equal(quizSchema.safeParse({ id: 100001, title: 'Quiz', questions: [question, question] }).success, false);
+  assert.equal(quizSchema.safeParse({ id: 100001, title: 'Quiz', questions: [{ ...question, type: 'image' }] }).success, false);
+  assert.equal(quizSchema.safeParse({ id: 100001, title: 'Quiz', questions: [{ ...question, type: 'audio', media: '/media/sound.mp3', playback: { startSeconds: 30, endSeconds: 10 } }] }).success, false);
+});
+
+test('quiz IDs are required positive safe integers, distinct from question IDs', () => {
+  const quiz = { title: 'Quiz', questions: [{ id: 'one', type: 'text', question: 'Question', answer: 'Answer' }] };
+  assert.equal(quizSchema.safeParse(quiz).success, false);
+  for (const id of [1, 100001, Number.MAX_SAFE_INTEGER]) {
+    assert.equal(quizSchema.parse({ ...quiz, id }).id, id);
+  }
+  for (const id of [0, -1, 1.5, '100001', Number.MAX_SAFE_INTEGER + 1]) {
+    assert.equal(quizSchema.safeParse({ ...quiz, id }).success, false);
+  }
 });

@@ -5,6 +5,7 @@ import { GameEngine } from './engine.js';
 import type { HostAction, Quiz } from '../shared/protocol.js';
 
 const quiz: Quiz = {
+  id: 100001,
   title: 'Test Quiz',
   questions: [
     { id: 'one', type: 'text', question: 'First question?', answer: 'SECRET FIRST' },
@@ -19,6 +20,21 @@ function setup() {
   const command = (action: HostAction) => game.command({ id: randomUUID(), revision: game.revision, action });
   return { game, alice, bob, command, advance: (ms: number) => { time += ms; } };
 }
+
+test('quiz ID stays stable across title edits, question resets and new sessions', () => {
+  const { game, command } = setup();
+  assert.equal(game.snapshot().quizId, quiz.id);
+  assert.equal(game.snapshot(true).quizId, quiz.id);
+  command({ type: 'setup', settings: { ...game.settings, title: 'Renamed Quiz' } });
+  assert.equal(game.snapshot().settings.title, 'Renamed Quiz');
+  assert.equal(game.snapshot().quizId, quiz.id);
+  command({ type: 'start' });
+  command({ type: 'reset' });
+  command({ type: 'close' });
+  command({ type: 'next' });
+  assert.equal(game.snapshot().quizId, quiz.id);
+  assert.equal(new GameEngine(quiz).snapshot().quizId, quiz.id);
+});
 
 test('only first buzz wins; clock freezes indefinitely with no automatic score changes', () => {
   const { game, alice, bob, command, advance } = setup();
