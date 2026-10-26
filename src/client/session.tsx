@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import { io, type Socket } from 'socket.io-client';
 import type { ClientEvents, HostAction, JoinRequest, ServerEvents, Snapshot } from '../shared/protocol';
 import { pointsAt } from '../shared/game';
+import { clearPlayerToken, readPlayerToken, savePlayerToken } from './playerToken';
 
 type GameSocket = Socket<ServerEvents, ClientEvents>;
 interface Session {
@@ -17,7 +18,6 @@ interface Session {
   buzz: () => Promise<boolean>;
 }
 const Context = createContext<Session | null>(null);
-const tokenKey = 'quiz-night-player-token';
 
 function commandId(): string {
   // randomUUID is unavailable on ordinary HTTP LAN origins.
@@ -41,9 +41,10 @@ export function SessionProvider({ role, passcode, children }: {
   const [pending, setPending] = useState(false);
 
   useEffect(() => {
+    let playerToken = role === 'player' ? readPlayerToken() : null;
     const socket: GameSocket = io({
       autoConnect: false,
-      auth: { role, passcode, token: role === 'player' ? localStorage.getItem(tokenKey) : undefined },
+      auth: { role, passcode, token: playerToken ?? undefined },
     });
     socketRef.current = socket;
     socket.on('connect', () => { setConnected(true); setError(null); });
@@ -58,8 +59,9 @@ export function SessionProvider({ role, passcode, children }: {
     });
     socket.on('player:identity', ({ playerId: id }) => {
       setPlayerId(id);
-      if (role === 'player' && !id && localStorage.getItem(tokenKey)) {
-        localStorage.removeItem(tokenKey);
+      if (role === 'player' && !id && (playerToken || (socket.auth as { token?: string }).token)) {
+        playerToken = null;
+        clearPlayerToken();
         socket.auth = { role };
         setError('Your previous player is no longer in this session. Please join again.');
       }
@@ -99,9 +101,11 @@ export function SessionProvider({ role, passcode, children }: {
   const join = (input: JoinRequest) => request(async (socket) => {
     const result = await socket.timeout(5000).emitWithAck('player:join', input);
     if (!result.ok) { setError(result.error); return false; }
-    localStorage.setItem(tokenKey, result.data.token);
     socket.auth = { role, token: result.data.token };
     setPlayerId(result.data.playerId);
+    if (!savePlayerToken(result.data.token)) {
+      setError('Joined successfully, but Safari or your browser blocked saving your player. Keep this tab open; reloading may require joining again.');
+    }
     return true;
   });
   const buzz = () => request(async (socket) => {

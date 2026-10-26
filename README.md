@@ -63,6 +63,41 @@ uses HTTP without TLS. The host passcode and player reconnect tokens are bearer
 credentials. A player's token is stored in that browser's local storage; host
 credentials are scoped to the admin browser tab's session storage.
 
+### iPhone/Safari troubleshooting
+
+For WSL or multiple network adapters, set `JOIN_ORIGIN` to the Windows PC's
+Wi-Fi/LAN origin before starting the server, for example in the WSL terminal:
+
+```sh
+JOIN_ORIGIN=http://192.168.1.42:3000 npm run dev
+```
+
+Replace the example IP with the Windows Wi-Fi IPv4 address shown by `ipconfig`.
+For production, use the same environment variable with `npm start`. Lobby/TV
+QR codes will prefer this address instead of WSL's internal IP. Include the
+phone-facing port; do not include `/play`. This only changes the advertised
+address: it does not configure forwarding or open firewall ports.
+
+With WSL2 NAT networking, Windows must forward the chosen TCP port to WSL's
+server port, and Windows Firewall must allow incoming traffic from the private
+LAN. Alternatively, use WSL mirrored networking with appropriate firewall
+rules, or run the Node server directly on Windows. VPN LAN access must also be
+allowed. Test the Windows LAN `/api/health` address from the phone before
+sharing the QR code.
+
+- Open `/api/health` on the **same origin as the phone's join URL**. If it does
+  not load, check the address, firewall, and Wi-Fi client isolation. Chrome on
+  the host using `localhost` does not verify that phones can reach the server.
+- With WSL, use the Windows PC's Wi-Fi IPv4 address, not the WSL or container
+  address. WSL networking/port forwarding and the Windows firewall must allow
+  incoming connections to the server port.
+- If the health check works but the join page stays on **Loading Quiz Night**,
+  the JavaScript has not started. Update iOS and try a production build
+  (`npm run build`, then stop the development server and run `npm start`).
+  A React crash instead shows an error message to share with the host.
+- Blocked browser storage no longer prevents joining. Keep the player tab open:
+  without storage, refreshing or closing it may lose your reconnect identity.
+
 ## Implemented core flow
 
 - Authenticated host commands; server-filtered public snapshots never contain the

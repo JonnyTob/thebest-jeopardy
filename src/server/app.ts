@@ -17,9 +17,21 @@ interface AppOptions {
   passcode: string;
   production?: boolean;
   serveClient?: boolean;
+  joinOrigin?: string;
 }
 
 export async function createApp(options: AppOptions) {
+  let joinOrigin: string | undefined;
+  if (options.joinOrigin !== undefined) {
+    let parsed: URL;
+    try { parsed = new URL(options.joinOrigin); }
+    catch { throw new Error('JOIN_ORIGIN must be an HTTP(S) origin, for example http://192.168.1.42:3000.'); }
+    if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password
+      || parsed.pathname !== '/' || parsed.search || parsed.hash) {
+      throw new Error('JOIN_ORIGIN must be an HTTP(S) origin without credentials, path, query or fragment.');
+    }
+    joinOrigin = parsed.origin;
+  }
   const engine = new GameEngine(await options.storage.load());
   const app = express();
   app.disable('x-powered-by');
@@ -169,7 +181,8 @@ export async function createApp(options: AppOptions) {
     const port = address && typeof address !== 'string' ? address.port : 3000;
     const hosts = Object.values(networkInterfaces()).flatMap((entries) =>
       (entries ?? []).filter((entry) => entry.family === 'IPv4' && !entry.internal).map((entry) => entry.address));
-    res.json({ joinUrls: hosts.map((host) => `http://${host}:${port}/play`), source: 'src/data/questions.json' });
+    res.json({ joinUrls: joinOrigin ? [`${joinOrigin}/play`] : hosts.map((host) => `http://${host}:${port}/play`),
+      preferredJoinUrl: joinOrigin ? `${joinOrigin}/play` : undefined, source: 'src/data/questions.json' });
   });
 
   let closeVite: (() => Promise<void>) | undefined;

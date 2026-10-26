@@ -6,6 +6,29 @@ import { io, type Socket } from 'socket.io-client';
 import { createApp } from './app.js';
 import type { ClientEvents, ServerEvents, Snapshot, Result } from '../shared/protocol.js';
 
+test('configured LAN origin overrides internal interface addresses for QR links', async () => {
+  const options = {
+    storage: { load: async () => ({ id: 100001, title: 'LAN Quiz', questions: [{ id: 'one', type: 'text', question: 'Clue', answer: 'Answer' }] }) },
+    passcode: 'test-host-passcode', serveClient: false,
+  };
+  for (const joinOrigin of ['not-a-url', 'ftp://example.com', 'http://user:secret@example.com',
+    'http://example.com/play', 'http://example.com?token=x', 'http://example.com#fragment']) {
+    await assert.rejects(createApp({ ...options, joinOrigin }), /JOIN_ORIGIN/);
+  }
+  const application = await createApp({ ...options, joinOrigin: 'http://192.168.1.42:4000/' });
+  try {
+    await new Promise<void>((resolve) => application.httpServer.listen(0, '127.0.0.1', resolve));
+    const address = application.httpServer.address();
+    assert.ok(address && typeof address !== 'string');
+    const response = await fetch(`http://127.0.0.1:${address.port}/api/info`);
+    const info = await response.json();
+    assert.deepEqual(info.joinUrls, ['http://192.168.1.42:4000/play']);
+    assert.equal(info.preferredJoinUrl, 'http://192.168.1.42:4000/play');
+  } finally {
+    await application.close();
+  }
+});
+
 test('socket flow enforces host authorization, answer privacy, one winner and token reconnection', async () => {
   const application = await createApp({
     storage: { load: async () => ({ id: 100001, title: 'Socket Quiz', questions: [{ id: 'one', type: 'text', question: 'Public clue', answer: 'PRIVATE ANSWER' }] }) },

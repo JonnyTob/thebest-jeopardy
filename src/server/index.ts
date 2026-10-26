@@ -11,6 +11,7 @@ const application = await createApp({
   storage: new JsonQuizStorage(path.resolve('src/data/questions.json')),
   passcode,
   production: process.argv.includes('--production'),
+  joinOrigin: process.env.JOIN_ORIGIN,
 });
 application.httpServer.on('error', (error) => {
   console.error('Unable to start Quiz Night:', error);
@@ -20,6 +21,7 @@ application.httpServer.on('error', (error) => {
 application.httpServer.listen(port, '0.0.0.0', () => {
   console.log(`Quiz Night: http://localhost:${port}`);
   console.log(`Private host console: http://localhost:${port}/admin`);
+  if (process.env.JOIN_ORIGIN) console.log(`Player join URL: ${new URL('/play', process.env.JOIN_ORIGIN).href}`);
   console.log(`Host passcode: ${passcode}`);
   console.log('Keep this passcode private. Active game state is lost when this server stops.');
 });

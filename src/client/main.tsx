@@ -6,10 +6,12 @@ import { AdminPage } from './pages/AdminPage';
 import { DisplayPage } from './pages/DisplayPage';
 import { PlayPage } from './pages/PlayPage';
 import { HomePage } from './pages/HomePage';
+import { AppErrorBoundary } from './components/AppErrorBoundary';
 import './styles.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
+    <AppErrorBoundary>
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<HomePage />} />
@@ -19,5 +21,6 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         <Route path="*" element={<main className="landing"><h1>Page not found</h1><Link to="/">Back to Quiz Night</Link></main>} />
       </Routes>
     </BrowserRouter>
+    </AppErrorBoundary>
   </React.StrictMode>,
 );

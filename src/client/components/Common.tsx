@@ -77,12 +77,12 @@ export function JoinLink({ compact = false }: { compact?: boolean }) {
     const controller = new AbortController();
     void fetch('/api/info', { signal: controller.signal }).then(async (response) => {
       if (!response.ok) throw new Error('Unable to load LAN join addresses.');
-      const info: { joinUrls: string[] } = await response.json();
+      const info: { joinUrls: string[]; preferredJoinUrl?: string } = await response.json();
       const current = `${location.origin}/play`;
       const choices = [...new Set([...info.joinUrls, current])];
       setUrls(choices);
       const local = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
-      setUrl(local ? choices[0] : current);
+      setUrl(info.preferredJoinUrl ?? (local ? choices[0] : current));
     }).catch((cause: unknown) => {
       if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : 'Unable to load join link.');
     });
