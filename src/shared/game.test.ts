@@ -38,3 +38,12 @@ test('quiz IDs are required positive safe integers, distinct from question IDs',
     assert.equal(quizSchema.safeParse({ ...quiz, id }).success, false);
   }
 });
+
+test('quiz covers are optional and restricted to local media paths', () => {
+  const quiz = { id: 100001, title: 'Quiz', questions: [{ id: 'one', type: 'text', question: 'Question', answer: 'Answer' }] };
+  assert.equal(quizSchema.parse(quiz).coverImage, undefined);
+  assert.equal(quizSchema.parse({ ...quiz, coverImage: '/media/covers/100001.svg' }).coverImage, '/media/covers/100001.svg');
+  for (const coverImage of ['', 'https://example.com/cover.jpg', '/media/../questions.json', '/private/cover.jpg']) {
+    assert.equal(quizSchema.safeParse({ ...quiz, coverImage }).success, false);
+  }
+});

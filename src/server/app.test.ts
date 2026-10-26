@@ -90,7 +90,7 @@ test('development serves all pages, modules and public media without exposing se
       assert.equal(response.status, 200, route);
       assert.match(await response.text(), /id="root"/);
     }
-    for (const route of ['/main.tsx', '/media/mystery.svg']) {
+    for (const route of ['/main.tsx', '/media/mystery.svg', '/media/covers/100001.svg']) {
       const response = await fetch(base + route);
       assert.equal(response.status, 200, route);
       await response.text();

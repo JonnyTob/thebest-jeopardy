@@ -248,13 +248,24 @@ td:last-child, th:last-child { padding-right: 0; }
 .leader-details { min-width: 0; display: grid; gap: 4px; }
 .leader-details strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: clamp(.65rem, 1vw, 1.2rem); }
 .leader-details > span { font-weight: 800; color: var(--gold); font-size: clamp(.8rem, 1.5vw, 1.8rem); font-variant-numeric: tabular-nums; }
-.empty-leaderboard { border: 1px dashed #62447a; border-radius: 12px; color: var(--muted); display: grid; place-items: center; width: 100%; font-size: .9rem; }
+.empty-leaderboard { border: 1px dashed #62447a; border-radius: 12px; color: var(--muted); display: grid; place-items: center; width: 100%; padding: 12px 24px; text-align: center; }
 .tv-welcome { grid-row: 1 / -1; align-self: center; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 18px; min-height: 0; }
 .tv-welcome h1 { font-size: clamp(2rem, 4.5vw, 5rem); color: var(--gold); }
 .tv-welcome > .avatar { width: clamp(80px, 12vw, 200px); height: auto; }
-.tv-welcome .join-link { text-align: left; margin-top: 12px; }
-.tv-welcome .join-link img { width: clamp(100px, 12vw, 180px); height: auto; }
-.tv-welcome .join-link h3 { font-size: clamp(1rem, 1.5vw, 1.7rem); }
+.lobby-join .join-link h3, .empty-leaderboard { font-size: clamp(1rem, 1.5vw, 1.7rem); font-weight: 700; line-height: 1.4; }
+.clue-panel.lobby-cover-panel { padding: 0; gap: 0; }
+.quiz-cover { grid-row: 1 / -1; position: relative; min-height: 0; overflow: hidden; background: radial-gradient(ellipse at 70% 25%, #7947ac, #261238 65%); }
+.quiz-cover-image { display: block; width: 100%; height: 100%; object-fit: contain; }
+.quiz-cover-overlay { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: end; align-items: start; gap: 14px; padding: clamp(24px, 3.5vw, 64px); background: linear-gradient(180deg, #120b2400 25%, #120b2480 55%, #120b24f5 100%); }
+.quiz-cover-overlay h1 { color: var(--gold); font-size: clamp(2rem, 4.5vw, 5rem); text-shadow: 0 3px 20px #0008; }
+.quiz-cover-overlay p { color: #e4d5f2; font-size: clamp(.85rem, 1.4vw, 1.5rem); }
+.cover-error { position: absolute; top: 16px; left: 16px; right: 16px; padding: 12px; border: 1px solid #a84879; border-radius: 8px; background: #4c173bee; color: #ffcee8; font-size: .9rem; }
+.lobby-buzzer .buzzer-status { padding: clamp(8px, 1.5vh, 16px) 0; gap: 8px; }
+.lobby-join { display: flex; align-items: center; justify-content: center; flex: 1; min-height: 0; width: 100%; }
+.lobby-join .join-link.compact { margin: 0; width: 100%; gap: clamp(8px, 1.5vh, 16px); }
+.lobby-join .join-link img { width: clamp(100px, min(15vw, 24vh), 260px); height: auto; }
+.lobby-join .join-link p { font-size: clamp(.8rem, 1vw, 1.1rem); }
+.lobby-join .join-url { font-size: clamp(.75rem, .95vw, 1.1rem); }
 .winner-score { color: var(--magenta); font-size: clamp(1.3rem, 3vw, 3rem); }
 .tv-offline { position: absolute; top: 0; left: 0; right: 0; z-index: 10; padding: 14px; text-align: center; background: #82213f; color: white; }
 .tv-errors { position: absolute; bottom: 18px; left: 22px; right: 22px; z-index: 10; }
@@ -287,10 +298,8 @@ td:last-child, th:last-child { padding-right: 0; }
   .tv-header { gap: 12px; }
   .tv-header .quiz-id { font-size: .6rem; padding: 3px 5px; }
   .tv-welcome { gap: 10px; }
-  .tv-welcome .join-link { gap: 16px; }
-  .tv-welcome .join-link p, .tv-welcome .join-link label, .tv-welcome > p { display: none; }
-  .tv-welcome .join-link h3 { font-size: .9rem; }
-  .tv-welcome .join-link img { width: 95px; }
+  .tv-welcome > p { display: none; }
+  .lobby-join .join-link h3, .empty-leaderboard { font-size: .9rem; }
   .buzzer-footer { padding-top: 8px; margin-top: 8px; }
   .tv-buzzer { padding: 12px; }
   .leaderboard-row { gap: 5px; }
@@ -321,7 +330,12 @@ td:last-child, th:last-child { padding-right: 0; }
   .leader-card { flex-direction: row; gap: 8px; }
   .leader-card .avatar { max-height: 80%; }
   .tv-welcome { gap: 10px; }
-  .tv-welcome .join-link { margin-top: 0; }
+  .lobby-buzzer > .eyebrow, .lobby-buzzer .buzzer-orb, .lobby-join .eyebrow, .lobby-join .join-link p { display: none; }
+  .lobby-buzzer .buzzer-status { padding: 0 0 8px; }
+  .lobby-join .join-link img { width: clamp(88px, 22vh, 130px); }
+  .lobby-join .join-link h3 { margin: 0; }
+  .lobby-join .join-url { margin-top: 5px; font-size: .65rem; }
+  .quiz-cover-overlay { gap: 8px; padding: 20px; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; }

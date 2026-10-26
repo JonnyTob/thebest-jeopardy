@@ -36,6 +36,17 @@ test('quiz ID stays stable across title edits, question resets and new sessions'
   assert.equal(new GameEngine(quiz).snapshot().quizId, quiz.id);
 });
 
+test('each quiz publishes its own optional cover without exposing answers', () => {
+  const coveredQuiz = { ...quiz, coverImage: '/media/covers/100001.svg' };
+  const game = new GameEngine(coveredQuiz);
+  assert.equal(game.snapshot().coverImage, coveredQuiz.coverImage);
+  assert.equal(game.snapshot(true).coverImage, coveredQuiz.coverImage);
+  assert.equal(new GameEngine(quiz).snapshot().coverImage, null);
+  assert.equal(new GameEngine({ ...quiz, id: 100002, coverImage: '/media/covers/100002.jpg' }).snapshot().coverImage,
+    '/media/covers/100002.jpg');
+  assert.equal(JSON.stringify(game.snapshot()).includes('SECRET'), false);
+});
+
 test('only first buzz wins; clock freezes indefinitely with no automatic score changes', () => {
   const { game, alice, bob, command, advance } = setup();
   command({ type: 'start' });

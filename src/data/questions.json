@@ -1,6 +1,7 @@
 {
   "id": 100001,
   "title": "Friday Night Quiz",
+  "coverImage": "/media/covers/100001.svg",
   "questions": [
     {
       "id": "warm-up",

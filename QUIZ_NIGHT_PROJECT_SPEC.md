@@ -33,6 +33,17 @@ Quiz Night is a locally hosted, multimedia, multiplayer buzzer quiz. One Windows
 
 The TV does not need to display all connected players. The admin dashboard always shows everyone, in a **compact, sortable table** with rank, avatar/name, score, connectivity, buzzer eligibility, locked-out/answering state and gamemaster-only adjustment controls. This removes the TV layout as the main player-count constraint; practical capacity still depends on network/server performance and game dynamics.
 
+**Lobby/welcome layout:** Before the host starts, the large left clue panel
+shows the quiz's optional `coverImage`, with aspect ratio preserved and the quiz
+name/ID on a dark overlay. Each Quiz ID can reference a separate local cover,
+for example `/media/covers/100001.svg`. Without a cover, use the default gradient
+background; a configured cover that fails to load must display an explicit warning.
+The right panel shows the QR code and join instructions below **WAITING TO START**.
+These TV join elements are lobby-only and disappear when the host starts the
+game; active/closed questions and final standings use the normal buzzer panel.
+The bottom single-row leaderboard remains fixed throughout. This is a display
+rule, not a restriction on players joining via an existing link.
+
 ### 3.2 Baseline wireframe
 
 ```text

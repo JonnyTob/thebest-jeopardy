@@ -91,7 +91,7 @@ export function JoinLink({ compact = false }: { compact?: boolean }) {
   useEffect(() => {
     if (!url) return;
     let active = true;
-    void QRCode.toDataURL(url, { width: 180, margin: 1, color: { dark: '#211035', light: '#ffffff' } })
+    void QRCode.toDataURL(url, { width: 512, margin: 4, color: { dark: '#211035', light: '#ffffff' } })
       .then((image) => { if (active) setQr(image); })
       .catch((cause: unknown) => { if (active) setError(`Unable to generate QR code: ${String(cause)}`); });
     return () => { active = false; };

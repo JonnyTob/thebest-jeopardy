@@ -238,6 +238,7 @@ export class GameEngine {
     } : null;
     return {
       revision: this.revision, quizId: this.quiz.id, settings: { ...this.settings }, phase: this.clue.phase,
+      coverImage: this.quiz.coverImage ?? null,
       questionIndex: this.clue.questionIndex, questionCount: this.quiz.questions.length,
       question: publicQuestion,
       revealedAnswer: this.clue.phase === 'ANSWER_REVEALED' ? question.answer : null,

@@ -107,6 +107,7 @@ and `questions`. The starter quiz uses:
 {
   "id": 100001,
   "title": "Friday Night Quiz",
+  "coverImage": "/media/covers/100001.svg",
   "questions": []
 }
 ```
@@ -123,6 +124,26 @@ The ID is shown as **Quiz #100001** beside the quiz name on TV, phone, and admin
 live/setup screens. It survives server restarts because it is stored in the quiz
 file, and it cannot be changed through session setup. This is a quiz/library ID,
 not a temporary join PIN or the private host passcode.
+
+### Lobby cover
+
+Each quiz can optionally set `coverImage` to its own local image path. The
+starter quiz includes an original **3840 x 2160 SVG illustration** in
+[src/public/media/covers/100001.svg](./src/public/media/covers/100001.svg).
+It is resolution-independent and remains sharp on 4K displays.
+Use the Quiz ID in the filename to keep covers organized; other local SVG,
+PNG, JPEG, or WebP covers can be referenced in the same way.
+
+On the TV lobby, the cover fills the large left panel without cropping, with
+the quiz name and ID on a dark overlay. The QR code and join instructions appear
+in the right panel below **WAITING TO START**, and disappear when the host starts
+the game. They do not reappear between questions or on the final screen.
+The fixed single-row leaderboard remains below both panels.
+
+Without `coverImage`, the title is shown on a built-in gradient background.
+A configured image that fails to load shows an explicit warning while keeping
+the title and QR available. Rebuild after replacing public assets in production.
+Hiding the TV's join information does not disable joining via an existing link.
 
 Place local media in [src/public/media/](./src/public/media/) and reference it as
 `/media/your-file.ext`. Rebuild after changing public assets for production.
