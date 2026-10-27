@@ -17,6 +17,10 @@ export function DisplayPage() {
   const winner = finished ? players[0] : null;
   const typed = state.question?.mode === 'typed';
   const reviewedPlayer = state.players.find((player) => player.id === state.review?.playerId);
+  const timerMs = (state.question?.timerSeconds ?? 0) * 1000;
+  const remainingMs = Math.max(0, timerMs - state.clueElapsedMs);
+  const remainingSeconds = Math.ceil(remainingMs / 1000);
+  const remainingPercent = timerMs > 0 ? Math.min(100, remainingMs / timerMs * 100) : 0;
 
   return <main className="tv-shell">
     <header className="tv-header"><Brand /><QuizName title={state.settings.title} id={state.quizId} />
@@ -42,8 +46,16 @@ export function DisplayPage() {
               <div className="media-area"><Media state={state} />
                 {state.revealedAnswer && <div className="answer-reveal"><span className="eyebrow">THE ANSWER</span><h2>{state.revealedAnswer}</h2></div>}
               </div>
-              {typed ? <div className="point-meta"><strong>{state.question?.fixedPoints} fixed points</strong>
-                <span>Timer: {Math.max(0, Math.ceil(((state.question?.timerSeconds ?? 0) * 1000 - state.clueElapsedMs) / 1000))}s / host closes submissions</span></div>
+              {typed ? <div className="point-bar">
+                <div className="point-label"><span>TIME REMAINING</span><strong>{remainingSeconds} <small>s</small></strong></div>
+                <div className="point-track" role="progressbar" aria-label="Time remaining"
+                  aria-valuenow={Math.round(remainingPercent)} aria-valuemin={0} aria-valuemax={100}
+                  aria-valuetext={`${remainingSeconds} seconds remaining`}>
+                  <div style={{ width: `${remainingPercent}%` }} />
+                </div>
+                <div className="point-meta"><strong>{state.question?.fixedPoints} fixed points</strong>
+                  <span>{state.clockRunning ? 'Clock running' : 'Clock frozen'} / host closes submissions</span></div>
+                </div>
                 : <PointBar state={state} />}
             </>}
       </div>

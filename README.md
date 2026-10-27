@@ -211,8 +211,13 @@ sharing the QR code.
 - **Everyone answers** questions accept one final typed submission per player.
   A guide timer counts down on the TV, host and phones, but submissions remain
   open until the host closes the clue. Pausing pauses the timer and submissions.
+  The TV clue also shows a shrinking countdown bar using the question's
+  `timerSeconds`. It freezes when paused or closed and stays empty at zero;
+  it does not affect the fixed points or automatically close submissions.
   The host can see all submissions privately; other players see only the count.
-  After closing, start review to show each answer on the TV, mark it correct or
+  Use **Close submissions & start review** to close the clue and show the first
+  answer on the TV in one step. Alternatively, use **Close submissions**, then
+  **Start answer review**. Mark each answer correct or
   wrong, then advance manually. Correct earns the question's fixed points;
   wrong or missing answers earn zero. The leaderboard updates immediately.
   Review order is submission order, followed by non-submitters in join order.
@@ -236,7 +241,7 @@ awarded points, so use undo first if the scores should be reversed.
 ## Questions and media
 
 Edit [src/data/questions.json](./src/data/questions.json), then restart the server.
-The starter quiz has two text clues and an original tiled-image clue. Questions
+The starter quiz has ten questions covering both modes and all four media types. Questions
 are validated on startup; invalid data fails explicitly. The raw JSON is
 **server-only** and is not exposed as a public HTTP resource.
 
@@ -266,6 +271,41 @@ file, and it cannot be changed through session setup. This is a quiz/library ID,
 not a temporary join PIN or the private host passcode.
 
 ### Question modes
+
+The bundled quiz is also a playable examples catalog:
+
+| # | Question ID | Type / mode | Features to try |
+| --- | --- | --- | --- |
+| 1 | `warm-up` | Text / buzzer | Omitted `mode` defaults to buzzer; separate headline and clue text |
+| 2 | `mystery-image` | Image / buzzer | Deterministic 8 x 6 tile reveal over 20 seconds; buzz freezes it |
+| 3 | `everyone-answers-text` | Text / typed | Everyone submits privately; 250 fixed points and a 30-second guide timer |
+| 4 | `static-image` | Image / buzzer | Explicit `mode` and `static` reveal; count the five gold stars |
+| 5 | `everyone-answers-image` | Image / typed | 6 x 4 tiles with a different seed; 15-second reveal independent of the 25-second guide timer |
+| 6 | `audio-buzzer` | Audio / buzzer | Full eight-second original chime clip with live spectrum visualization |
+| 7 | `everyone-answers-audio` | Audio / typed | Only seconds 4.5-8 of the same clip; visualization disabled; 300 fixed points |
+| 8 | `video-buzzer` | Video / buzzer | Full original silent moving-shapes clip; aspect-preserving playback |
+| 9 | `everyone-answers-video` | Video / typed | Seconds 2-6 of the clip; 150 fixed points and a 20-second guide timer |
+| 10 | `last-call` | Text / buzzer | Return to buzzer mode after typed review, then finish the quiz |
+
+For typed questions, join from a real phone/browser, submit, then use
+**Close submissions & start review**, the correct/wrong ruling, and **Next review**
+for every player. The combined button works before or after the guide timer
+expires, including while paused. It immediately freezes submissions and the
+review queue; there is no need to wait for zero or close the question separately.
+You can still use **Close submissions** followed by **Start answer review**.
+Reveal or advance once review is complete. A wrong or missing typed answer earns
+zero, unlike the symmetric negative penalty for a wrong buzzer answer.
+Neither guide timers nor clip endings automatically close a question.
+The `players` helper only joins players; it does not submit typed answers.
+
+All referenced media is bundled and works offline: the original rocket image,
+an original ringed-planet illustration, a synthesized WAV (three ascending notes,
+then three descending notes), and a silent 1280 x 720 MP4 of moving coloured
+shapes. The latter three live in [src/public/media/examples/](./src/public/media/examples/).
+The MP4 uses H.264 for broad browser compatibility.
+Audio/video plays on the TV only and may need its playback-unlock button.
+No commercial music, movie clips, remote URLs, or missing placeholder files are
+needed for the bundled quiz.
 
 Each question may use `"mode": "buzzer"` for the original first-buzz flow, or
 `"mode": "typed"` for everyone to answer privately. Omitted `mode` defaults to

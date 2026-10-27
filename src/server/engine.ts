@@ -211,8 +211,10 @@ export class GameEngine {
         this.clue.phase = 'ANSWER_REVEALED';
         break;
       case 'startReview':
-        this.require(this.clue.phase === 'QUESTION_CLOSED' && this.quiz.questions[this.clue.questionIndex]?.mode === 'typed',
-          'Close a typed-answer question before starting review.');
+        this.require(['QUESTION_OPEN', 'QUESTION_CLOSED'].includes(this.clue.phase) &&
+          this.quiz.questions[this.clue.questionIndex]?.mode === 'typed',
+          'Start review from an open or closed typed-answer question.');
+        if (this.clue.phase === 'QUESTION_OPEN') this.close();
         this.clue.reviewIndex = 0;
         this.clue.phase = this.clue.reviewQueue.length ? 'REVIEW' : 'REVIEW_COMPLETE';
         break;

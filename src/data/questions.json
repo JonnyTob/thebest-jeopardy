@@ -6,9 +6,12 @@
     {
       "id": "warm-up",
       "type": "text",
+      "mode": "typed",
       "question": "Let's start with a little space travel.",
       "text": "Which planet in our solar system is known as the Red Planet?",
-      "answer": "Mars"
+      "answer": "Mars",
+      "fixedPoints": 250,
+      "timerSeconds": 30
     },
     {
       "id": "mystery-image",
@@ -22,6 +25,96 @@
         "columns": 8,
         "rows": 6,
         "seed": 814
+      }
+    },
+    {
+      "id": "everyone-answers-text",
+      "type": "text",
+      "mode": "typed",
+      "question": "Everyone answers: a little mental arithmetic.",
+      "text": "What is 12 multiplied by 8? Type the number on your phone and submit once.",
+      "answer": "96",
+      "fixedPoints": 250,
+      "timerSeconds": 30
+    },
+    {
+      "id": "static-image",
+      "type": "image",
+      "mode": "buzzer",
+      "question": "Look closely. How many gold stars surround the planet?",
+      "media": "/media/examples/planet.svg",
+      "answer": "Five gold stars. The small white dots are not stars for this question.",
+      "reveal": {
+        "effect": "static"
+      }
+    },
+    {
+      "id": "everyone-answers-image",
+      "type": "image",
+      "mode": "typed",
+      "question": "Everyone answers: what shape surrounds the planet?",
+      "media": "/media/examples/planet.svg",
+      "answer": "An oval / ellipse (the planet's ring). Accept ring.",
+      "fixedPoints": 200,
+      "timerSeconds": 25,
+      "reveal": {
+        "effect": "tiles",
+        "durationSeconds": 15,
+        "columns": 6,
+        "rows": 4,
+        "seed": 2026
+      }
+    },
+    {
+      "id": "audio-buzzer",
+      "type": "audio",
+      "mode": "buzzer",
+      "question": "Listen to the first three notes. Does their pitch go up or down?",
+      "media": "/media/examples/chimes.wav",
+      "answer": "Up / ascending. The first three notes get higher; the last three get lower.",
+      "visualizer": {
+        "enabled": true,
+        "style": "spectrum"
+      }
+    },
+    {
+      "id": "everyone-answers-audio",
+      "type": "audio",
+      "mode": "typed",
+      "question": "Everyone answers: how many notes are played in this short clip?",
+      "media": "/media/examples/chimes.wav",
+      "answer": "Three notes. This segment plays only the descending second half.",
+      "fixedPoints": 300,
+      "timerSeconds": 20,
+      "visualizer": {
+        "enabled": false,
+        "style": "spectrum"
+      },
+      "playback": {
+        "startSeconds": 4.5,
+        "endSeconds": 8
+      }
+    },
+    {
+      "id": "video-buzzer",
+      "type": "video",
+      "mode": "buzzer",
+      "question": "Watch the moving shapes. What colour is the circle?",
+      "media": "/media/examples/shapes.mp4",
+      "answer": "Magenta / pink / purple-pink. The square is gold and the triangle is mint green."
+    },
+    {
+      "id": "everyone-answers-video",
+      "type": "video",
+      "mode": "typed",
+      "question": "Everyone answers: which shape has exactly three sides?",
+      "media": "/media/examples/shapes.mp4",
+      "answer": "The triangle / mint-green triangle.",
+      "fixedPoints": 150,
+      "timerSeconds": 20,
+      "playback": {
+        "startSeconds": 2,
+        "endSeconds": 6
       }
     },
     {

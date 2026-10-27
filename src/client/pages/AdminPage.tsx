@@ -97,7 +97,10 @@ function AdminConsole({ logout, requirePasscode }: { logout: () => void; require
                     <button className="primary" disabled={disabled || state.review.correct === null}
                       onClick={() => { void command({ type: 'nextReview' }); }}>Next review &rarr;</button>
                   </div>}
-                  <button disabled={disabled || state.phase !== 'QUESTION_CLOSED'} onClick={() => { void command({ type: 'startReview' }); }}>Start answer review</button>
+                  <button disabled={disabled || !(isOpen || state.phase === 'QUESTION_CLOSED')}
+                    onClick={() => { void command({ type: 'startReview' }); }}>
+                    {isOpen ? 'Close submissions & start review' : 'Start answer review'}</button>
+                  {isOpen && <p className="muted">The timer is a guide. Starting review closes submissions immediately.</p>}
                 </> : <>
                 {active ? <div className="host-answering"><Avatar id={active.avatarId} /><div><h2>{active.name}</h2>
                   <p>{state.pointsAtBuzz} frozen points / answering aloud</p></div></div> : <h2>{buzzerLabel(state)}</h2>}
@@ -109,7 +112,8 @@ function AdminConsole({ logout, requirePasscode }: { logout: () => void; require
                 <button disabled={disabled || !isOpen} onClick={() => { void command({ type: state.paused ? 'resume' : 'pause' }); }}>
                   {state.paused ? 'Resume clue' : 'Pause clue'} {typed ? '& submissions' : '& buzzers'}</button>
                 <button disabled={disabled || !isOpen} onClick={() => { void command({ type: 'restartMedia' }); }}>Restart media only</button>
-                <button disabled={disabled || !(isOpen || answering)} onClick={() => { void command({ type: 'close' }); }}>Close / skip question</button>
+                <button disabled={disabled || !(isOpen || answering)} onClick={() => { void command({ type: 'close' }); }}>
+                  {typed ? 'Close submissions' : 'Close / skip question'}</button>
                 <button disabled={disabled || (typed ? state.phase !== 'REVIEW_COMPLETE' : state.phase !== 'QUESTION_CLOSED')} onClick={() => { void command({ type: 'reveal' }); }}>Reveal answer on TV</button>
                 <button className="primary" disabled={disabled || !readyForNext} onClick={() => { void command({ type: 'next' }); }}>
                   {state.questionIndex === state.questionCount - 1 ? 'Finish quiz' : 'Next question'} &rarr;</button>

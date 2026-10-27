@@ -35,6 +35,53 @@ test('typed question validation requires fixed points and timer while old questi
     minimumPoints: 100, dropPoints: 100, dropEverySeconds: 5, maxAnswerLength: 501 }).success, false);
 });
 
+test('one-click review atomically closes open typed submissions before or after the guide timer, including when paused', () => {
+  for (const [elapsed, paused] of [[1000, false], [3000, false], [1000, true]] as const) {
+    const { game, alice, bob, carol, command, advance } = setup();
+    assert.throws(() => command({ type: 'startReview' }), /open or closed typed-answer/);
+    command({ type: 'start' });
+    const instance = game.snapshot().questionInstanceId!;
+    game.submitAnswer(bob.id, instance, 'First submission');
+    game.setConnected(carol.id, false);
+    advance(elapsed);
+    if (paused) command({ type: 'pause' });
+    const reviewCommand = { id: randomUUID(), revision: game.revision, action: { type: 'startReview' } } as const;
+    game.command(reviewCommand);
+    assert.equal(game.snapshot().phase, 'REVIEW');
+    assert.equal(game.snapshot().clockRunning, false);
+    assert.equal(game.snapshot().paused, false);
+    assert.equal(game.snapshot().clueElapsedMs, elapsed);
+    assert.equal(game.snapshot().reviewCount, 3);
+    assert.equal(game.snapshot().review?.playerId, bob.id);
+    assert.equal(game.snapshot().review?.answer, 'First submission');
+    assert.equal(JSON.stringify(game.snapshot()).includes('SECRET'), false);
+    advance(10000);
+    assert.equal(game.snapshot().clueElapsedMs, elapsed);
+    assert.throws(() => game.submitAnswer(alice.id, instance, 'Too late'), /not open/);
+    game.join({ name: 'Late player', avatarId: 'bear' });
+    assert.equal(game.snapshot().reviewCount, 3);
+    command({ type: 'judgeReview', correct: true });
+    game.command(reviewCommand);
+    assert.equal(game.snapshot().review?.correct, true, 'Duplicate start must not reset review');
+    command({ type: 'nextReview' });
+    assert.equal(game.snapshot().review?.playerId, alice.id);
+    assert.throws(() => command({ type: 'startReview' }), /open or closed typed-answer/);
+  }
+});
+
+test('one-click review handles empty queues and rejects buzzer questions without closing them', () => {
+  const game = new GameEngine(quiz);
+  const command = (action: HostAction) => game.command({ id: randomUUID(), revision: game.revision, action });
+  command({ type: 'start' });
+  command({ type: 'startReview' });
+  assert.equal(game.snapshot().phase, 'REVIEW_COMPLETE');
+  assert.equal(game.snapshot().clockRunning, false);
+  command({ type: 'next' });
+  assert.throws(() => command({ type: 'startReview' }), /open or closed typed-answer/);
+  assert.equal(game.snapshot().phase, 'QUESTION_OPEN');
+  assert.equal(game.snapshot().clockRunning, true);
+});
+
 test('typed answers remain private and final, obey the host close and are reviewed in submission order', () => {
   const { game, alice, bob, carol, command, advance } = setup();
   command({ type: 'setup', settings: { ...game.settings, maxAnswerLength: 8 } });
@@ -178,7 +225,6 @@ test('sockets send answers only to host until current review and restore submiss
     assert.equal(snapshots.get(reconnected)?.mySubmitted, true);
     const repeat = await reconnected.timeout(5000).emitWithAck('player:submitAnswer', { questionInstanceId: id, answer: 'Again' });
     assert.equal(repeat.ok, false);
-    assert.ok((await send({ type: 'close' })).ok);
     const displayReceived = new Promise<Snapshot>((resolve) => {
       display.on('session:snapshot', function listener(state) {
         if (state.review?.answer === 'PRIVATE GUESS') {
