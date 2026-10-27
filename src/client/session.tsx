@@ -3,6 +3,7 @@ import { io, type Socket } from 'socket.io-client';
 import type { ClientEvents, HostAction, JoinRequest, ServerEvents, Snapshot } from '../shared/protocol';
 import { pointsAt } from '../shared/game';
 import { clearPlayerToken, readPlayerToken, savePlayerToken } from './playerToken';
+import { branding } from './branding';
 
 type GameSocket = Socket<ServerEvents, ClientEvents>;
 interface Session {
@@ -83,7 +84,7 @@ export function SessionProvider({ role, passcode, children }: {
     try {
       return await execute(socketRef.current);
     } catch (cause) {
-      console.error('Quiz Night request failed:', cause);
+      console.error(`${branding.name} request failed:`, cause);
       setError('The server did not confirm the request. Check the current state before retrying.');
       return false;
     } finally {

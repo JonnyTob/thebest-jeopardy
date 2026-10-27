@@ -1,12 +1,15 @@
 import { createServer } from 'node:http';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { networkInterfaces } from 'node:os';
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import express from 'express';
 import { Server } from 'socket.io';
-import { hostCommandSchema, joinSchema, type ClientEvents, type ServerEvents } from '../shared/protocol.js';
+import { brandingSchema, createJoinSchema, hostCommandSchema, serverSettingsSchema, settingsSchema, type Branding, type ClientEvents, type ServerEvents, type Settings, type ServerSettings } from '../shared/protocol.js';
 import { GameEngine, GameError } from './engine.js';
 import type { QuizStorage } from './storage.js';
+import type { QuizSettingsStorage } from './settings.js';
+import { renderBrandingHtml } from './branding.js';
 
 interface SocketData {
   host: boolean;
@@ -18,9 +21,14 @@ interface AppOptions {
   production?: boolean;
   serveClient?: boolean;
   joinOrigin?: string;
+  gameSetup?: Partial<Settings>;
+  settingsStorage?: QuizSettingsStorage;
+  serverSettings?: Partial<ServerSettings>;
+  branding?: Branding;
 }
 
 export async function createApp(options: AppOptions) {
+  const branding = brandingSchema.parse(options.branding ?? {});
   let joinOrigin: string | undefined;
   if (options.joinOrigin !== undefined) {
     let parsed: URL;
@@ -32,7 +40,16 @@ export async function createApp(options: AppOptions) {
     }
     joinOrigin = parsed.origin;
   }
-  const engine = new GameEngine(await options.storage.load());
+  const quiz = await options.storage.load();
+  const settingsStorage = options.settingsStorage;
+  const serverSettings = serverSettingsSchema.parse(options.serverSettings ?? {});
+  const joinSchema = createJoinSchema(serverSettings.maxPlayerNameLength);
+  const engine = new GameEngine(quiz, undefined, serverSettings);
+  engine.settings = settingsSchema.parse({
+    ...engine.settings,
+    ...options.gameSetup,
+    ...settingsStorage?.load(quiz.id),
+  });
   const app = express();
   app.disable('x-powered-by');
   const httpServer = createServer(app);
@@ -47,6 +64,10 @@ export async function createApp(options: AppOptions) {
     const auth = socket.handshake.auth;
     socket.data.host = false;
     if (auth.role === 'host') {
+      if (!serverSettings.requireAdminPasscode) {
+        socket.data.host = true;
+        return next();
+      }
       const address = socket.handshake.address;
       const now = Date.now();
       let failures = failedHosts.get(address);
@@ -96,7 +117,8 @@ export async function createApp(options: AppOptions) {
         return;
       }
       const parsed = joinSchema.safeParse(input);
-      if (!parsed.success) return ack({ ok: false, error: 'Choose a nickname (1-24 characters) and an available avatar.' });
+      if (!parsed.success) return ack({ ok: false,
+        error: `Choose a nickname (1-${serverSettings.maxPlayerNameLength} characters) and an available avatar.` });
       if (socket.handshake.auth.role !== 'player' || socket.data.playerId) {
         return ack({ ok: false, error: 'This connection cannot join as a new player.' });
       }
@@ -137,7 +159,14 @@ export async function createApp(options: AppOptions) {
       const parsed = hostCommandSchema.safeParse(input);
       if (!parsed.success) return ack({ ok: false, error: 'Invalid host command. Check the values and try again.' });
       try {
-        engine.command(parsed.data);
+        engine.command(parsed.data, settingsStorage ? (settings) => {
+          try {
+            settingsStorage.save(quiz.id, settings);
+          } catch (cause) {
+            console.error('Unable to save quiz settings:', cause);
+            throw new GameError('Unable to save quiz settings to disk. Setup was not changed. Check the server console.');
+          }
+        } : undefined);
         if (parsed.data.action.type === 'removePlayer') {
           const removedId = parsed.data.action.playerId;
           for (const [token, playerId] of tokens) if (playerId === removedId) tokens.delete(token);
@@ -184,19 +213,22 @@ export async function createApp(options: AppOptions) {
     const hosts = Object.values(networkInterfaces()).flatMap((entries) =>
       (entries ?? []).filter((entry) => entry.family === 'IPv4' && !entry.internal).map((entry) => entry.address));
     res.json({ joinUrls: joinOrigin ? [`${joinOrigin}/play`] : hosts.map((host) => `http://${host}:${port}/play`),
-      preferredJoinUrl: joinOrigin ? `${joinOrigin}/play` : undefined, source: 'src/data/questions.json' });
+      preferredJoinUrl: joinOrigin ? `${joinOrigin}/play` : undefined, source: 'src/data/questions.json',
+      serverSettings, branding });
   });
 
   let closeVite: (() => Promise<void>) | undefined;
   if (options.serveClient !== false) {
     if (options.production) {
-      app.use(express.static(path.resolve('dist/client'), { index: false }));
-      app.get(['/', '/display', '/admin', '/play'], (_req, res) => {
-        res.sendFile(path.resolve('dist/client/index.html'));
+      const html = renderBrandingHtml(await readFile(path.resolve('dist/client/index.html'), 'utf8'), branding);
+      app.get(['/', '/index.html', '/display', '/admin', '/play'], (_req, res) => {
+        res.type('html').send(html);
       });
+      app.use(express.static(path.resolve('dist/client'), { index: false }));
     } else {
       const { createServer: createViteServer } = await import('vite');
       const vite = await createViteServer({
+        plugins: [{ name: 'runtime-branding', transformIndexHtml: (html) => renderBrandingHtml(html, branding) }],
         server: {
           middlewareMode: true,
           hmr: { server: httpServer },

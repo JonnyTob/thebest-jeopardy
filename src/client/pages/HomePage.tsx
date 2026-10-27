@@ -1,9 +1,10 @@
 import { Link } from 'react-router-dom';
 import { Brand, JoinLink } from '../components/Common';
+import { branding } from '../branding';
 
 export function HomePage() {
   return <main className="landing">
-    <Brand subtitle="Your living room. Your game show." />
+    <Brand subtitle={branding.tagline} />
     <div className="hero"><span className="eyebrow">A LITTLE COMPETITION. A GREAT NIGHT.</span>
       <h1>Big screen.<br /><em>Quick thinking.</em></h1>
       <p>One quiz. Everyone in the room. Choose your screen to get started.</p></div>

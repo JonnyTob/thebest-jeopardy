@@ -2,34 +2,40 @@ import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { createApp } from './app.js';
 import { JsonQuizStorage } from './storage.js';
+import { JsonQuizSettingsStorage, loadGlobalSettings } from './settings.js';
 
-const port = Number(process.env.PORT ?? 3000);
-if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('PORT must be between 1 and 65535.');
-const passcode = process.env.HOST_PASSCODE ?? randomBytes(6).toString('hex');
-if (passcode.length < 8) throw new Error('HOST_PASSCODE must contain at least 8 characters.');
+const settings = loadGlobalSettings(path.resolve('settings.json'));
+const { port, joinOrigin, ...serverSettings } = settings.server;
+const passcode = serverSettings.requireAdminPasscode ? process.env.HOST_PASSCODE ?? randomBytes(6).toString('hex') : '';
+if (serverSettings.requireAdminPasscode && passcode.length < 8) throw new Error('HOST_PASSCODE must contain at least 8 characters.');
 const application = await createApp({
   storage: new JsonQuizStorage(path.resolve('src/data/questions.json')),
   passcode,
   production: process.argv.includes('--production'),
-  joinOrigin: process.env.JOIN_ORIGIN,
+  joinOrigin,
+  gameSetup: settings.gameSetup,
+  settingsStorage: new JsonQuizSettingsStorage(path.resolve('settings/quizzes')),
+  serverSettings,
+  branding: settings.branding,
 });
 application.httpServer.on('error', (error) => {
-  console.error('Unable to start Quiz Night:', error);
+  console.error(`Unable to start ${settings.branding.name}:`, error);
   process.exitCode = 1;
   void application.close();
 });
 application.httpServer.listen(port, '0.0.0.0', () => {
-  console.log(`Quiz Night: http://localhost:${port}`);
+  console.log(`${settings.branding.name}: http://localhost:${port}`);
   console.log(`Private host console: http://localhost:${port}/admin`);
-  if (process.env.JOIN_ORIGIN) console.log(`Player join URL: ${new URL('/play', process.env.JOIN_ORIGIN).href}`);
-  console.log(`Host passcode: ${passcode}`);
-  console.log('Keep this passcode private. Active game state is lost when this server stops.');
+  if (joinOrigin) console.log(`Player join URL: ${new URL('/play', joinOrigin).href}`);
+  if (serverSettings.requireAdminPasscode) console.log(`Host passcode: ${passcode} (keep private)`);
+  else console.warn('Admin passcode protection is DISABLED. Anyone who can reach this server can control the quiz.');
+  console.log('Quiz setup is saved; players, scores and active game state are lost when this server stops.');
 });
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.once(signal, () => {
     void application.close().catch((error: unknown) => {
-      console.error('Error shutting down Quiz Night:', error);
+      console.error(`Error shutting down ${settings.branding.name}:`, error);
       process.exitCode = 1;
     });
   });

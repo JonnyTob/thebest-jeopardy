@@ -2,6 +2,7 @@ import { useAnimatedState, useSession } from '../session';
 import { Avatar, Brand, Connection, JoinLink, PointBar, QuizName, SessionError, buzzerLabel } from '../components/Common';
 import { Media } from '../components/Media';
 import { QuizCover } from '../components/QuizCover';
+import { branding } from '../branding';
 
 export function DisplayPage() {
   const { connected } = useSession();
@@ -24,7 +25,7 @@ export function DisplayPage() {
     <section className="tv-stage">
       <div className={`panel clue-panel ${lobby ? 'lobby-cover-panel' : ''}`}>
         {lobby ? <QuizCover key={`${state.quizId}:${state.coverImage}`} title={state.settings.title} id={state.quizId} image={state.coverImage} />
-          : finished ? <div className="tv-welcome"><span className="eyebrow">OUR QUIZ NIGHT CHAMPION</span>
+          : finished ? <div className="tv-welcome"><span className="eyebrow">OUR {branding.name.toUpperCase()} CHAMPION</span>
             {winner ? <><Avatar id={winner.avatarId} /><h1>{winner.name}</h1><strong className="winner-score">{winner.score.toLocaleString()} points</strong></>
               : <h1>Thanks for playing!</h1>}<p>Same time next quiz?</p></div>
             : <>

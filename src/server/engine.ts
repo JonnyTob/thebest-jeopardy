@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { pointsAt, rankPlayers } from '../shared/game.js';
-import type { HostCommand, JoinRequest, Phase, Player, Quiz, ScoreEvent, Settings, Snapshot } from '../shared/protocol.js';
+import { serverSettingsSchema, type HostCommand, type JoinRequest, type Phase, type Player, type Quiz, type ScoreEvent, type Settings, type Snapshot, type ServerSettings } from '../shared/protocol.js';
 
 export class GameError extends Error {}
 
@@ -21,7 +21,6 @@ interface ClueState {
 interface UndoEntry {
   clue: ClueState;
   scores: Map<string, number>;
-  leaderboardIds: string[];
   eventId: string;
 }
 
@@ -40,7 +39,8 @@ export class GameEngine {
     mediaOffsetSeconds: 0, mediaVersion: 0,
   };
 
-  constructor(readonly quiz: Quiz, private readonly now: () => number = () => performance.now()) {
+  constructor(readonly quiz: Quiz, private readonly now: () => number = () => performance.now(),
+    readonly serverSettings: ServerSettings = serverSettingsSchema.parse({})) {
     this.settings = { title: quiz.title, leaderboardCount: 8, startPoints: 500,
       minimumPoints: 100, dropPoints: 100, dropEverySeconds: 5, lockoutSeconds: 0 };
   }
@@ -72,12 +72,15 @@ export class GameEngine {
   }
 
   join(request: JoinRequest): Player {
+    this.require(request.name.length >= 1 && request.name.length <= this.serverSettings.maxPlayerNameLength,
+      `Choose a nickname (1-${this.serverSettings.maxPlayerNameLength} characters).`);
+    this.require(this.players.size < this.serverSettings.maxPlayers,
+      `The game is full (${this.serverSettings.maxPlayers} players maximum). Ask the host to remove an unused player.`);
     this.require(![...this.players.values()].some((p) => p.name.toLocaleLowerCase() === request.name.toLocaleLowerCase()),
       'That nickname is already in use.');
     const player: Player = { id: randomUUID(), ...request, score: 0, connected: true, joinedOrder: this.nextOrder++ };
     this.players.set(player.id, player);
-    if (!this.isActive()) this.rank();
-    else this.leaderboardIds.push(player.id);
+    this.rank();
     this.revision++;
     return player;
   }
@@ -127,22 +130,23 @@ export class GameEngine {
     this.history.push({
       clue: { ...structuredClone(this.clue), elapsedMs: this.elapsed(), startedAt: this.clue.startedAt === null ? null : this.now() },
       scores: new Map([...this.players.values()].map((p) => [p.id, p.score])),
-      leaderboardIds: [...this.leaderboardIds],
       eventId,
     });
     if (this.history.length > 100) this.history.shift();
     player.score += delta;
+    this.rank();
     this.scoreEvents.unshift({ id: eventId, description, playerId: player.id, delta });
     this.scoreEvents = this.scoreEvents.slice(0, 100);
   }
 
-  command(command: HostCommand) {
+  command(command: HostCommand, saveSettings?: (settings: Settings) => void) {
     if (this.processed.has(command.id)) return;
     this.require(command.revision === this.revision, 'Game state changed. Review the latest state and try again.');
     const action = command.action;
     switch (action.type) {
       case 'setup':
         this.require(this.clue.phase === 'LOBBY', 'Setup can only change in the lobby.');
+        saveSettings?.(action.settings);
         this.settings = action.settings;
         break;
       case 'start':
@@ -208,7 +212,6 @@ export class GameEngine {
         const player = this.players.get(action.playerId);
         this.require(player, 'Player not found.');
         this.saveScore(player, action.delta, `${player.name}: manual adjustment`);
-        if (!this.isActive()) this.rank();
         break;
       }
       case 'undo': {
@@ -221,9 +224,7 @@ export class GameEngine {
           if (player) player.score = score;
         }
         this.scoreEvents = this.scoreEvents.filter((event) => event.id !== entry.eventId);
-        this.leaderboardIds = [...entry.leaderboardIds.filter((id) => this.players.has(id)),
-          ...[...this.players.keys()].filter((id) => !entry.leaderboardIds.includes(id))];
-        if (!this.isActive()) this.rank();
+        this.rank();
         break;
       }
       case 'removePlayer':
@@ -249,6 +250,7 @@ export class GameEngine {
     } : null;
     return {
       revision: this.revision, quizId: this.quiz.id, settings: { ...this.settings }, phase: this.clue.phase,
+      serverSettings: { ...this.serverSettings },
       coverImage: this.quiz.coverImage ?? null,
       questionIndex: this.clue.questionIndex, questionCount: this.quiz.questions.length,
       question: publicQuestion,

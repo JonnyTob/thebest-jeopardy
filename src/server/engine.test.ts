@@ -152,21 +152,63 @@ test('public snapshots never contain private answers until explicit reveal', () 
   assert.throws(() => command({ type: 'next' }), /Close/);
 });
 
-test('12 players retain stable clue ordering, with off-leaderboard buzzer prominently identified', () => {
+test('12-player leaderboard immediately promotes a scorer into the displayed top players during an active clue', () => {
   const { game, command } = setup();
   for (let i = 2; i < 12; i++) game.join({ name: `Player ${i}`, avatarId: 'frog' });
   const last = [...game.players.values()][11];
   command({ type: 'start' });
-  const initial = game.snapshot().leaderboardIds;
-  command({ type: 'adjust', playerId: last.id, delta: 1000 });
-  assert.deepEqual(game.snapshot().leaderboardIds, initial);
+  assert.equal(game.snapshot().leaderboardIds.slice(0, game.settings.leaderboardCount).includes(last.id), false);
   game.buzz(last.id);
   assert.equal(game.snapshot().activePlayerId, last.id);
   assert.equal(game.snapshot().players.length, 12);
+  command({ type: 'adjust', playerId: last.id, delta: 1000 });
+  assert.equal(game.snapshot().phase, 'ANSWERING');
+  assert.equal(game.snapshot().leaderboardIds[0], last.id);
+  assert.equal(game.snapshot().leaderboardIds.slice(0, game.settings.leaderboardCount).length, 8);
+  assert.equal(game.snapshot().activePlayerId, last.id);
   command({ type: 'judge', correct: true });
   assert.equal(game.snapshot().leaderboardIds[0], last.id);
 });
 
+test('wrong rulings and undo immediately rerank an open question without waiting for close', () => {
+  const { game, alice, bob, command } = setup();
+  command({ type: 'start' });
+  assert.deepEqual(game.snapshot().leaderboardIds, [alice.id, bob.id]);
+  game.buzz(alice.id);
+  command({ type: 'judge', correct: false });
+  assert.equal(game.snapshot().phase, 'QUESTION_OPEN');
+  assert.deepEqual(game.snapshot().leaderboardIds, [bob.id, alice.id]);
+  command({ type: 'undo' });
+  assert.equal(game.snapshot().phase, 'ANSWERING');
+  assert.deepEqual(game.snapshot().leaderboardIds, [alice.id, bob.id]);
+  assert.equal(alice.score, 0);
+});
+
+test('manual score changes rerank immediately while paused, with ties resolved by join order', () => {
+  const { game, alice, bob, command } = setup();
+  command({ type: 'start' });
+  command({ type: 'pause' });
+  command({ type: 'adjust', playerId: bob.id, delta: 100 });
+  assert.deepEqual(game.snapshot().leaderboardIds, [bob.id, alice.id]);
+  command({ type: 'adjust', playerId: alice.id, delta: 100 });
+  assert.deepEqual(game.snapshot().leaderboardIds, [alice.id, bob.id]);
+  command({ type: 'adjust', playerId: alice.id, delta: -200 });
+  assert.deepEqual(game.snapshot().leaderboardIds, [bob.id, alice.id]);
+  command({ type: 'undo' });
+  assert.deepEqual(game.snapshot().leaderboardIds, [alice.id, bob.id]);
+  assert.equal(game.snapshot().paused, true);
+});
+
+test('late joiners rank above negative scores, and undo includes players who joined after the ruling', () => {
+  const { game, alice, bob, command } = setup();
+  command({ type: 'start' });
+  game.buzz(alice.id);
+  command({ type: 'judge', correct: false });
+  const charlie = game.join({ name: 'Charlie', avatarId: 'bear' });
+  assert.deepEqual(game.snapshot().leaderboardIds, [bob.id, charlie.id, alice.id]);
+  command({ type: 'undo' });
+  assert.deepEqual(game.snapshot().leaderboardIds, [alice.id, bob.id, charlie.id]);
+});
 test('disconnects retain identity, score and eligibility; reset clears lockout but not scores', () => {
   const { game, alice, command } = setup();
   command({ type: 'start' });

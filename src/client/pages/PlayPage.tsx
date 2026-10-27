@@ -3,12 +3,15 @@ import { avatars, type AvatarId } from '../../shared/protocol';
 import { rankPlayers } from '../../shared/game';
 import { useSession } from '../session';
 import { Avatar, Brand, Connection, QuizName, SessionError } from '../components/Common';
+import { branding } from '../branding';
 
 export function PlayPage() {
   const { state, connected, playerId, join, buzz, pending } = useSession();
   const [name, setName] = useState('');
   const [avatar, setAvatar] = useState<AvatarId>('fox');
   const player = state?.players.find((p) => p.id === playerId);
+  const maxPlayerNameLength = state?.serverSettings.maxPlayerNameLength;
+  const full = !!state && state.players.length >= state.serverSettings.maxPlayers;
   const rank = state && player ? rankPlayers(state.players).findIndex((p) => p.id === playerId) + 1 : 0;
   const lockedOut = !!playerId && !!state?.lockedOutIds.includes(playerId);
   const lockoutRemaining = playerId ? state?.lockoutRemainingMs[playerId] : undefined;
@@ -42,13 +45,16 @@ export function PlayPage() {
     {!player ? <form className="panel join-form" onSubmit={submit}>
       <span className="eyebrow">YOUR BUZZER AWAITS</span><h1>Join the game</h1>
       <p>No account. Just a name and a little confidence.</p>
-      <label>Your nickname<input autoComplete="nickname" maxLength={24} required value={name}
+      <label>Your nickname<input autoComplete="nickname" maxLength={maxPlayerNameLength} required value={name}
         onChange={(event) => setName(event.target.value)} placeholder="What should we call you?" /></label>
+      {maxPlayerNameLength && <p className="footnote">Nickname: 1-{maxPlayerNameLength} characters.</p>}
+      {full && <p className="notice" role="status">The game is full ({state?.serverSettings.maxPlayers} players maximum). Ask the host to remove an unused player.</p>}
       <fieldset><legend>Choose your avatar</legend><div className="avatar-picker">
         {avatars.map((id) => <button type="button" key={id} className={avatar === id ? 'selected' : ''}
           aria-label={`Choose ${id}`} aria-pressed={avatar === id} onClick={() => setAvatar(id)}><Avatar id={id} /></button>)}
       </div></fieldset>
-      <button className="primary wide" disabled={!connected || !name.trim() || pending}>{pending ? 'Joining...' : 'Join Quiz Night'}</button>
+      <button className="primary wide" disabled={!connected || !state || full || !name.trim()
+        || name.trim().length > (maxPlayerNameLength ?? 0) || pending}>{pending ? 'Joining...' : `Join ${branding.name}`}</button>
       <p className="footnote">Keep this page open while you play.</p>
     </form> : <>
       <section className="panel player-profile"><Avatar id={player.avatarId} /><div><span className="eyebrow">YOU'RE IN</span><h1>{player.name}</h1></div>

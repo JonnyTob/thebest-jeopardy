@@ -1,0 +1,21 @@
+{
+  "branding": {
+    "name": "Kaboot",
+    "logoText": "K",
+    "tagline": "Buzz in. Get booted."
+  },
+  "server": {
+    "port": 3000,
+    "maxPlayerNameLength": 10,
+    "requireAdminPasscode": false,
+    "maxPlayers": 12
+  },
+  "gameSetup": {
+    "leaderboardCount": 8,
+    "startPoints": 500,
+    "minimumPoints": 100,
+    "dropPoints": 20,
+    "dropEverySeconds": 1,
+    "lockoutSeconds": 2
+  }
+}

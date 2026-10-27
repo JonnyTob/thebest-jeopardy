@@ -1,6 +1,6 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { rankPlayers } from '../../shared/game';
-import { settingsSchema, type Player, type Settings, type Snapshot } from '../../shared/protocol';
+import { serverSettingsSchema, settingsSchema, type Player, type Settings, type Snapshot } from '../../shared/protocol';
 import { SessionProvider, useSession } from '../session';
 import { Avatar, Brand, Connection, JoinLink, PointBar, QuizName, SessionError, buzzerLabel } from '../components/Common';
 import { Media } from '../components/Media';
@@ -10,24 +10,43 @@ const passcodeKey = 'quiz-night-host-passcode';
 export function AdminPage() {
   const [passcode, setPasscode] = useState(() => sessionStorage.getItem(passcodeKey) ?? '');
   const [input, setInput] = useState('');
+  const [requirePasscode, setRequirePasscode] = useState<boolean | null>(null);
+  const [configError, setConfigError] = useState('');
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetch('/api/info', { signal: controller.signal }).then(async (response) => {
+      if (!response.ok) throw new Error('Unable to load admin console settings.');
+      const info: { serverSettings: unknown } = await response.json();
+      setRequirePasscode(serverSettingsSchema.parse(info.serverSettings).requireAdminPasscode);
+    }).catch((cause: unknown) => {
+      if (!controller.signal.aborted) {
+        console.error('Unable to load admin console settings:', cause);
+        setConfigError('Unable to load admin console settings. Reload the page to try again.');
+      }
+    });
+    return () => controller.abort();
+  }, []);
   function login(event: FormEvent) {
     event.preventDefault();
     sessionStorage.setItem(passcodeKey, input);
     setPasscode(input);
   }
-  if (!passcode) return <main className="login-shell"><Brand subtitle="Private host console" />
+  if (requirePasscode === null) return <main className="login-shell"><Brand subtitle="Host console" />
+    <section className="panel">{configError ? <><p role="alert">{configError}</p>
+      <button onClick={() => location.reload()}>Reload</button></> : <h1>Loading host console...</h1>}</section></main>;
+  if (requirePasscode && !passcode) return <main className="login-shell"><Brand subtitle="Private host console" />
     <form className="panel" onSubmit={login}><span className="eyebrow">YOU'RE RUNNING THE SHOW</span><h1>Welcome, gamemaster.</h1>
       <p>Enter the host passcode printed in the server terminal. Keep this screen off the TV.</p>
       <label>Host passcode<input type="password" autoComplete="current-password" required value={input} onChange={(event) => setInput(event.target.value)} /></label>
       <button className="primary wide">Unlock host console</button></form></main>;
-  return <SessionProvider key={passcode} role="host" passcode={passcode}><AdminConsole logout={() => {
+  return <SessionProvider key={passcode} role="host" passcode={passcode}><AdminConsole requirePasscode={requirePasscode} logout={() => {
     sessionStorage.removeItem(passcodeKey);
     setPasscode('');
     setInput('');
   }} /></SessionProvider>;
 }
 
-function AdminConsole({ logout }: { logout: () => void }) {
+function AdminConsole({ logout, requirePasscode }: { logout: () => void; requirePasscode: boolean }) {
   const { state, connected, command, pending } = useSession();
   const [tab, setTab] = useState<'live' | 'setup'>('live');
   const [confirm, setConfirm] = useState(false);
@@ -41,8 +60,9 @@ function AdminConsole({ logout }: { logout: () => void }) {
       <nav aria-label="Host sections"><button className={tab === 'live' ? 'active' : ''} onClick={() => setTab('live')}>Live game</button>
         <button className={tab === 'setup' ? 'active' : ''} onClick={() => setTab('setup')}>Game setup</button></nav>
       <div className="header-actions"><Connection connected={connected} /><a href="/display" target="_blank" rel="noreferrer">Open TV &nearr;</a>
-        <button className="quiet" onClick={logout}>Lock console</button></div></header>
+        {requirePasscode && <button className="quiet" onClick={logout}>Lock console</button>}</div></header>
     <SessionError />
+    {state?.serverSettings.requireAdminPasscode === false && <div className="notice" role="status">Admin passcode protection is disabled. Anyone who can reach this server can control the quiz.</div>}
     {!connected && <div className="notice" role="status">Host controls are disabled until connected. If the passcode was rejected, lock the console and try again.</div>}
     {!state ? <section className="panel"><h1>Connecting to the game...</h1></section>
       : tab === 'setup' ? <Setup state={state} /> : <>
@@ -164,6 +184,7 @@ function Setup({ state }: { state: Snapshot }) {
       <button className="primary" type="submit">Save setup</button></fieldset>
     {message && <p role="status">{message}</p>}
     <p className="muted">Wrong answers always lose the frozen point value. The minimum value is not a deadline.</p>
+    <p className="muted">Global defaults load from settings.json. Save setup writes this quiz's settings to settings/quizzes/{state.quizId}.json for future sessions. Server options are file-only.</p>
     <p className="muted">Timed lockouts start at the wrong-answer ruling and keep counting down during pauses and other players' answers. Players can buzz again when the timer ends and buzzers are open.</p>
   </form><section className="panel setup-guide"><h2>Before you start</h2><ol><li>Connect the TV and choose <strong>Extend</strong>, not Duplicate.</li>
     <li>Open <a href="/display" target="_blank" rel="noreferrer">the TV display</a> there and press F11.</li><li>Keep this private console on the laptop.</li>

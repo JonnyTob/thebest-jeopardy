@@ -8,6 +8,7 @@ import { PlayPage } from './pages/PlayPage';
 import { HomePage } from './pages/HomePage';
 import { AppErrorBoundary } from './components/AppErrorBoundary';
 import './styles.css';
+import { branding } from './branding';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
@@ -18,7 +19,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         <Route path="/admin" element={<AdminPage />} />
         <Route path="/display" element={<SessionProvider role="display"><DisplayPage /></SessionProvider>} />
         <Route path="/play" element={<SessionProvider role="player"><PlayPage /></SessionProvider>} />
-        <Route path="*" element={<main className="landing"><h1>Page not found</h1><Link to="/">Back to Quiz Night</Link></main>} />
+        <Route path="*" element={<main className="landing"><h1>Page not found</h1><Link to="/">Back to {branding.name}</Link></main>} />
       </Routes>
     </BrowserRouter>
     </AppErrorBoundary>

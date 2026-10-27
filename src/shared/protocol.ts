@@ -58,6 +58,18 @@ export const settingsSchema = z.object({
 }).refine((s) => s.minimumPoints <= s.startPoints,
   'Minimum points cannot exceed starting points');
 export type Settings = z.infer<typeof settingsSchema>;
+export const brandingSchema = z.object({
+  name: z.string().trim().min(1).max(100).default('Kaboot'),
+  logoText: z.string().trim().min(1).max(4).default('K'),
+  tagline: z.string().trim().max(160).default('Buzz in. Get booted.'),
+}).strict();
+export type Branding = z.infer<typeof brandingSchema>;
+export const serverSettingsSchema = z.object({
+  maxPlayerNameLength: z.number().int().min(1).max(100).default(24),
+  requireAdminPasscode: z.boolean().default(true),
+  maxPlayers: z.number().int().min(1).max(1000).default(12),
+}).strict();
+export type ServerSettings = z.infer<typeof serverSettingsSchema>;
 export type Phase = 'LOBBY' | 'QUESTION_OPEN' | 'ANSWERING' | 'QUESTION_CLOSED' | 'ANSWER_REVEALED' | 'GAME_FINISHED';
 export interface Player {
   id: string;
@@ -78,6 +90,7 @@ export interface Snapshot {
   quizId: number;
   coverImage: string | null;
   settings: Settings;
+  serverSettings: ServerSettings;
   phase: Phase;
   questionIndex: number;
   questionCount: number;
@@ -101,10 +114,13 @@ export interface Snapshot {
   scoreEvents: ScoreEvent[];
 }
 
-export const joinSchema = z.object({
-  name: z.string().trim().min(1).max(24),
-  avatarId: z.enum(avatars),
-});
+export function createJoinSchema(maxPlayerNameLength: number) {
+  return z.object({
+    name: z.string().trim().min(1).max(maxPlayerNameLength),
+    avatarId: z.enum(avatars),
+  });
+}
+export const joinSchema = createJoinSchema(serverSettingsSchema.parse({}).maxPlayerNameLength);
 export type JoinRequest = z.infer<typeof joinSchema>;
 export const hostCommandSchema = z.object({
   id: z.string().uuid(),

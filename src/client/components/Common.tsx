@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import type { AvatarId, Snapshot } from '../../shared/protocol';
 import { valueWindowMs } from '../../shared/game';
 import { useSession } from '../session';
+import { branding } from '../branding';
 
 const animalColors: Record<AvatarId, string> = {
   fox: '#f69246', cat: '#f7c955', bear: '#ba835b', panda: '#eee7fa', frog: '#65d7a1', owl: '#b49aef',
@@ -26,8 +27,8 @@ export function Avatar({ id, className = '' }: { id: AvatarId; className?: strin
 }
 
 export function Brand({ subtitle }: { subtitle?: string }) {
-  return <Link className="brand" to="/"><span className="brand-mark" aria-hidden="true">Q</span>
-    <span>QUIZ NIGHT{subtitle && <small>{subtitle}</small>}</span></Link>;
+  return <Link className="brand" to="/"><span className="brand-mark" aria-hidden="true">{branding.logoText}</span>
+    <span>{branding.name}{subtitle && <small>{subtitle}</small>}</span></Link>;
 }
 
 export function QuizName({ title, id }: { title: string; id: number }) {

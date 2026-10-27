@@ -1,4 +1,4 @@
-# Quiz Night
+# Kaboot
 
 A locally hosted, sequential multiplayer buzzer quiz. The gamemaster runs the
 show on a laptop, a separate TV displays clues, and players buzz from their
@@ -43,6 +43,82 @@ For example, in PowerShell:
 $env:PORT = "3000"
 npm start
 ```
+
+### Settings files
+
+[settings.json](./settings.json) is the global configuration, with three sections:
+
+```json
+{
+  "branding": {
+    "name": "Kaboot",
+    "logoText": "K",
+    "tagline": "Buzz in. Get booted."
+  },
+  "server": {
+    "port": 3000,
+    "joinOrigin": "http://192.168.1.42:3000",
+    "maxPlayerNameLength": 24,
+    "requireAdminPasscode": true,
+    "maxPlayers": 12
+  },
+  "gameSetup": {
+    "leaderboardCount": 8,
+    "startPoints": 500,
+    "minimumPoints": 100,
+    "dropPoints": 100,
+    "dropEverySeconds": 5,
+    "lockoutSeconds": 0
+  }
+}
+```
+
+- **branding**: global, file-only presentation settings. `name` (1-100 characters)
+  appears in headers, browser titles, loading/error messages, player join buttons,
+  and server logs. `logoText` (1-4 characters) replaces the logo letter, and
+  `tagline` (up to 160 characters, or empty) appears on the home page.
+  Branding is separate from the quiz's editable title and cannot be overridden
+  per quiz. Restart the server and reload browser pages after editing it.
+  No rebuild is needed for branding-only changes to an existing production build.
+  Browser storage keys remain unchanged so rebranding does not itself discard
+  saved player identities or host passcodes.
+- **server**: file-only options; never editable through Game setup.
+  `joinOrigin` is optional; omit it for automatic LAN address detection.
+  `PORT` and `JOIN_ORIGIN` environment variables override the file.
+  Keep the host passcode out of configuration files; use `HOST_PASSCODE` or
+  the automatically generated passcode.
+  - `maxPlayerNameLength`: maximum nickname length, **24** by default
+    (whole number, 1-100). Names must contain at least one non-whitespace character.
+    Both the phone input and the server enforce the configured limit.
+  - `requireAdminPasscode`: **true** by default. Set to **false** to open the
+    admin console without a login. This disables server-side host passcode
+    verification, not just the login screen: anyone who can reach the server
+    can control the quiz and see host-only answers. Use only on a trusted LAN.
+    With protection disabled, `HOST_PASSCODE` is ignored.
+  - `maxPlayers`: **12** by default (whole number, 1-1000). Counts all joined
+    players, including disconnected players, until the host removes them.
+    Reconnecting an existing player does not use another slot. New players
+    cannot join a full game; phones show the limit and the server also enforces it.
+- **gameSetup**: defaults for the host's editable settings. An optional `title`
+  overrides the title from the question file; omit it to use the quiz's own title.
+- **settings/quizzes/\<quiz-id\>.json**: per-quiz overrides, identified by the
+  numeric quiz ID in the question file. This file has a `gameSetup` section only.
+  A missing per-quiz file means the quiz uses global defaults. You can create a
+  partial override, for example `{"gameSetup":{"lockoutSeconds":10}}`.
+
+On startup, values are merged in this order: quiz title, global game defaults,
+then per-quiz overrides. **Save setup** writes all current game settings to that
+quiz's file, creating it if needed. This includes the title but never server
+options. Saved values take precedence over later global-default changes; remove
+an override from the quiz file to inherit the global value again.
+
+Both development and production read these files from the repository root at
+startup. Restart the server after editing them manually. Missing/invalid global
+configuration or invalid per-quiz settings stop startup with an error.
+Save failures are reported to the host without changing the running setup.
+Settings persist across restarts; players, scores and active game state do not.
+Setup remains locked once the quiz starts.
+None of the server-only options can be saved in a per-quiz override file.
 
 ### Laptop, TV, and phones
 
@@ -91,7 +167,8 @@ sharing the QR code.
 - With WSL, use the Windows PC's Wi-Fi IPv4 address, not the WSL or container
   address. WSL networking/port forwarding and the Windows firewall must allow
   incoming connections to the server port.
-- If the health check works but the join page stays on **Loading Quiz Night**,
+- If the health check works but the join page stays on **Loading Kaboot** (or
+  your configured brand name),
   the JavaScript has not started. Update iOS and try a production build
   (`npm run build`, then stop the development server and run `npm start`).
   A React crash instead shows an error message to share with the host.
@@ -122,7 +199,9 @@ sharing the QR code.
   identity, and lockout. Reopening multiple tabs with the same token still counts
   as one player. An offline answering player remains active until the host rules
   or closes the clue.
-- Stable leaderboard ordering during active clues, reranking between questions;
+- Leaderboard sorted immediately after every score change, including wrong-answer
+  penalties, manual adjustments and undo during active clues. Highest scores come
+  first; tied scores use join order. New players are inserted at their score rank;
   up to eight TV cards by default, all players in a sortable/searchable host table.
 - Text and image clues, deterministic random tile reveals, and TV-only native
   audio/video rendering with an audio frequency-spectrum visualizer.
