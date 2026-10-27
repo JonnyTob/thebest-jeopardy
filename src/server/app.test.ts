@@ -115,7 +115,8 @@ test('admin passcode switch controls host authentication without granting player
         });
         assert.ok(started.ok);
         assert.equal(application.engine.snapshot().privateAnswer, undefined);
-        assert.equal(application.engine.snapshot(true).privateAnswer, 'Private answer');
+        assert.equal(application.engine.snapshot().phase, 'STARTING');
+        assert.equal(application.engine.snapshot(true).privateAnswer, undefined);
       } finally {
         for (const socket of sockets) socket.disconnect();
         await application.close();
@@ -282,10 +283,26 @@ test('socket flow enforces host authorization, answer privacy, one winner and to
       id: randomUUID(), revision: application.engine.revision, action: { type: 'start' },
     });
     assert.deepEqual(unauthorized, { ok: false, error: 'Host authorization required.' });
+    const opened = new Promise<void>((resolve) => {
+      display.on('session:snapshot', function listener(state) {
+        if (state.phase === 'QUESTION_OPEN') {
+          display.off('session:snapshot', listener);
+          resolve();
+        }
+      });
+    });
     const started = await host.emitWithAck('host:command', {
       id: randomUUID(), revision: application.engine.revision, action: { type: 'start' },
     });
     assert.ok(started.ok);
+    assert.equal(application.engine.snapshot().phase, 'STARTING');
+    assert.equal(application.engine.snapshot().question, null);
+    const earlyBuzz = await alice.emitWithAck('player:buzz');
+    assert.equal(earlyBuzz.ok, false);
+    const lateDisplay = await connect({ role: 'display' });
+    assert.equal(snapshots.get(lateDisplay)?.phase, 'STARTING');
+    assert.ok((snapshots.get(lateDisplay)?.startCountdownMs ?? 0) > 0);
+    await opened;
     const buzzes: Result[] = await Promise.all([alice.emitWithAck('player:buzz'), bob.emitWithAck('player:buzz')]);
     assert.equal(buzzes.filter((r) => r.ok).length, 1);
     assert.equal(publicPayloads.some((p) => p.includes('PRIVATE ANSWER')), false);

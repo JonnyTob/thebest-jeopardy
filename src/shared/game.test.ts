@@ -1,7 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { pointsAt, tileOrder, valueWindowMs } from './game.js';
+import { pointsAt, startCountdownText, tileOrder, valueWindowMs } from './game.js';
 import { quizSchema, settingsSchema } from './protocol.js';
+
+test('game-start countdown gives each number and the launch message one second', () => {
+  for (const [remaining, text] of [[4000, '3'], [3001, '3'], [3000, '2'], [2001, '2'],
+    [2000, '1'], [1001, '1'], [1000, "LET'S GO!"], [1, "LET'S GO!"], [0, "LET'S GO!"]] as const) {
+    assert.equal(startCountdownText(remaining), text);
+  }
+});
 
 test('default points hit exact boundaries and stay at minimum indefinitely', () => {
   const settings = { title: 'Test', leaderboardCount: 8, startPoints: 500, minimumPoints: 100, dropPoints: 100, dropEverySeconds: 5, lockoutSeconds: 0, maxAnswerLength: 100 };

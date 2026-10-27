@@ -50,6 +50,7 @@ export function SessionError() {
 
 export function buzzerLabel(state: Snapshot): string {
   if (state.phase === 'LOBBY') return 'WAITING TO START';
+  if (state.phase === 'STARTING') return 'GET READY';
   if (state.phase === 'GAME_FINISHED') return 'FINAL SCORES';
   if (state.phase === 'ANSWERING') return 'PLAYER ANSWERING';
   if (state.phase === 'REVIEW') return 'REVIEWING ANSWERS';

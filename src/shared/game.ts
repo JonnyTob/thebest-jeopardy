@@ -1,5 +1,11 @@
 import type { Player, Settings } from './protocol.js';
 
+export const START_COUNTDOWN_MS = 4000;
+
+export function startCountdownText(remainingMs: number): string {
+  return remainingMs > 1000 ? String(Math.ceil(remainingMs / 1000) - 1) : "LET'S GO!";
+}
+
 export function pointsAt(elapsedMs: number, settings: Settings): number {
   return Math.max(settings.minimumPoints,
     settings.startPoints - Math.floor(elapsedMs / (settings.dropEverySeconds * 1000)) * settings.dropPoints);

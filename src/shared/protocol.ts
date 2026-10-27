@@ -77,7 +77,7 @@ export const serverSettingsSchema = z.object({
   maxPlayers: z.number().int().min(1).max(1000).default(12),
 }).strict();
 export type ServerSettings = z.infer<typeof serverSettingsSchema>;
-export type Phase = 'LOBBY' | 'QUESTION_OPEN' | 'ANSWERING' | 'QUESTION_CLOSED' | 'REVIEW' | 'REVIEW_COMPLETE' | 'ANSWER_REVEALED' | 'GAME_FINISHED';
+export type Phase = 'LOBBY' | 'STARTING' | 'QUESTION_OPEN' | 'ANSWERING' | 'QUESTION_CLOSED' | 'REVIEW' | 'REVIEW_COMPLETE' | 'ANSWER_REVEALED' | 'GAME_FINISHED';
 export interface TypedReview {
   playerId: string;
   answer: string | null;
@@ -104,6 +104,7 @@ export interface Snapshot {
   settings: Settings;
   serverSettings: ServerSettings;
   phase: Phase;
+  startCountdownMs: number | null;
   questionIndex: number;
   questionCount: number;
   question: PublicQuestion | null;

@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { rankPlayers } from '../../shared/game';
+import { rankPlayers, startCountdownText } from '../../shared/game';
 import { serverSettingsSchema, settingsSchema, type Player, type Settings, type Snapshot } from '../../shared/protocol';
 import { SessionProvider, useSession } from '../session';
 import { Avatar, Brand, Connection, JoinLink, PointBar, QuizName, SessionError, buzzerLabel } from '../components/Common';
@@ -56,7 +56,7 @@ function AdminConsole({ logout, requirePasscode }: { logout: () => void; require
   const closed = state?.phase === 'QUESTION_CLOSED' || state?.phase === 'ANSWER_REVEALED';
   const typed = state?.question?.mode === 'typed';
   const readyForNext = state?.phase === 'REVIEW_COMPLETE' || (closed && (!typed || state?.phase === 'ANSWER_REVEALED'));
-  const disabled = !connected || pending;
+  const disabled = !connected || pending || state?.phase === 'STARTING';
   return <main className="admin-shell">
     <header className="admin-header"><Brand subtitle="Private host console" />
       <nav aria-label="Host sections"><button className={tab === 'live' ? 'active' : ''} onClick={() => setTab('live')}>Live game</button>
@@ -70,12 +70,17 @@ function AdminConsole({ logout, requirePasscode }: { logout: () => void; require
       : tab === 'setup' ? <Setup state={state} /> : <>
         <section className="panel game-heading"><div><span className="eyebrow">{state.phase === 'LOBBY' ? "LET'S GET EVERYONE IN" : 'YOU CALL THE SHOTS'}</span>
           <h1><QuizName title={state.settings.title} id={state.quizId} /></h1><p>{state.phase === 'LOBBY' ? 'Lobby open / waiting for players' :
+            state.phase === 'STARTING' ? 'Starting game / first question opens after the countdown' :
             state.phase === 'GAME_FINISHED' ? 'Game finished / final standings' :
               `Question ${state.questionIndex + 1} of ${state.questionCount} / ${buzzerLabel(state).toLowerCase()}`}</p></div>
           <div className={`phase-pill ${answering ? 'amber' : ''}`}>{state.phase.replaceAll('_', ' ')}</div></section>
         {state.phase === 'LOBBY' ? <section className="panel lobby-controls"><JoinLink />
           <div><h2>Ready when you are.</h2><p>Open the TV display, get everyone on the same Wi-Fi, then start the first clue.</p>
             <button className="primary wide" disabled={disabled} onClick={() => { void command({ type: 'start' }); }}>Start quiz</button></div></section>
+          : state.phase === 'STARTING' ? <section className="panel" role="status">
+            <h2>{startCountdownText(state.startCountdownMs ?? 0)}</h2>
+            <p>Watch the TV. The first question, media and answering open after the four-second countdown.</p>
+          </section>
           : state.phase === 'GAME_FINISHED' ? <section className="panel"><h2>Final standings</h2><p>Scores are still adjustable below. Restart the server for a new session.</p></section>
             : <div className="admin-game-grid">
               <section className="panel admin-question"><span className="eyebrow">CURRENT QUESTION / {state.question?.type.toUpperCase()} / {typed ? 'EVERYONE ANSWERS' : 'BUZZER'}</span>
@@ -150,7 +155,7 @@ function PlayerTable({ state }: { state: Snapshot }) {
     if (sort === 'connection') return Number(b.connected) - Number(a.connected) || a.joinedOrder - b.joinedOrder;
     return 0;
   });
-  const activeClue = state.phase === 'QUESTION_OPEN' || state.phase === 'ANSWERING' || state.phase === 'REVIEW'
+  const activeClue = state.phase === 'STARTING' || state.phase === 'QUESTION_OPEN' || state.phase === 'ANSWERING' || state.phase === 'REVIEW'
     || (state.phase === 'QUESTION_CLOSED' && state.question?.mode === 'typed');
   return <section className="panel players-panel"><div className="table-heading"><h2>Players <span className="count-badge">{state.players.length}</span></h2>
     <input aria-label="Search players" placeholder="Search players" value={search} onChange={(event) => setSearch(event.target.value)} />
@@ -175,14 +180,14 @@ function PlayerTable({ state }: { state: Snapshot }) {
 }
 
 function ScoreAdjustment({ player }: { player: Player }) {
-  const { command, pending, connected } = useSession();
+  const { command, pending, connected, state } = useSession();
   const [delta, setDelta] = useState('');
   return <form className="score-adjust" onSubmit={(event) => {
     event.preventDefault();
     void command({ type: 'adjust', playerId: player.id, delta: Number(delta) }).then((ok) => { if (ok) setDelta(''); });
   }}><input type="number" step="1" min="-100000" max="100000" required placeholder="+/-"
     aria-label={`Adjust ${player.name}'s score`} value={delta} onChange={(event) => setDelta(event.target.value)} />
-    <button className="small" disabled={pending || !connected || !delta || Number(delta) === 0}>Apply</button></form>;
+    <button className="small" disabled={pending || !connected || state?.phase === 'STARTING' || !delta || Number(delta) === 0}>Apply</button></form>;
 }
 
 function Setup({ state }: { state: Snapshot }) {

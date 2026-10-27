@@ -21,6 +21,7 @@ export function PlayPage() {
   let status = 'Waiting for the host';
   let detail = 'The next question is on its way.';
   if (!connected) { status = 'Reconnecting'; detail = 'Your score and place are saved on the server.'; }
+  else if (state?.phase === 'STARTING') { status = 'Game starting!'; detail = 'Watch the TV countdown. Answering opens when the first question appears.'; }
   else if (state?.phase === 'GAME_FINISHED') { status = 'That is a wrap!'; detail = 'Thanks for playing. See the TV for the final scores.'; }
   else if (answering) { status = 'You buzzed first!'; detail = 'Say your answer out loud. The host will make the call.'; }
   else if (lockedOut && (state?.phase === 'QUESTION_OPEN' || state?.phase === 'ANSWERING')) {
@@ -62,7 +63,7 @@ export function PlayPage() {
       {state?.question?.mode === 'typed' && state.phase !== 'GAME_FINISHED'
         ? <TypedAnswer key={state.questionInstanceId} state={state} />
         : <><section className={`buzzer-card ${answering ? 'is-answering' : ''}`}>
-        <span className="eyebrow">{state?.phase === 'LOBBY' ? 'LOBBY' : `QUESTION ${(state?.questionIndex ?? 0) + 1} / ${state?.questionCount}`}</span>
+        <span className="eyebrow">{state?.phase === 'LOBBY' ? 'LOBBY' : state?.phase === 'STARTING' ? 'GET READY' : `QUESTION ${(state?.questionIndex ?? 0) + 1} / ${state?.questionCount}`}</span>
         <h2 role="status">{status}</h2><p>{detail}</p>
         <button className="buzz-button" disabled={!canBuzz} onClick={() => { void buzz(); }}>
           <span>{answering ? 'FIRST!' : lockedOut && lockoutRemaining !== undefined && (open || state?.phase === 'ANSWERING')

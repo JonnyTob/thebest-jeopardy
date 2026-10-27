@@ -345,3 +345,19 @@ td:last-child, th:last-child { padding-right: 0; }
   *, *::before, *::after { transition: none !important; animation: none !important; }
 }
 .tv-welcome.review-card > p { display: block; }
+.game-start-overlay { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; overflow: hidden; background: #10091de8; backdrop-filter: blur(5px); }
+.game-start-content { position: relative; width: 100%; padding: 24px; text-align: center; }
+.game-start-content .eyebrow { font-size: clamp(.8rem, 1.6vw, 2rem); color: var(--gold); letter-spacing: .22em; }
+.game-start-content > p { margin: 20px 0 0; font-size: clamp(.8rem, 1.5vw, 1.8rem); }
+.game-start-number { display: block; font-size: min(42vh, 36vw); font-weight: 950; line-height: 1.2; color: #fff4d4; text-shadow: 0 0 70px #edbe5866, 0 12px 0 #744b81; animation: game-start-pop .65s ease-out both; }
+.game-start-number.game-start-go { font-size: min(27vh, 14vw); color: var(--gold); white-space: nowrap; }
+.game-start-ring { position: absolute; width: min(78vw, 85vh); aspect-ratio: 1; border: 2px solid #edbe5833; border-radius: 50%; box-shadow: 0 0 0 30px #ad6ce30a, 0 0 0 65px #ad6ce30a, inset 0 0 80px #ad6ce322; }
+.game-start-ring::before, .game-start-ring::after { content: ''; position: absolute; inset: -12px; border: 8px solid transparent; border-top-color: #edbe58; border-bottom-color: #ad6ce3; border-radius: 50%; animation: game-start-spin 4s linear infinite; }
+.game-start-ring::after { inset: 24px; border-width: 3px; animation-direction: reverse; opacity: .5; }
+@keyframes game-start-pop {
+  from { opacity: 0; transform: scale(.65) translateY(20px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes game-start-spin {
+  to { transform: rotate(360deg); }
+}

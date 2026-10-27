@@ -208,6 +208,14 @@ sharing the QR code.
   up to eight TV cards by default, all players in a sortable/searchable host table.
 - Text and image clues, deterministic random tile reveals, and TV-only native
   audio/video rendering with an audio frequency-spectrum visualizer.
+- **Game-start countdown:** clicking **Start quiz** starts a synchronized
+  four-second `STARTING` phase. The TV darkens the board and shows giant
+  **3 -> 2 -> 1 -> LET'S GO!** graphics, one second per step. Only then does
+  the first question open and its clue clock, points, reveal and media begin.
+  Buzzing, submissions and host game controls are disabled during the countdown.
+  Reconnecting displays resume the current step rather than replaying it;
+  later questions and question resets do not repeat it. The animation is silent
+  and respects the browser's reduced-motion preference.
 - **Everyone answers** questions accept one final typed submission per player.
   A guide timer counts down on the TV, host and phones, but submissions remain
   open until the host closes the clue. Pausing pauses the timer and submissions.

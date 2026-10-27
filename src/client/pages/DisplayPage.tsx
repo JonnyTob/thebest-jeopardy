@@ -3,6 +3,7 @@ import { Avatar, Brand, Connection, JoinLink, PointBar, QuizName, SessionError, 
 import { Media } from '../components/Media';
 import { QuizCover } from '../components/QuizCover';
 import { branding } from '../branding';
+import { startCountdownText } from '../../shared/game';
 
 export function DisplayPage() {
   const { connected } = useSession();
@@ -12,6 +13,9 @@ export function DisplayPage() {
   const players = state.leaderboardIds.slice(0, state.settings.leaderboardCount)
     .flatMap((id) => state.players.find((p) => p.id === id) ?? []);
   const lobby = state.phase === 'LOBBY';
+  const starting = state.phase === 'STARTING';
+  const preGame = lobby || starting;
+  const countdownText = startCountdownText(state.startCountdownMs ?? 0);
   const finished = state.phase === 'GAME_FINISHED';
   const open = state.phase === 'QUESTION_OPEN' && !state.paused && connected;
   const winner = finished ? players[0] : null;
@@ -24,13 +28,13 @@ export function DisplayPage() {
 
   return <main className="tv-shell">
     <header className="tv-header"><Brand /><QuizName title={state.settings.title} id={state.quizId} />
-      <span className="question-counter">{lobby ? 'WELCOME TO THE SHOW' : finished ? 'THAT IS A WRAP' :
+      <span className="question-counter">{lobby ? 'WELCOME TO THE SHOW' : starting ? 'GET READY' : finished ? 'THAT IS A WRAP' :
         `QUESTION ${String(state.questionIndex + 1).padStart(2, '0')} / ${state.questionCount}`}</span></header>
     {!connected && <div className="tv-offline" role="alert">Connection lost. Buzzing is unavailable while reconnecting.</div>}
     <div className="tv-errors"><SessionError /></div>
     <section className="tv-stage">
-      <div className={`panel clue-panel ${lobby ? 'lobby-cover-panel' : ''}`}>
-        {lobby ? <QuizCover key={`${state.quizId}:${state.coverImage}`} title={state.settings.title} id={state.quizId} image={state.coverImage} />
+      <div className={`panel clue-panel ${preGame ? 'lobby-cover-panel' : ''}`}>
+        {preGame ? <QuizCover key={`${state.quizId}:${state.coverImage}`} title={state.settings.title} id={state.quizId} image={state.coverImage} />
           : finished ? <div className="tv-welcome"><span className="eyebrow">OUR {branding.name.toUpperCase()} CHAMPION</span>
             {winner ? <><Avatar id={winner.avatarId} /><h1>{winner.name}</h1><strong className="winner-score">{winner.score.toLocaleString()} points</strong></>
               : <h1>Thanks for playing!</h1>}<p>Same time next quiz?</p></div>
@@ -67,7 +71,7 @@ export function DisplayPage() {
           <strong>{state.pointsAtBuzz} points</strong><p>The floor is yours.</p></div>
           : <div className="buzzer-idle"><span className="giant-q">?</span><p>{typed
             ? `${state.submissionCount} of ${state.players.length} submitted` : open ? 'Know the answer? Make your move.' : 'Eyes on the next clue.'}</p></div>}
-        {!lobby && <div className="buzzer-footer"><span>{state.clockRunning ? 'CLUE PLAYING' : 'CLUE PAUSED'}</span>
+        {!preGame && <div className="buzzer-footer"><span>{state.clockRunning ? 'CLUE PLAYING' : 'CLUE PAUSED'}</span>
           <small>{typed ? 'Type your answer on your phone' : active ? 'No rush. Answer out loud.' : open ? 'First buzz takes the floor' : 'The gamemaster has control'}</small></div>}
       </aside>
     </section>
@@ -83,5 +87,17 @@ export function DisplayPage() {
       </div>
     </section>
     <div className="sr-only"><Connection connected={connected} /></div>
+    {starting && <div className="game-start-overlay">
+      <div className="game-start-ring" aria-hidden="true" />
+      <div className="game-start-content">
+        <span className="eyebrow">THE GAME IS ABOUT TO BEGIN</span>
+        <div role="status" aria-live="polite" aria-atomic="true">
+          <strong key={countdownText} className={`game-start-number ${countdownText === "LET'S GO!" ? 'game-start-go' : ''}`}>
+            {countdownText}
+          </strong>
+        </div>
+        <p>{connected ? 'Eyes on the screen. Get ready to play.' : 'Connection lost. Waiting to reconnect...'}</p>
+      </div>
+    </div>}
   </main>;
 }

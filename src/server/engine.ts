@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
-import { pointsAt, rankPlayers } from '../shared/game.js';
+import { pointsAt, rankPlayers, START_COUNTDOWN_MS } from '../shared/game.js';
 import { serverSettingsSchema, type HostCommand, type JoinRequest, type Phase, type Player, type Quiz, type ScoreEvent, type Settings, type Snapshot, type ServerSettings, type TypedReview } from '../shared/protocol.js';
 
 export class GameError extends Error {}
@@ -37,6 +37,7 @@ export class GameEngine {
   private history: UndoEntry[] = [];
   private scoreEvents: ScoreEvent[] = [];
   private processed = new Set<string>();
+  private startCountdownAt: number | null = null;
   private clue: ClueState = {
     phase: 'LOBBY', questionIndex: -1, elapsedMs: 0, startedAt: null,
     paused: false, lockedOutIds: [], lockedOutUntil: {}, activePlayerId: null, pointsAtBuzz: null,
@@ -52,6 +53,15 @@ export class GameEngine {
 
   private require(condition: unknown, message: string): asserts condition {
     if (!condition) throw new GameError(message);
+  }
+
+  tick() {
+    if (this.clue.phase === 'STARTING' && this.startCountdownAt !== null
+      && this.now() - this.startCountdownAt >= START_COUNTDOWN_MS) {
+      this.startCountdownAt = null;
+      this.open(0);
+      this.revision++;
+    }
   }
 
   private elapsed(): number {
@@ -169,6 +179,7 @@ export class GameEngine {
   command(command: HostCommand, saveSettings?: (settings: Settings) => void) {
     if (this.processed.has(command.id)) return;
     this.require(command.revision === this.revision, 'Game state changed. Review the latest state and try again.');
+    this.require(this.clue.phase !== 'STARTING', 'Wait for the game-start countdown to finish.');
     const action = command.action;
     switch (action.type) {
       case 'setup':
@@ -178,7 +189,8 @@ export class GameEngine {
         break;
       case 'start':
         this.require(this.clue.phase === 'LOBBY', 'The game has already started.');
-        this.open(0);
+        this.clue.phase = 'STARTING';
+        this.startCountdownAt = this.now();
         break;
       case 'next':
         this.require(['QUESTION_CLOSED', 'REVIEW_COMPLETE', 'ANSWER_REVEALED'].includes(this.clue.phase), 'Close the current question before advancing.');
@@ -315,6 +327,8 @@ export class GameEngine {
     } : null;
     return {
       revision: this.revision, quizId: this.quiz.id, settings: { ...this.settings }, phase: this.clue.phase,
+      startCountdownMs: this.startCountdownAt === null ? null
+        : Math.max(0, START_COUNTDOWN_MS - (now - this.startCountdownAt)),
       serverSettings: { ...this.serverSettings },
       coverImage: this.quiz.coverImage ?? null,
       questionIndex: this.clue.questionIndex, questionCount: this.quiz.questions.length,

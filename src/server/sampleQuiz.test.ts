@@ -6,6 +6,7 @@ import { test } from 'node:test';
 import type { HostAction } from '../shared/protocol.js';
 import { GameEngine } from './engine.js';
 import { JsonQuizStorage } from './storage.js';
+import { START_COUNTDOWN_MS } from '../shared/game.js';
 
 const storage = new JsonQuizStorage(path.resolve('src/data/questions.json'));
 
@@ -47,11 +48,15 @@ test('sample quiz demonstrates both modes for every media type with real local a
 
 test('sample quiz plays through mixed buzzer and typed questions to completion', async () => {
   const quiz = await storage.load();
-  const game = new GameEngine(quiz, () => 0);
+  let time = 0;
+  const game = new GameEngine(quiz, () => time);
   const player = game.join({ name: 'Sample player', avatarId: 'fox' });
   const command = (action: HostAction) => game.command({ id: randomUUID(), revision: game.revision, action });
   let expectedScore = 0;
   command({ type: 'start' });
+  assert.equal(game.snapshot().phase, 'STARTING');
+  time += START_COUNTDOWN_MS;
+  game.tick();
   for (const [index, question] of quiz.questions.entries()) {
     assert.equal(game.snapshot().questionIndex, index);
     assert.equal(game.snapshot().question?.id, question.id);

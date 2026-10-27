@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { GameEngine } from './engine.js';
 import type { HostAction, Quiz } from '../shared/protocol.js';
+import { START_COUNTDOWN_MS } from '../shared/game.js';
 
 const quiz: Quiz = {
   id: 100001,
@@ -17,9 +18,83 @@ function setup() {
   const game = new GameEngine(quiz, () => time);
   const alice = game.join({ name: 'Alice', avatarId: 'fox' });
   const bob = game.join({ name: 'Bob', avatarId: 'cat' });
-  const command = (action: HostAction) => game.command({ id: randomUUID(), revision: game.revision, action });
+  const command = (action: HostAction) => {
+    game.command({ id: randomUUID(), revision: game.revision, action });
+    if (action.type === 'start') { time += START_COUNTDOWN_MS; game.tick(); }
+  };
   return { game, alice, bob, command, advance: (ms: number) => { time += ms; } };
 }
+
+test('game-start countdown hides the first clue, rejects early play and opens once at the exact boundary', () => {
+  for (const mode of ['buzzer', 'typed'] as const) {
+    let time = 0;
+    const game = new GameEngine({ ...quiz, questions: [
+      { ...quiz.questions[0], mode, fixedPoints: 250, timerSeconds: 30 },
+    ] }, () => time);
+    const player = game.join({ name: 'Alice', avatarId: 'fox' });
+    const start = { id: randomUUID(), revision: game.revision, action: { type: 'start' } } as const;
+    game.command(start);
+    const revision = game.revision;
+    assert.equal(game.snapshot().phase, 'STARTING');
+    assert.equal(game.snapshot().startCountdownMs, 4000);
+    assert.equal(game.snapshot().question, null);
+    assert.equal(game.snapshot(true).privateAnswer, undefined);
+    assert.equal(game.snapshot().questionIndex, -1);
+    assert.equal(game.snapshot().questionInstanceId, null);
+    assert.equal(game.snapshot().clockRunning, false);
+    for (const action of [{ type: 'start' }, { type: 'reset' }, { type: 'close' },
+      { type: 'next' }, { type: 'pause' }, { type: 'undo' },
+      { type: 'adjust', playerId: player.id, delta: 100 }] satisfies HostAction[]) {
+      assert.throws(() => game.command({ id: randomUUID(), revision: game.revision, action }), /countdown/);
+    }
+    assert.throws(() => game.buzz(player.id), /not open/);
+    assert.throws(() => game.submitAnswer(player.id, 'early', 'hello'), /not open/);
+    time = 1250;
+    game.tick();
+    assert.equal(game.revision, revision, 'Countdown updates do not invalidate commands');
+    assert.equal(game.snapshot().startCountdownMs, 2750, 'Reconnecting clients see the current countdown');
+    game.join({ name: 'Late player', avatarId: 'cat' });
+    game.setConnected(player.id, false);
+    game.setConnected(player.id, true);
+    game.command(start);
+    assert.equal(game.snapshot().startCountdownMs, 2750, 'Duplicate start must not restart the countdown');
+    time = 3999;
+    game.tick();
+    assert.equal(game.snapshot().phase, 'STARTING');
+    assert.equal(game.snapshot().clueElapsedMs, 0);
+    assert.equal(game.snapshot().mediaPositionSeconds, 0);
+    assert.equal(game.snapshot().revealProgress, 0);
+    time = 4000;
+    const beforeOpen = game.revision;
+    game.tick();
+    assert.equal(game.revision, beforeOpen + 1);
+    assert.equal(game.snapshot().phase, 'QUESTION_OPEN');
+    assert.equal(game.snapshot().startCountdownMs, null);
+    assert.equal(game.snapshot().questionIndex, 0);
+    assert.equal(game.snapshot().clueElapsedMs, 0);
+    assert.equal(game.snapshot().clockRunning, true);
+    const instance = game.snapshot().questionInstanceId!;
+    if (mode === 'typed') game.submitAnswer(player.id, instance, 'hello');
+    else game.buzz(player.id);
+    const afterPlay = game.revision;
+    time = 10000;
+    game.tick();
+    assert.equal(game.revision, afterPlay);
+    assert.equal(game.snapshot().questionInstanceId, instance);
+    assert.throws(() => game.command({ id: randomUUID(), revision: start.revision, action: { type: 'reset' } }), /state changed/);
+  }
+});
+
+test('a late server tick opens the first clue with its full time budget', () => {
+  let time = 0;
+  const game = new GameEngine(quiz, () => time);
+  game.command({ id: randomUUID(), revision: game.revision, action: { type: 'start' } });
+  time = 10000;
+  game.tick();
+  assert.equal(game.snapshot().clueElapsedMs, 0);
+  assert.equal(game.snapshot().currentPoints, game.settings.startPoints);
+  assert.equal(game.snapshot().mediaPositionSeconds, 0);
+});
 
 test('quiz ID stays stable across title edits, question resets and new sessions', () => {
   const { game, command } = setup();

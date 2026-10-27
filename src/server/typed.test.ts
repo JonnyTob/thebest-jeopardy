@@ -5,6 +5,7 @@ import { io, type Socket } from 'socket.io-client';
 import { GameEngine } from './engine.js';
 import { createApp } from './app.js';
 import { quizSchema, settingsSchema, type ClientEvents, type HostAction, type ServerEvents, type Snapshot } from '../shared/protocol.js';
+import { START_COUNTDOWN_MS } from '../shared/game.js';
 
 const quiz = quizSchema.parse({
   id: 100001, title: 'Mixed quiz', questions: [
@@ -19,7 +20,10 @@ function setup() {
   const alice = game.join({ name: 'Alice', avatarId: 'fox' });
   const bob = game.join({ name: 'Bob', avatarId: 'cat' });
   const carol = game.join({ name: 'Carol', avatarId: 'owl' });
-  const command = (action: HostAction) => game.command({ id: randomUUID(), revision: game.revision, action });
+  const command = (action: HostAction) => {
+    game.command({ id: randomUUID(), revision: game.revision, action });
+    if (action.type === 'start') { time += START_COUNTDOWN_MS; game.tick(); }
+  };
   return { game, alice, bob, carol, command, advance: (ms: number) => { time += ms; } };
 }
 
@@ -70,9 +74,12 @@ test('one-click review atomically closes open typed submissions before or after 
 });
 
 test('one-click review handles empty queues and rejects buzzer questions without closing them', () => {
-  const game = new GameEngine(quiz);
+  let time = 0;
+  const game = new GameEngine(quiz, () => time);
   const command = (action: HostAction) => game.command({ id: randomUUID(), revision: game.revision, action });
   command({ type: 'start' });
+  time += START_COUNTDOWN_MS;
+  game.tick();
   command({ type: 'startReview' });
   assert.equal(game.snapshot().phase, 'REVIEW_COMPLETE');
   assert.equal(game.snapshot().clockRunning, false);
@@ -163,9 +170,12 @@ test('paused submissions, reconnect, reset, undo and empty reviews preserve thei
   assert.equal(game.snapshot().submissionCount, 0);
   assert.throws(() => game.submitAnswer(alice.id, first, 'Old'), /changed/);
 
-  const empty = new GameEngine(quiz);
+  let emptyTime = 0;
+  const empty = new GameEngine(quiz, () => emptyTime);
   const send = (action: HostAction) => empty.command({ id: randomUUID(), revision: empty.revision, action });
   send({ type: 'start' });
+  emptyTime += START_COUNTDOWN_MS;
+  empty.tick();
   send({ type: 'close' });
   send({ type: 'startReview' });
   assert.equal(empty.snapshot().phase, 'REVIEW_COMPLETE');
@@ -206,7 +216,19 @@ test('sockets send answers only to host until current review and restore submiss
     const send = (action: HostAction) => host.timeout(5000).emitWithAck('host:command', {
       id: randomUUID(), revision: application.engine.revision, action,
     });
+    const opened = new Promise<void>((resolve) => {
+      player.on('session:snapshot', function listener(state) {
+        if (state.phase === 'QUESTION_OPEN') {
+          player.off('session:snapshot', listener);
+          resolve();
+        }
+      });
+    });
     assert.ok((await send({ type: 'start' })).ok);
+    assert.equal(application.engine.snapshot().phase, 'STARTING');
+    const early = await player.timeout(5000).emitWithAck('player:submitAnswer', { questionInstanceId: 'early', answer: 'PRIVATE GUESS' });
+    assert.equal(early.ok, false);
+    await opened;
     const id = application.engine.snapshot().questionInstanceId!;
     const hostReceived = new Promise<Snapshot>((resolve) => {
       host.on('session:snapshot', function listener(state) {

@@ -160,7 +160,8 @@ or host credential.
 
 ```text
 LOBBY
-  └─ host opens question → QUESTION_OPEN
+  └─ host START → STARTING (4-second TV countdown: 3, 2, 1, LET'S GO!)
+       └─ countdown completes → QUESTION_OPEN
        (media/reveal running, clue clock running, buzzers enabled)
           ├─ first valid buzz → ANSWERING
           │    (freeze media/reveal/clock and pointsAtBuzz; lock buzzers)
@@ -174,6 +175,10 @@ LOBBY
 After final question → GAME_FINISHED
 Future persistence: GAME_FINISHED → ARCHIVED
 ```
+
+The start countdown is server-owned. No clue, media, reveal, points decay, buzzing
+or typed submissions start until it finishes. Reconnecting displays resume its
+current step; question resets and subsequent questions do not replay it.
 
 The gamemaster may pause/reopen/override. No answering countdown and no automatic score changes. If all players fail, the host reveals/closes/advances. A media clip ending does not automatically close the question. Protect against duplicate buzzes and double-processed rulings; undo must restore scores and eligibility consistently.
 

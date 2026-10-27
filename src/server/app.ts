@@ -215,8 +215,9 @@ export async function createApp(options: AppOptions) {
   });
 
   const interval = setInterval(() => {
+    engine.tick();
     const state = engine.snapshot();
-    if (state.clockRunning || (state.settings.lockoutSeconds > 0
+    if (state.phase === 'STARTING' || state.clockRunning || (state.settings.lockoutSeconds > 0
       && (state.phase === 'QUESTION_OPEN' || state.phase === 'ANSWERING'))) broadcast();
     for (const [address, failures] of failedHosts) {
       if (Date.now() - failures.since > 60000) failedHosts.delete(address);

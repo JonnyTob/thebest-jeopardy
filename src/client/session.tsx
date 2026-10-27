@@ -136,16 +136,18 @@ export function useAnimatedState(): Snapshot | null {
   const { state, receivedAt, connected } = useSession();
   const [now, setNow] = useState(() => performance.now());
   useEffect(() => {
-    if (!state?.clockRunning || !connected) return;
+    if ((!state?.clockRunning && state?.phase !== 'STARTING') || !connected) return;
     const timer = setInterval(() => setNow(performance.now()), 50);
     return () => clearInterval(timer);
-  }, [state?.clockRunning, connected]);
+  }, [state?.clockRunning, state?.phase, connected]);
   if (!state) return null;
-  const extra = state.clockRunning && connected ? Math.max(0, now - receivedAt) : 0;
-  const elapsed = state.clueElapsedMs + extra;
+  const extra = (state.clockRunning || state.phase === 'STARTING') && connected ? Math.max(0, now - receivedAt) : 0;
+  const clueExtra = state.clockRunning ? extra : 0;
+  const elapsed = state.clueElapsedMs + clueExtra;
   return { ...state, clockRunning: state.clockRunning && connected,
+    startCountdownMs: state.startCountdownMs === null ? null : Math.max(0, state.startCountdownMs - extra),
     clueElapsedMs: elapsed, currentPoints: state.question?.mode === 'typed'
       ? state.question.fixedPoints ?? state.currentPoints : state.pointsAtBuzz ?? pointsAt(elapsed, state.settings),
-    revealProgress: Math.min(1, state.revealProgress + extra / ((state.question?.reveal?.durationSeconds ?? 20) * 1000)),
-    mediaPositionSeconds: state.mediaPositionSeconds + extra / 1000 };
+    revealProgress: Math.min(1, state.revealProgress + clueExtra / ((state.question?.reveal?.durationSeconds ?? 20) * 1000)),
+    mediaPositionSeconds: state.mediaPositionSeconds + clueExtra / 1000 };
 }

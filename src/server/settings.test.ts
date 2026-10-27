@@ -86,10 +86,11 @@ test('quiz settings support partial overrides, persist separately and reject mal
 });
 
 test('setup saves before committing state; failed, stale, duplicate or mid-game commands do not write', () => {
+  let time = 0;
   const game = new GameEngine({
     id: 100001, title: 'Quiz',
     questions: [{ id: 'one', type: 'text', question: 'Clue', answer: 'Answer' }],
-  });
+  }, () => time);
   const settings = { ...game.settings, lockoutSeconds: 10 };
   const command = { id: randomUUID(), revision: game.revision, action: { type: 'setup', settings } } as const;
   let writes = 0;
@@ -102,6 +103,10 @@ test('setup saves before committing state; failed, stale, duplicate or mid-game 
   assert.equal(game.settings.lockoutSeconds, 10);
   assert.throws(() => game.command({ ...command, id: randomUUID() }, () => { writes++; }), /state changed/);
   game.command({ id: randomUUID(), revision: game.revision, action: { type: 'start' } });
+  assert.throws(() => game.command({ ...command, id: randomUUID(), revision: game.revision },
+    () => { writes++; }), /countdown/);
+  time = 4000;
+  game.tick();
   assert.throws(() => game.command({ ...command, id: randomUUID(), revision: game.revision },
     () => { writes++; }), /lobby/);
   assert.equal(writes, 1);
