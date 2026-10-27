@@ -16,6 +16,7 @@
     "minimumPoints": 100,
     "dropPoints": 20,
     "dropEverySeconds": 1,
-    "lockoutSeconds": 2
+    "lockoutSeconds": 2,
+    "maxAnswerLength": 100
   }
 }

@@ -7,6 +7,7 @@ import { brandingSchema, serverSettingsSchema, settingsSchema, type Settings } f
 const gameSetupOverridesSchema = z.object({
   ...settingsSchema.shape,
   lockoutSeconds: settingsSchema.shape.lockoutSeconds.removeDefault(),
+  maxAnswerLength: settingsSchema.shape.maxAnswerLength.removeDefault(),
 }).partial().strict();
 
 const serverSchema = z.object({

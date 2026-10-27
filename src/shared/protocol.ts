@@ -18,6 +18,9 @@ export const questionSchema = z.object({
   id: z.string().min(1).max(80),
   type: z.enum(['text', 'image', 'video', 'audio']),
   question: z.string().trim().min(1).max(500),
+  mode: z.enum(['buzzer', 'typed']).optional(),
+  fixedPoints: z.number().int().min(1).max(10000).optional(),
+  timerSeconds: z.number().int().min(1).max(3600).optional(),
   text: z.string().max(2000).optional(),
   media: localMedia.optional(),
   answer: z.string().trim().min(1).max(2000),
@@ -34,6 +37,9 @@ export const questionSchema = z.object({
 }).superRefine((question, context) => {
   if (question.type !== 'text' && !question.media) {
     context.addIssue({ code: z.ZodIssueCode.custom, message: 'Media clues require a local media path' });
+  }
+  if (question.mode === 'typed' && (question.fixedPoints === undefined || question.timerSeconds === undefined)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: 'Typed questions require fixedPoints and timerSeconds' });
   }
 });
 export type Question = z.infer<typeof questionSchema>;
@@ -55,6 +61,7 @@ export const settingsSchema = z.object({
   dropPoints: z.number().int().min(1).max(10000),
   dropEverySeconds: z.number().min(1).max(120),
   lockoutSeconds: z.number().int().min(0).max(300).default(0),
+  maxAnswerLength: z.number().int().min(1).max(500).default(100),
 }).refine((s) => s.minimumPoints <= s.startPoints,
   'Minimum points cannot exceed starting points');
 export type Settings = z.infer<typeof settingsSchema>;
@@ -70,7 +77,12 @@ export const serverSettingsSchema = z.object({
   maxPlayers: z.number().int().min(1).max(1000).default(12),
 }).strict();
 export type ServerSettings = z.infer<typeof serverSettingsSchema>;
-export type Phase = 'LOBBY' | 'QUESTION_OPEN' | 'ANSWERING' | 'QUESTION_CLOSED' | 'ANSWER_REVEALED' | 'GAME_FINISHED';
+export type Phase = 'LOBBY' | 'QUESTION_OPEN' | 'ANSWERING' | 'QUESTION_CLOSED' | 'REVIEW' | 'REVIEW_COMPLETE' | 'ANSWER_REVEALED' | 'GAME_FINISHED';
+export interface TypedReview {
+  playerId: string;
+  answer: string | null;
+  correct: boolean | null;
+}
 export interface Player {
   id: string;
   name: string;
@@ -112,6 +124,13 @@ export interface Snapshot {
   mediaVersion: number;
   canUndo: boolean;
   scoreEvents: ScoreEvent[];
+  questionInstanceId: string | null;
+  submissionCount: number;
+  mySubmitted: boolean;
+  review: TypedReview | null;
+  reviewIndex: number;
+  reviewCount: number;
+  hostSubmissions?: TypedReview[];
 }
 
 export function createJoinSchema(maxPlayerNameLength: number) {
@@ -126,8 +145,9 @@ export const hostCommandSchema = z.object({
   id: z.string().uuid(),
   revision: z.number().int().nonnegative(),
   action: z.discriminatedUnion('type', [
-    z.object({ type: z.enum(['start', 'pause', 'resume', 'close', 'reveal', 'next', 'reset', 'restartMedia', 'undo']) }),
+    z.object({ type: z.enum(['start', 'pause', 'resume', 'close', 'reveal', 'next', 'reset', 'restartMedia', 'undo', 'startReview', 'nextReview']) }),
     z.object({ type: z.literal('judge'), correct: z.boolean() }),
+    z.object({ type: z.literal('judgeReview'), correct: z.boolean() }),
     z.object({ type: z.literal('adjust'), playerId: z.string(), delta: z.number().int().min(-100000).max(100000).refine((v) => v !== 0) }),
     z.object({ type: z.literal('removePlayer'), playerId: z.string() }),
     z.object({ type: z.literal('setup'), settings: settingsSchema }),
@@ -140,6 +160,7 @@ export type Ack<T = undefined> = (result: Result<T>) => void;
 export interface ClientEvents {
   'player:join': (request: JoinRequest, ack: Ack<{ token: string; playerId: string }>) => void;
   'player:buzz': (ack: Ack) => void;
+  'player:submitAnswer': (request: { questionInstanceId: string; answer: string }, ack: Ack) => void;
   'host:command': (command: HostCommand, ack: Ack) => void;
 }
 export interface ServerEvents {

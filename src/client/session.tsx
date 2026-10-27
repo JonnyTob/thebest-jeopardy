@@ -17,6 +17,7 @@ interface Session {
   command: (action: HostAction) => Promise<boolean>;
   join: (request: JoinRequest) => Promise<boolean>;
   buzz: () => Promise<boolean>;
+  submitAnswer: (answer: string, questionInstanceId: string) => Promise<boolean>;
 }
 const Context = createContext<Session | null>(null);
 
@@ -114,8 +115,13 @@ export function SessionProvider({ role, passcode, children }: {
     if (!result.ok) setError(result.error);
     return result.ok;
   });
+  const submitAnswer = (answer: string, questionInstanceId: string) => request(async (socket) => {
+    const result = await socket.timeout(5000).emitWithAck('player:submitAnswer', { answer, questionInstanceId });
+    if (!result.ok) setError(result.error);
+    return result.ok;
+  });
 
-  return <Context.Provider value={{ state, receivedAt, connected, playerId, error, pending, clearError: () => setError(null), command, join, buzz }}>
+  return <Context.Provider value={{ state, receivedAt, connected, playerId, error, pending, clearError: () => setError(null), command, join, buzz, submitAnswer }}>
     {children}
   </Context.Provider>;
 }
@@ -138,7 +144,8 @@ export function useAnimatedState(): Snapshot | null {
   const extra = state.clockRunning && connected ? Math.max(0, now - receivedAt) : 0;
   const elapsed = state.clueElapsedMs + extra;
   return { ...state, clockRunning: state.clockRunning && connected,
-    clueElapsedMs: elapsed, currentPoints: state.pointsAtBuzz ?? pointsAt(elapsed, state.settings),
+    clueElapsedMs: elapsed, currentPoints: state.question?.mode === 'typed'
+      ? state.question.fixedPoints ?? state.currentPoints : state.pointsAtBuzz ?? pointsAt(elapsed, state.settings),
     revealProgress: Math.min(1, state.revealProgress + extra / ((state.question?.reveal?.durationSeconds ?? 20) * 1000)),
     mediaPositionSeconds: state.mediaPositionSeconds + extra / 1000 };
 }

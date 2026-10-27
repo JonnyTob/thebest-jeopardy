@@ -52,8 +52,10 @@ export function buzzerLabel(state: Snapshot): string {
   if (state.phase === 'LOBBY') return 'WAITING TO START';
   if (state.phase === 'GAME_FINISHED') return 'FINAL SCORES';
   if (state.phase === 'ANSWERING') return 'PLAYER ANSWERING';
+  if (state.phase === 'REVIEW') return 'REVIEWING ANSWERS';
+  if (state.phase === 'REVIEW_COMPLETE') return 'REVIEW COMPLETE';
   if (state.paused) return 'HOST PAUSED';
-  if (state.phase === 'QUESTION_OPEN') return 'BUZZ NOW';
+  if (state.phase === 'QUESTION_OPEN') return state.question?.mode === 'typed' ? 'ANSWERS OPEN' : 'BUZZ NOW';
   return 'QUESTION CLOSED';
 }
 

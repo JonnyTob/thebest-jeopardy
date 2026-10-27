@@ -9,7 +9,7 @@ import { randomUUID } from 'node:crypto';
 
 const defaults = {
   leaderboardCount: 8, startPoints: 500, minimumPoints: 100, dropPoints: 100,
-  dropEverySeconds: 5, lockoutSeconds: 0,
+  dropEverySeconds: 5, lockoutSeconds: 0, maxAnswerLength: 100,
 };
 const branding = { name: 'Kaboot', logoText: 'K', tagline: 'Buzz in. Get booted.' };
 

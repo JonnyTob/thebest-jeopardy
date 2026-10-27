@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { pointsAt, rankPlayers } from '../shared/game.js';
-import { serverSettingsSchema, type HostCommand, type JoinRequest, type Phase, type Player, type Quiz, type ScoreEvent, type Settings, type Snapshot, type ServerSettings } from '../shared/protocol.js';
+import { serverSettingsSchema, type HostCommand, type JoinRequest, type Phase, type Player, type Quiz, type ScoreEvent, type Settings, type Snapshot, type ServerSettings, type TypedReview } from '../shared/protocol.js';
 
 export class GameError extends Error {}
 
@@ -17,6 +17,10 @@ interface ClueState {
   pointsAtBuzz: number | null;
   mediaOffsetSeconds: number;
   mediaVersion: number;
+  questionInstanceId: string | null;
+  submissions: TypedReview[];
+  reviewQueue: TypedReview[];
+  reviewIndex: number;
 }
 interface UndoEntry {
   clue: ClueState;
@@ -37,12 +41,13 @@ export class GameEngine {
     phase: 'LOBBY', questionIndex: -1, elapsedMs: 0, startedAt: null,
     paused: false, lockedOutIds: [], lockedOutUntil: {}, activePlayerId: null, pointsAtBuzz: null,
     mediaOffsetSeconds: 0, mediaVersion: 0,
+    questionInstanceId: null, submissions: [], reviewQueue: [], reviewIndex: 0,
   };
 
   constructor(readonly quiz: Quiz, private readonly now: () => number = () => performance.now(),
     readonly serverSettings: ServerSettings = serverSettingsSchema.parse({})) {
     this.settings = { title: quiz.title, leaderboardCount: 8, startPoints: 500,
-      minimumPoints: 100, dropPoints: 100, dropEverySeconds: 5, lockoutSeconds: 0 };
+      minimumPoints: 100, dropPoints: 100, dropEverySeconds: 5, lockoutSeconds: 0, maxAnswerLength: 100 };
   }
 
   private require(condition: unknown, message: string): asserts condition {
@@ -96,12 +101,26 @@ export class GameEngine {
   buzz(playerId: string) {
     this.require(this.players.get(playerId)?.connected, 'Join the game before buzzing.');
     this.require(this.clue.phase === 'QUESTION_OPEN' && !this.clue.paused, 'Buzzers are not open.');
+    this.require(this.quiz.questions[this.clue.questionIndex]?.mode !== 'typed', 'This question requires a typed answer.');
     this.require(!this.isLockedOut(playerId), this.settings.lockoutSeconds > 0
       ? 'You are locked out until your countdown ends.' : 'You are locked out for this question.');
     this.freeze();
     this.clue.activePlayerId = playerId;
     this.clue.pointsAtBuzz = pointsAt(this.clue.elapsedMs, this.settings);
     this.clue.phase = 'ANSWERING';
+    this.revision++;
+  }
+
+  submitAnswer(playerId: string, instanceId: string, value: string) {
+    this.require(this.players.get(playerId)?.connected, 'Join the game before answering.');
+    this.require(this.clue.phase === 'QUESTION_OPEN' && !this.clue.paused, 'Submissions are not open.');
+    this.require(this.quiz.questions[this.clue.questionIndex]?.mode === 'typed', 'This question does not accept typed answers.');
+    this.require(instanceId === this.clue.questionInstanceId, 'This question has changed. Check the current question.');
+    const answer = value.trim();
+    this.require(answer.length > 0 && answer.length <= this.settings.maxAnswerLength,
+      `Enter an answer of 1-${this.settings.maxAnswerLength} characters.`);
+    this.require(!this.clue.submissions.some((entry) => entry.playerId === playerId), 'Your answer has already been submitted.');
+    this.clue.submissions.push({ playerId, answer, correct: null });
     this.revision++;
   }
 
@@ -112,6 +131,7 @@ export class GameEngine {
       phase: 'QUESTION_OPEN', questionIndex: index, elapsedMs: 0, startedAt: this.now(),
       paused: false, lockedOutIds: [], lockedOutUntil: {}, activePlayerId: null, pointsAtBuzz: null,
       mediaOffsetSeconds: 0, mediaVersion: this.clue.mediaVersion + 1,
+      questionInstanceId: randomUUID(), submissions: [], reviewQueue: [], reviewIndex: 0,
     };
   }
 
@@ -121,6 +141,13 @@ export class GameEngine {
     this.clue.paused = false;
     this.clue.activePlayerId = null;
     this.clue.pointsAtBuzz = null;
+    if (this.quiz.questions[this.clue.questionIndex]?.mode === 'typed') {
+      const submitted = new Set(this.clue.submissions.map((entry) => entry.playerId));
+      this.clue.reviewQueue = [...structuredClone(this.clue.submissions),
+        ...[...this.players.values()].filter((player) => !submitted.has(player.id))
+          .sort((a, b) => a.joinedOrder - b.joinedOrder)
+          .map((player) => ({ playerId: player.id, answer: null, correct: null }))];
+    }
     this.rank();
   }
 
@@ -154,7 +181,9 @@ export class GameEngine {
         this.open(0);
         break;
       case 'next':
-        this.require(['QUESTION_CLOSED', 'ANSWER_REVEALED'].includes(this.clue.phase), 'Close the current question before advancing.');
+        this.require(['QUESTION_CLOSED', 'REVIEW_COMPLETE', 'ANSWER_REVEALED'].includes(this.clue.phase), 'Close the current question before advancing.');
+        this.require(this.quiz.questions[this.clue.questionIndex]?.mode !== 'typed' || this.clue.phase !== 'QUESTION_CLOSED',
+          'Review all answers before advancing.');
         if (this.clue.questionIndex + 1 >= this.quiz.questions.length) {
           this.clue.phase = 'GAME_FINISHED';
           this.history = [];
@@ -176,8 +205,35 @@ export class GameEngine {
         this.close();
         break;
       case 'reveal':
-        this.require(this.clue.phase === 'QUESTION_CLOSED', 'Close the question before revealing its answer.');
+        this.require(this.clue.phase === 'QUESTION_CLOSED' || this.clue.phase === 'REVIEW_COMPLETE', 'Close the question before revealing its answer.');
+        this.require(this.quiz.questions[this.clue.questionIndex]?.mode !== 'typed' || this.clue.phase === 'REVIEW_COMPLETE',
+          'Review all answers before revealing the answer.');
         this.clue.phase = 'ANSWER_REVEALED';
+        break;
+      case 'startReview':
+        this.require(this.clue.phase === 'QUESTION_CLOSED' && this.quiz.questions[this.clue.questionIndex]?.mode === 'typed',
+          'Close a typed-answer question before starting review.');
+        this.clue.reviewIndex = 0;
+        this.clue.phase = this.clue.reviewQueue.length ? 'REVIEW' : 'REVIEW_COMPLETE';
+        break;
+      case 'judgeReview': {
+        this.require(this.clue.phase === 'REVIEW', 'There is no answer to review.');
+        const entry = this.clue.reviewQueue[this.clue.reviewIndex];
+        this.require(entry && entry.correct === null, 'This answer has already been reviewed.');
+        this.require(!action.correct || entry.answer !== null, 'A missing answer cannot be marked correct.');
+        const player = this.players.get(entry.playerId);
+        this.require(player, 'Review player not found.');
+        const points = this.quiz.questions[this.clue.questionIndex].fixedPoints;
+        this.require(points !== undefined, 'Question points are missing.');
+        this.saveScore(player, action.correct ? points : 0, `${player.name}: ${action.correct ? 'correct' : entry.answer === null ? 'no answer' : 'wrong'}`);
+        entry.correct = action.correct;
+        break;
+      }
+      case 'nextReview':
+        this.require(this.clue.phase === 'REVIEW', 'There is no answer to advance.');
+        this.require(this.clue.reviewQueue[this.clue.reviewIndex]?.correct !== null, 'Judge the current answer before advancing.');
+        this.clue.reviewIndex++;
+        if (this.clue.reviewIndex >= this.clue.reviewQueue.length) this.clue.phase = 'REVIEW_COMPLETE';
         break;
       case 'reset':
         this.require(this.clue.questionIndex >= 0 && this.clue.phase !== 'GAME_FINISHED', 'There is no question to reset.');
@@ -217,8 +273,12 @@ export class GameEngine {
       case 'undo': {
         const entry = this.history.pop();
         this.require(entry, 'There is no score change to undo for this question.');
+        const submissions = this.clue.submissions;
         this.clue = { ...entry.clue, startedAt: entry.clue.startedAt === null ? null : this.now(),
           mediaVersion: this.clue.mediaVersion + 1 };
+        if (this.clue.phase === 'QUESTION_OPEN' && this.quiz.questions[this.clue.questionIndex]?.mode === 'typed') {
+          this.clue.submissions = submissions;
+        }
         for (const [id, score] of entry.scores) {
           const player = this.players.get(id);
           if (player) player.score = score;
@@ -229,6 +289,8 @@ export class GameEngine {
       }
       case 'removePlayer':
         this.require(!this.isActive(), 'Remove players between questions.');
+        this.require(this.clue.phase !== 'REVIEW' && !(this.clue.phase === 'QUESTION_CLOSED'
+          && this.quiz.questions[this.clue.questionIndex]?.mode === 'typed'), 'Remove players after answer review.');
         this.require(this.players.has(action.playerId), 'Player not found.');
         this.players.delete(action.playerId);
         this.history = [];
@@ -240,12 +302,13 @@ export class GameEngine {
     this.revision++;
   }
 
-  snapshot(host = false): Snapshot {
+  snapshot(host = false, playerId?: string): Snapshot {
     const question = this.quiz.questions[this.clue.questionIndex];
     const elapsed = this.elapsed();
     const now = this.now();
     const publicQuestion = question ? {
       id: question.id, type: question.type, question: question.question, text: question.text,
+      mode: question.mode, fixedPoints: question.fixedPoints, timerSeconds: question.timerSeconds,
       media: question.media, reveal: question.reveal, playback: question.playback, visualizer: question.visualizer,
     } : null;
     return {
@@ -262,13 +325,20 @@ export class GameEngine {
       lockoutRemainingMs: Object.fromEntries(Object.entries(this.clue.lockedOutUntil)
         .filter(([, until]) => until > now).map(([id, until]) => [id, until - now])),
       activePlayerId: this.clue.activePlayerId, pointsAtBuzz: this.clue.pointsAtBuzz,
-      currentPoints: this.clue.pointsAtBuzz ?? pointsAt(elapsed, this.settings),
+      currentPoints: question?.mode === 'typed' ? question.fixedPoints ?? 0 : this.clue.pointsAtBuzz ?? pointsAt(elapsed, this.settings),
       clueElapsedMs: elapsed, clockRunning: this.clue.startedAt !== null, paused: this.clue.paused,
       revealProgress: Math.min(1, Math.max(0, elapsed / 1000 + this.clue.mediaOffsetSeconds) / (question?.reveal?.durationSeconds ?? 20)),
       mediaPositionSeconds: (question?.playback?.startSeconds ?? 0) + Math.max(0, elapsed / 1000 + this.clue.mediaOffsetSeconds),
       mediaVersion: this.clue.mediaVersion,
       canUndo: host && this.history.length > 0,
       scoreEvents: host ? structuredClone(this.scoreEvents) : [],
+      questionInstanceId: this.clue.questionInstanceId,
+      submissionCount: this.clue.submissions.length,
+      mySubmitted: !!playerId && this.clue.submissions.some((entry) => entry.playerId === playerId),
+      review: this.clue.phase === 'REVIEW' ? structuredClone(this.clue.reviewQueue[this.clue.reviewIndex]) : null,
+      reviewIndex: this.clue.reviewIndex,
+      reviewCount: this.clue.reviewQueue.length,
+      ...(host ? { hostSubmissions: structuredClone(this.clue.reviewQueue.length ? this.clue.reviewQueue : this.clue.submissions) } : {}),
     };
   }
 }

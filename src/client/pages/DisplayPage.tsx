@@ -15,6 +15,8 @@ export function DisplayPage() {
   const finished = state.phase === 'GAME_FINISHED';
   const open = state.phase === 'QUESTION_OPEN' && !state.paused && connected;
   const winner = finished ? players[0] : null;
+  const typed = state.question?.mode === 'typed';
+  const reviewedPlayer = state.players.find((player) => player.id === state.review?.playerId);
 
   return <main className="tv-shell">
     <header className="tv-header"><Brand /><QuizName title={state.settings.title} id={state.quizId} />
@@ -28,23 +30,33 @@ export function DisplayPage() {
           : finished ? <div className="tv-welcome"><span className="eyebrow">OUR {branding.name.toUpperCase()} CHAMPION</span>
             {winner ? <><Avatar id={winner.avatarId} /><h1>{winner.name}</h1><strong className="winner-score">{winner.score.toLocaleString()} points</strong></>
               : <h1>Thanks for playing!</h1>}<p>Same time next quiz?</p></div>
+            : state.phase === 'REVIEW' && state.review ? <div className="tv-welcome review-card">
+              <span className="eyebrow">ANSWER {state.reviewIndex + 1} / {state.reviewCount}</span>
+              {reviewedPlayer && <><Avatar id={reviewedPlayer.avatarId} /><h1>{reviewedPlayer.name}</h1></>}
+              <strong className="review-answer">{state.review.answer ?? 'No answer'}</strong>
+              {state.review.correct !== null && <p className={state.review.correct ? 'positive' : 'negative'}>
+                {state.review.correct ? `Correct +${state.question?.fixedPoints}` : state.review.answer === null ? 'No answer / +0' : 'Wrong / +0'}</p>}
+              </div>
             : <>
               <div className="clue-heading"><span className="eyebrow">THE QUESTION</span><h1>{state.question?.question}</h1></div>
               <div className="media-area"><Media state={state} />
                 {state.revealedAnswer && <div className="answer-reveal"><span className="eyebrow">THE ANSWER</span><h2>{state.revealedAnswer}</h2></div>}
               </div>
-              <PointBar state={state} />
+              {typed ? <div className="point-meta"><strong>{state.question?.fixedPoints} fixed points</strong>
+                <span>Timer: {Math.max(0, Math.ceil(((state.question?.timerSeconds ?? 0) * 1000 - state.clueElapsedMs) / 1000))}s / host closes submissions</span></div>
+                : <PointBar state={state} />}
             </>}
       </div>
       <aside className={`panel tv-buzzer ${lobby ? 'lobby-buzzer' : open ? 'is-open' : active ? 'is-answering' : ''}`}>
-        <span className="eyebrow">BUZZER STATUS</span>
+        <span className="eyebrow">{typed ? 'ANSWER STATUS' : 'BUZZER STATUS'}</span>
         <div className="buzzer-status"><span className="buzzer-orb" /><h2>{connected ? buzzerLabel(state) : 'RECONNECTING'}</h2></div>
         {lobby ? <div className="lobby-join"><JoinLink compact /></div>
           : active ? <div className="answering-player"><Avatar id={active.avatarId} /><h2>{active.name}</h2>
           <strong>{state.pointsAtBuzz} points</strong><p>The floor is yours.</p></div>
-          : <div className="buzzer-idle"><span className="giant-q">?</span><p>{open ? 'Know the answer? Make your move.' : 'Eyes on the next clue.'}</p></div>}
+          : <div className="buzzer-idle"><span className="giant-q">?</span><p>{typed
+            ? `${state.submissionCount} of ${state.players.length} submitted` : open ? 'Know the answer? Make your move.' : 'Eyes on the next clue.'}</p></div>}
         {!lobby && <div className="buzzer-footer"><span>{state.clockRunning ? 'CLUE PLAYING' : 'CLUE PAUSED'}</span>
-          <small>{active ? 'No rush. Answer out loud.' : open ? 'First buzz takes the floor' : 'The gamemaster has control'}</small></div>}
+          <small>{typed ? 'Type your answer on your phone' : active ? 'No rush. Answer out loud.' : open ? 'First buzz takes the floor' : 'The gamemaster has control'}</small></div>}
       </aside>
     </section>
     <section className="tv-leaderboard" aria-label="Leaderboard">

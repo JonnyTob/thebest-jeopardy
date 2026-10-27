@@ -4,7 +4,7 @@ import { pointsAt, tileOrder, valueWindowMs } from './game.js';
 import { quizSchema, settingsSchema } from './protocol.js';
 
 test('default points hit exact boundaries and stay at minimum indefinitely', () => {
-  const settings = { title: 'Test', leaderboardCount: 8, startPoints: 500, minimumPoints: 100, dropPoints: 100, dropEverySeconds: 5, lockoutSeconds: 0 };
+  const settings = { title: 'Test', leaderboardCount: 8, startPoints: 500, minimumPoints: 100, dropPoints: 100, dropEverySeconds: 5, lockoutSeconds: 0, maxAnswerLength: 100 };
   for (const [elapsed, expected] of [[0, 500], [4999, 500], [5000, 400], [10000, 300], [15000, 200], [20000, 100], [999999, 100]]) {
     assert.equal(pointsAt(elapsed, settings), expected);
   }

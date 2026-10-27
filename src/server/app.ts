@@ -96,7 +96,8 @@ export async function createApp(options: AppOptions) {
     const publicState = engine.snapshot();
     const privateState = engine.snapshot(true);
     for (const socket of io.sockets.sockets.values()) {
-      socket.emit('session:snapshot', socket.data.host ? privateState : publicState);
+      socket.emit('session:snapshot', socket.data.host ? privateState
+        : socket.data.playerId ? engine.snapshot(false, socket.data.playerId) : publicState);
     }
   }
 
@@ -143,6 +144,24 @@ export async function createApp(options: AppOptions) {
       try {
         if (!socket.data.playerId) throw new GameError('Join the game before buzzing.');
         engine.buzz(socket.data.playerId);
+        ack({ ok: true, data: undefined });
+        broadcast();
+      } catch (error) {
+        ack({ ok: false, error: errorMessage(error) });
+      }
+    });
+
+    socket.on('player:submitAnswer', (request, ack) => {
+      if (typeof ack !== 'function') {
+        socket.emit('session:error', 'Answer submissions require an acknowledgement.');
+        return;
+      }
+      if (!request || typeof request.answer !== 'string' || typeof request.questionInstanceId !== 'string') {
+        return ack({ ok: false, error: 'Invalid answer submission.' });
+      }
+      try {
+        if (!socket.data.playerId) throw new GameError('Join the game before answering.');
+        engine.submitAnswer(socket.data.playerId, request.questionInstanceId, request.answer);
         ack({ ok: true, data: undefined });
         broadcast();
       } catch (error) {

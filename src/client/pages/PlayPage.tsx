@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
-import { avatars, type AvatarId } from '../../shared/protocol';
+import { avatars, type AvatarId, type Snapshot } from '../../shared/protocol';
 import { rankPlayers } from '../../shared/game';
-import { useSession } from '../session';
+import { useAnimatedState, useSession } from '../session';
 import { Avatar, Brand, Connection, QuizName, SessionError } from '../components/Common';
 import { branding } from '../branding';
 
@@ -59,7 +59,9 @@ export function PlayPage() {
     </form> : <>
       <section className="panel player-profile"><Avatar id={player.avatarId} /><div><span className="eyebrow">YOU'RE IN</span><h1>{player.name}</h1></div>
         <div className="personal-score"><strong>{player.score.toLocaleString()}</strong><span>RANK {rank} OF {state?.players.length}</span></div></section>
-      <section className={`buzzer-card ${answering ? 'is-answering' : ''}`}>
+      {state?.question?.mode === 'typed' && state.phase !== 'GAME_FINISHED'
+        ? <TypedAnswer key={state.questionInstanceId} state={state} />
+        : <><section className={`buzzer-card ${answering ? 'is-answering' : ''}`}>
         <span className="eyebrow">{state?.phase === 'LOBBY' ? 'LOBBY' : `QUESTION ${(state?.questionIndex ?? 0) + 1} / ${state?.questionCount}`}</span>
         <h2 role="status">{status}</h2><p>{detail}</p>
         <button className="buzz-button" disabled={!canBuzz} onClick={() => { void buzz(); }}>
@@ -70,7 +72,31 @@ export function PlayPage() {
       </section>
       <p className="footnote">Correct +points / Wrong -points<br />{state?.settings.lockoutSeconds
         ? `Wrong answer: ${state.settings.lockoutSeconds}s lockout, then try again.`
-        : 'One attempt per question. Make it count.'}</p>
+        : 'One attempt per question. Make it count.'}</p></>}
     </>}
   </main>;
+}
+
+function TypedAnswer({ state }: { state: Snapshot }) {
+  const { connected, pending, submitAnswer } = useSession();
+  const animated = useAnimatedState();
+  const [answer, setAnswer] = useState('');
+  const open = state.phase === 'QUESTION_OPEN' && !state.paused;
+  const remaining = Math.max(0, Math.ceil(((state.question?.timerSeconds ?? 0) * 1000
+    - (animated?.clueElapsedMs ?? state.clueElapsedMs)) / 1000));
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    if (state.questionInstanceId) void submitAnswer(answer, state.questionInstanceId);
+  }
+  return <section className="panel typed-answer"><span className="eyebrow">EVERYONE ANSWERS / {state.question?.fixedPoints} POINTS</span>
+    <h2>{state.mySubmitted ? 'Answer submitted' : open ? 'Your answer' : state.paused ? 'Host paused' : 'Submissions closed'}</h2>
+    {state.phase === 'QUESTION_OPEN' && <p>Timer: {remaining}s {remaining === 0 && '/ waiting for the host to close submissions'}</p>}
+    {state.mySubmitted ? <p>Your answer is locked in. Watch the TV for review.</p>
+      : open ? <form onSubmit={submit}><label>Type your answer
+        <input value={answer} maxLength={state.settings.maxAnswerLength} required
+          onChange={(event) => setAnswer(event.target.value)} autoComplete="off" /></label>
+        <p className="footnote">Maximum {state.settings.maxAnswerLength} characters. Your first submission is final.</p>
+        <button className="primary wide" disabled={!connected || pending || !answer.trim()}>Submit answer</button></form>
+        : <p>{state.paused ? 'Submissions resume when the host resumes the clue.' : 'Watch the TV for review.'}</p>}
+  </section>;
 }

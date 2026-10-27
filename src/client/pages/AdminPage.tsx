@@ -54,6 +54,8 @@ function AdminConsole({ logout, requirePasscode }: { logout: () => void; require
   const isOpen = state?.phase === 'QUESTION_OPEN';
   const answering = state?.phase === 'ANSWERING';
   const closed = state?.phase === 'QUESTION_CLOSED' || state?.phase === 'ANSWER_REVEALED';
+  const typed = state?.question?.mode === 'typed';
+  const readyForNext = state?.phase === 'REVIEW_COMPLETE' || (closed && (!typed || state?.phase === 'ANSWER_REVEALED'));
   const disabled = !connected || pending;
   return <main className="admin-shell">
     <header className="admin-header"><Brand subtitle="Private host console" />
@@ -76,32 +78,54 @@ function AdminConsole({ logout, requirePasscode }: { logout: () => void; require
             <button className="primary wide" disabled={disabled} onClick={() => { void command({ type: 'start' }); }}>Start quiz</button></div></section>
           : state.phase === 'GAME_FINISHED' ? <section className="panel"><h2>Final standings</h2><p>Scores are still adjustable below. Restart the server for a new session.</p></section>
             : <div className="admin-game-grid">
-              <section className="panel admin-question"><span className="eyebrow">CURRENT QUESTION / {state.question?.type.toUpperCase()}</span>
+              <section className="panel admin-question"><span className="eyebrow">CURRENT QUESTION / {state.question?.type.toUpperCase()} / {typed ? 'EVERYONE ANSWERS' : 'BUZZER'}</span>
                 <h2>{state.question?.question}</h2><div className="admin-media"><Media state={state} preview /></div>
                 <div className="private-answer"><span className="eyebrow">PRIVATE ANSWER / HOST ONLY</span><strong>{state.privateAnswer}</strong></div>
-                <PointBar state={state} /></section>
+                {typed ? <p>{state.question?.fixedPoints} fixed points / timer: {Math.max(0, Math.ceil(((state.question?.timerSeconds ?? 0) * 1000 - state.clueElapsedMs) / 1000))}s / host closes submissions</p> : <PointBar state={state} />}</section>
               <section className="panel game-actions"><span className="eyebrow">GAME ACTIONS</span>
+                {typed ? <>
+                  <h2>{buzzerLabel(state)}</h2>
+                  {state.phase === 'REVIEW' && state.review && <div className="notice">
+                    <strong>{state.players.find((player) => player.id === state.review?.playerId)?.name}</strong>
+                    <p>{state.review.answer ?? 'No answer'}</p>
+                    <p>Answer {state.reviewIndex + 1} of {state.reviewCount}
+                      {state.review.correct !== null && (state.review.correct ? ` / Correct +${state.question?.fixedPoints}` : ' / +0')}</p>
+                    <div className="ruling-buttons"><button className="success" disabled={disabled || state.review.correct !== null || state.review.answer === null}
+                      onClick={() => { void command({ type: 'judgeReview', correct: true }); }}>Correct +{state.question?.fixedPoints}</button>
+                      <button className="danger" disabled={disabled || state.review.correct !== null}
+                        onClick={() => { void command({ type: 'judgeReview', correct: false }); }}>{state.review.answer === null ? 'No answer +0' : 'Wrong +0'}</button></div>
+                    <button className="primary" disabled={disabled || state.review.correct === null}
+                      onClick={() => { void command({ type: 'nextReview' }); }}>Next review &rarr;</button>
+                  </div>}
+                  <button disabled={disabled || state.phase !== 'QUESTION_CLOSED'} onClick={() => { void command({ type: 'startReview' }); }}>Start answer review</button>
+                </> : <>
                 {active ? <div className="host-answering"><Avatar id={active.avatarId} /><div><h2>{active.name}</h2>
                   <p>{state.pointsAtBuzz} frozen points / answering aloud</p></div></div> : <h2>{buzzerLabel(state)}</h2>}
                 <div className="ruling-buttons"><button className="success" disabled={disabled || !answering}
                   onClick={() => { void command({ type: 'judge', correct: true }); }}>Correct +{state.pointsAtBuzz ?? state.currentPoints}</button>
                   <button className="danger" disabled={disabled || !answering}
                     onClick={() => { void command({ type: 'judge', correct: false }); }}>Wrong -{state.pointsAtBuzz ?? state.currentPoints}</button></div>
+                </>}
                 <button disabled={disabled || !isOpen} onClick={() => { void command({ type: state.paused ? 'resume' : 'pause' }); }}>
-                  {state.paused ? 'Resume clue & buzzers' : 'Pause clue & buzzers'}</button>
+                  {state.paused ? 'Resume clue' : 'Pause clue'} {typed ? '& submissions' : '& buzzers'}</button>
                 <button disabled={disabled || !isOpen} onClick={() => { void command({ type: 'restartMedia' }); }}>Restart media only</button>
                 <button disabled={disabled || !(isOpen || answering)} onClick={() => { void command({ type: 'close' }); }}>Close / skip question</button>
-                <button disabled={disabled || state.phase !== 'QUESTION_CLOSED'} onClick={() => { void command({ type: 'reveal' }); }}>Reveal answer on TV</button>
-                <button className="primary" disabled={disabled || !closed} onClick={() => { void command({ type: 'next' }); }}>
+                <button disabled={disabled || (typed ? state.phase !== 'REVIEW_COMPLETE' : state.phase !== 'QUESTION_CLOSED')} onClick={() => { void command({ type: 'reveal' }); }}>Reveal answer on TV</button>
+                <button className="primary" disabled={disabled || !readyForNext} onClick={() => { void command({ type: 'next' }); }}>
                   {state.questionIndex === state.questionCount - 1 ? 'Finish quiz' : 'Next question'} &rarr;</button>
                 <div className="action-divider" />
                 <button disabled={disabled || !state.canUndo} onClick={() => { void command({ type: 'undo' }); }}>Undo last score change</button>
-                {confirm ? <div className="notice"><p>Reopen this clue at full value and clear lockouts? Existing scores stay unchanged.</p>
+                {confirm ? <div className="notice"><p>Reopen this clue and clear lockouts and typed answers? Existing scores stay unchanged.</p>
                   <button className="danger" disabled={disabled} onClick={() => { void command({ type: 'reset' }).then((ok) => { if (ok) setConfirm(false); }); }}>Confirm reset</button>
                   <button className="quiet" onClick={() => setConfirm(false)}>Cancel</button></div>
                   : <button className="quiet" disabled={disabled} onClick={() => setConfirm(true)}>Reset this question...</button>}
               </section>
             </div>}
+        {typed && state.phase !== 'GAME_FINISHED' && <section className="panel"><h2>Typed answers ({state.submissionCount} submitted)</h2>
+          {state.hostSubmissions?.length ? <ol>{state.hostSubmissions.map((entry) => <li key={entry.playerId}>
+            <strong>{state.players.find((player) => player.id === entry.playerId)?.name ?? 'Unknown player'}:</strong>{' '}
+            {entry.answer ?? 'No answer'}{entry.correct !== null && (entry.correct ? ' / Correct' : ' / +0')}
+          </li>)}</ol> : <p>No answers submitted yet.</p>}</section>}
         <div className="admin-bottom-grid"><PlayerTable state={state} /><section className="panel game-log"><span className="eyebrow">SCORE LOG</span><h2>The night's numbers</h2>
           <button disabled={disabled || !state.canUndo} onClick={() => { void command({ type: 'undo' }); }}>Undo last score change</button>
           {state.scoreEvents.length ? <ol>{state.scoreEvents.map((event) => <li key={event.id}><span>{event.description}</span>
@@ -122,7 +146,8 @@ function PlayerTable({ state }: { state: Snapshot }) {
     if (sort === 'connection') return Number(b.connected) - Number(a.connected) || a.joinedOrder - b.joinedOrder;
     return 0;
   });
-  const activeClue = state.phase === 'QUESTION_OPEN' || state.phase === 'ANSWERING';
+  const activeClue = state.phase === 'QUESTION_OPEN' || state.phase === 'ANSWERING' || state.phase === 'REVIEW'
+    || (state.phase === 'QUESTION_CLOSED' && state.question?.mode === 'typed');
   return <section className="panel players-panel"><div className="table-heading"><h2>Players <span className="count-badge">{state.players.length}</span></h2>
     <input aria-label="Search players" placeholder="Search players" value={search} onChange={(event) => setSearch(event.target.value)} />
     <select aria-label="Sort players" value={sort} onChange={(event) => setSort(event.target.value)}>
@@ -179,6 +204,7 @@ function Setup({ state }: { state: Snapshot }) {
         ['dropPoints', 'Points dropped per step', 1, 10000],
         ['dropEverySeconds', 'Seconds between drops', 1, 120],
         ['lockoutSeconds', 'Wrong-answer lockout seconds (0 = entire question)', 0, 300],
+        ['maxAnswerLength', 'Maximum typed answer characters', 1, 500],
       ] as const).map(([key, label, min, max]) => <label key={key}>{label}<input type="number" required min={min} max={max} step="1"
         value={settings[key]} onChange={(event) => setSettings({ ...settings, [key]: Number(event.target.value) })} /></label>)}</div>
       <button className="primary" type="submit">Save setup</button></fieldset>

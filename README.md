@@ -68,7 +68,8 @@ npm start
     "minimumPoints": 100,
     "dropPoints": 100,
     "dropEverySeconds": 5,
-    "lockoutSeconds": 0
+    "lockoutSeconds": 0,
+    "maxAnswerLength": 100
   }
 }
 ```
@@ -101,6 +102,7 @@ npm start
     cannot join a full game; phones show the limit and the server also enforces it.
 - **gameSetup**: defaults for the host's editable settings. An optional `title`
   overrides the title from the question file; omit it to use the quiz's own title.
+  `maxAnswerLength` (1-500; default 100) limits typed answers for this quiz.
 - **settings/quizzes/\<quiz-id\>.json**: per-quiz overrides, identified by the
   numeric quiz ID in the question file. This file has a `gameSetup` section only.
   A missing per-quiz file means the quiz uses global defaults. You can create a
@@ -178,7 +180,8 @@ sharing the QR code.
 ## Implemented core flow
 
 - Authenticated host commands; server-filtered public snapshots never contain the
-  private answer until the host explicitly reveals it.
+  official answer until the host explicitly reveals it. Typed submissions are
+  private to the host until each submission is displayed during review.
 - Server-arbitrated first buzz, a frozen points-at-buzz value, and no answer
   countdown. Correct awards the frozen value; wrong deducts it, locks that player
   out, and resumes the clue for everyone else.
@@ -205,14 +208,30 @@ sharing the QR code.
   up to eight TV cards by default, all players in a sortable/searchable host table.
 - Text and image clues, deterministic random tile reveals, and TV-only native
   audio/video rendering with an audio frequency-spectrum visualizer.
+- **Everyone answers** questions accept one final typed submission per player.
+  A guide timer counts down on the TV, host and phones, but submissions remain
+  open until the host closes the clue. Pausing pauses the timer and submissions.
+  The host can see all submissions privately; other players see only the count.
+  After closing, start review to show each answer on the TV, mark it correct or
+  wrong, then advance manually. Correct earns the question's fixed points;
+  wrong or missing answers earn zero. The leaderboard updates immediately.
+  Review order is submission order, followed by non-submitters in join order.
+  Players present when submissions close are included, even if disconnected;
+  later joiners are not included in that review. The host can reveal the official
+  answer or move to the next question after review finishes.
 
 **Undo semantics:** Undo restores the latest score operation and its saved
 question state, elapsed time, scores, and eligibility. Undoing a ruling restores
 the answering player so the host can judge again. It never restores stale
 connection status. Undo history is cleared on next/reset or player removal.
-Reset reopens the current question at full value and clears lockouts, but does
+Reset reopens the current question at full value and clears lockouts and typed
+submissions, but does
 not erase previously awarded/deducted scores. Media restart restarts playback /
 image reveal without resetting the point clock.
+
+During typed-answer review, undo restores the last ruling and its score so it can
+be judged again, including wrong and missing answers. Reset after scoring retains
+awarded points, so use undo first if the scores should be reversed.
 
 ## Questions and media
 
@@ -245,6 +264,31 @@ The ID is shown as **Quiz #100001** beside the quiz name on TV, phone, and admin
 live/setup screens. It survives server restarts because it is stored in the quiz
 file, and it cannot be changed through session setup. This is a quiz/library ID,
 not a temporary join PIN or the private host passcode.
+
+### Question modes
+
+Each question may use `"mode": "buzzer"` for the original first-buzz flow, or
+`"mode": "typed"` for everyone to answer privately. Omitted `mode` defaults to
+the original buzzer behaviour, so existing quiz files continue to work. A typed
+question requires its own fixed point value and guide timer in seconds:
+
+```json
+{
+  "id": "movie-1",
+  "type": "text",
+  "mode": "typed",
+  "question": "Name the movie.",
+  "answer": "The Matrix",
+  "fixedPoints": 250,
+  "timerSeconds": 30
+}
+```
+
+`fixedPoints` is an integer from 1 to 10000; `timerSeconds` is an integer from
+1 to 3600. The mode applies to text, image, audio and video clues. A player
+cannot edit an answer after submitting; the same player reconnecting or opening
+another tab cannot submit again. The host sets the per-quiz answer length in
+**Game setup** and saves it with the other quiz settings.
 
 ### Lobby cover
 

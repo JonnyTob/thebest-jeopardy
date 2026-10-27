@@ -54,6 +54,10 @@ code { color: var(--gold); overflow-wrap: anywhere; }
 .brand:hover { text-decoration: none; }
 .brand small { display: block; font-size: .7rem; font-weight: 450; letter-spacing: 0; color: #d7c4ed; margin-top: 3px; }
 .brand-mark { display: grid; place-items: center; font-size: 1.35rem; width: 36px; height: 36px; border: 2px solid var(--gold); border-radius: 11px 11px 11px 2px; }
+.typed-answer { display: grid; gap: 12px; }
+.typed-answer form { display: grid; gap: 12px; }
+.review-answer { display: block; max-width: 100%; overflow-wrap: anywhere; font-size: clamp(1.5rem, 3vw, 3rem); color: var(--gold); }
+.review-card { max-height: 100%; overflow-y: auto; }
 .quiz-name { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; max-width: 100%; min-width: 0; }
 .quiz-name-text { min-width: 0; overflow-wrap: anywhere; }
 .quiz-id { flex-shrink: 0; white-space: nowrap; color: var(--gold); background: #63432a55; border: 1px solid #b3934455; border-radius: 6px; padding: 4px 8px; font-size: .75rem; font-weight: 650; letter-spacing: .03em; font-variant-numeric: tabular-nums; }
@@ -340,3 +344,4 @@ td:last-child, th:last-child { padding-right: 0; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; }
 }
+.tv-welcome.review-card > p { display: block; }
