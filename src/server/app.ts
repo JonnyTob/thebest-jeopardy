@@ -10,6 +10,7 @@ import { GameEngine, GameError } from './engine.js';
 import type { QuizStorage } from './storage.js';
 import type { QuizSettingsStorage } from './settings.js';
 import { renderBrandingHtml } from './branding.js';
+import { probeMediaDurations } from './mediaDurations.js';
 
 interface SocketData {
   host: boolean;
@@ -44,7 +45,9 @@ export async function createApp(options: AppOptions) {
   const settingsStorage = options.settingsStorage;
   const serverSettings = serverSettingsSchema.parse(options.serverSettings ?? {});
   const joinSchema = createJoinSchema(serverSettings.maxPlayerNameLength);
-  const engine = new GameEngine(quiz, undefined, serverSettings);
+  const mediaDurations = await probeMediaDurations(quiz,
+    path.resolve(options.production ? 'dist/client/media' : 'src/public/media'));
+  const engine = new GameEngine(quiz, undefined, serverSettings, mediaDurations);
   engine.settings = settingsSchema.parse({
     ...engine.settings,
     ...options.gameSetup,
@@ -177,7 +180,11 @@ export async function createApp(options: AppOptions) {
       if (!socket.data.host) return ack({ ok: false, error: 'Host authorization required.' });
       const parsed = hostCommandSchema.safeParse(input);
       if (!parsed.success) return ack({ ok: false, error: 'Invalid host command. Check the values and try again.' });
+      if (options.production && parsed.data.action.type === 'restartQuiz') {
+        return ack({ ok: false, error: 'Restart quiz is only available in development mode.' });
+      }
       try {
+        const previousRevision = engine.revision;
         engine.command(parsed.data, settingsStorage ? (settings) => {
           try {
             settingsStorage.save(quiz.id, settings);
@@ -194,6 +201,16 @@ export async function createApp(options: AppOptions) {
               delete client.data.playerId;
               client.emit('player:identity', { playerId: null });
               client.emit('session:error', 'The host removed your player. You can join again.');
+            }
+          }
+        }
+        if (parsed.data.action.type === 'restartQuiz' && engine.revision !== previousRevision) {
+          tokens.clear();
+          for (const client of io.sockets.sockets.values()) {
+            if (client.data.playerId) {
+              delete client.data.playerId;
+              client.emit('player:identity', { playerId: null });
+              client.emit('session:error', 'The host restarted the quiz. Please join again.');
             }
           }
         }
@@ -218,7 +235,7 @@ export async function createApp(options: AppOptions) {
     const revision = engine.revision;
     engine.tick();
     const state = engine.snapshot();
-    if (engine.revision !== revision || state.phase === 'STARTING' || state.phase === 'NEXT_ROUND' || state.clockRunning || (state.settings.lockoutSeconds > 0
+    if (engine.revision !== revision || state.phase === 'STARTING' || state.phase === 'NEXT_ROUND' || state.phase === 'BUZZ_RESULT' || state.displayClockRunning || (state.settings.lockoutSeconds > 0
       && (state.phase === 'QUESTION_OPEN' || state.phase === 'ANSWERING'))) broadcast();
     for (const [address, failures] of failedHosts) {
       if (Date.now() - failures.since > 60000) failedHosts.delete(address);
@@ -235,7 +252,7 @@ export async function createApp(options: AppOptions) {
       (entries ?? []).filter((entry) => entry.family === 'IPv4' && !entry.internal).map((entry) => entry.address));
     res.json({ joinUrls: joinOrigin ? [`${joinOrigin}/play`] : hosts.map((host) => `http://${host}:${port}/play`),
       preferredJoinUrl: joinOrigin ? `${joinOrigin}/play` : undefined, source: 'src/data/questions.json',
-      serverSettings, branding });
+      serverSettings, branding, development: !options.production });
   });
 
   let closeVite: (() => Promise<void>) | undefined;

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
-import { pointsAt, rankPlayers, START_COUNTDOWN_MS, NEXT_ROUND_MS } from '../shared/game.js';
+import { pointsAt, rankPlayers, START_COUNTDOWN_MS, NEXT_ROUND_MS, REVIEW_RESULT_MS, BUZZ_RESULT_MS } from '../shared/game.js';
 import { serverSettingsSchema, type HostCommand, type JoinRequest, type Phase, type Player, type Quiz, type ScoreEvent, type Settings, type Snapshot, type ServerSettings, type TypedReview } from '../shared/protocol.js';
 
 export class GameError extends Error {}
@@ -28,6 +28,15 @@ interface UndoEntry {
   eventId: string;
 }
 
+function emptyClue(): ClueState {
+  return {
+    phase: 'LOBBY', questionIndex: -1, elapsedMs: 0, startedAt: null,
+    paused: false, lockedOutIds: [], lockedOutUntil: {}, activePlayerId: null, pointsAtBuzz: null,
+    mediaOffsetSeconds: 0, mediaVersion: 0,
+    questionInstanceId: null, submissions: [], reviewQueue: [], reviewIndex: 0,
+  };
+}
+
 export class GameEngine {
   readonly players = new Map<string, Player>();
   settings: Settings;
@@ -40,15 +49,17 @@ export class GameEngine {
   private startCountdownAt: number | null = null;
   private nextRoundAt: number | null = null;
   private countdownId: string | null = null;
-  private clue: ClueState = {
-    phase: 'LOBBY', questionIndex: -1, elapsedMs: 0, startedAt: null,
-    paused: false, lockedOutIds: [], lockedOutUntil: {}, activePlayerId: null, pointsAtBuzz: null,
-    mediaOffsetSeconds: 0, mediaVersion: 0,
-    questionInstanceId: null, submissions: [], reviewQueue: [], reviewIndex: 0,
-  };
+  private reviewResultAt: number | null = null;
+  private reviewResultId: string | null = null;
+  private buzzResult: { id: string; playerId: string; correct: boolean; delta: number; at: number } | null = null;
+  private mediaFinishAt: number | null = null;
+  private mediaFinishDurationMs: number | null = null;
+  private mediaFinishElapsedMs = 0;
+  private clue: ClueState = emptyClue();
 
   constructor(readonly quiz: Quiz, private readonly now: () => number = () => performance.now(),
-    readonly serverSettings: ServerSettings = serverSettingsSchema.parse({})) {
+    readonly serverSettings: ServerSettings = serverSettingsSchema.parse({}),
+    private readonly mediaDurations: Readonly<Record<string, number>> = {}) {
     this.settings = { title: quiz.title, leaderboardCount: 8, startPoints: 500,
       minimumPoints: 100, dropPoints: 100, dropEverySeconds: 5, lockoutSeconds: 0, maxAnswerLength: 100 };
   }
@@ -66,6 +77,35 @@ export class GameEngine {
     } else if (this.clue.phase === 'NEXT_ROUND' && this.nextRoundAt !== null
       && this.now() - this.nextRoundAt >= NEXT_ROUND_MS) {
       this.open(this.clue.questionIndex + 1);
+      this.revision++;
+    } else if (this.clue.phase === 'REVIEW' && this.reviewResultAt !== null
+      && this.now() - this.reviewResultAt >= REVIEW_RESULT_MS) {
+      this.clearReviewResult();
+      this.advanceReview(this.clue.reviewIndex + 1);
+      this.revision++;
+    } else if (this.clue.phase === 'BUZZ_RESULT' && this.buzzResult !== null
+      && this.now() - this.buzzResult.at >= BUZZ_RESULT_MS) {
+      const correct = this.buzzResult.correct;
+      this.buzzResult = null;
+      if (correct) {
+        this.close();
+        const remaining = this.remainingPlaybackMs();
+        if (remaining === null || remaining > 0) {
+          this.clue.phase = 'MEDIA_FINISH';
+          this.mediaFinishAt = this.now();
+          this.mediaFinishDurationMs = remaining;
+          this.mediaFinishElapsedMs = 0;
+        } else this.beginNextRound();
+      } else {
+        this.clue.activePlayerId = null;
+        this.clue.pointsAtBuzz = null;
+        this.clue.phase = 'QUESTION_OPEN';
+        this.clue.startedAt = this.now();
+      }
+      this.revision++;
+    } else if (this.clue.phase === 'MEDIA_FINISH' && this.mediaFinishAt !== null
+      && this.mediaFinishDurationMs !== null && this.now() - this.mediaFinishAt >= this.mediaFinishDurationMs) {
+      this.finishMedia();
       this.revision++;
     } else if (this.clue.phase === 'QUESTION_OPEN' && !this.clue.paused && this.elapsed() >= this.submissionDeadline()) {
       this.close();
@@ -94,6 +134,44 @@ export class GameEngine {
       this.nextRoundAt = this.now();
       this.countdownId = randomUUID();
     }
+  }
+
+  private clearReviewResult() {
+    this.reviewResultAt = null;
+    this.reviewResultId = null;
+  }
+
+  /** Null means an audio/video endpoint could not be determined. */
+  private remainingPlaybackMs(): number | null {
+    const question = this.quiz.questions[this.clue.questionIndex];
+    const position = Math.max(0, this.clue.elapsedMs / 1000 + this.clue.mediaOffsetSeconds);
+    if (question?.type === 'image' && question.reveal?.effect === 'tiles') {
+      return Math.max(0, (question.reveal.durationSeconds - position) * 1000);
+    }
+    if (question?.type !== 'audio' && question?.type !== 'video') return 0;
+    const duration = question.media ? this.mediaDurations[question.media] : undefined;
+    const natural = duration !== undefined && Number.isFinite(duration) && duration > 0 ? duration : Infinity;
+    const end = Math.min(question.playback?.endSeconds ?? Infinity, natural);
+    return Number.isFinite(end) ? Math.max(0, (end - (question.playback?.startSeconds ?? 0) - position) * 1000) : null;
+  }
+
+  private visualFinishElapsed(): number {
+    if (this.mediaFinishAt === null) return this.mediaFinishElapsedMs;
+    const elapsed = Math.max(0, this.now() - this.mediaFinishAt);
+    return this.mediaFinishElapsedMs + (this.mediaFinishDurationMs === null ? elapsed : Math.min(elapsed, this.mediaFinishDurationMs));
+  }
+
+  private finishMedia() {
+    this.mediaFinishElapsedMs = this.visualFinishElapsed();
+    this.mediaFinishAt = null;
+    this.mediaFinishDurationMs = null;
+    this.beginNextRound();
+  }
+
+  private clearMediaFinish() {
+    this.mediaFinishAt = null;
+    this.mediaFinishDurationMs = null;
+    this.mediaFinishElapsedMs = 0;
   }
 
   private elapsed(): number {
@@ -170,6 +248,9 @@ export class GameEngine {
   private open(index: number) {
     this.nextRoundAt = null;
     this.countdownId = null;
+    this.clearReviewResult();
+    this.buzzResult = null;
+    this.clearMediaFinish();
     this.rank();
     this.history = [];
     this.clue = {
@@ -233,8 +314,12 @@ export class GameEngine {
   command(command: HostCommand, saveSettings?: (settings: Settings) => void) {
     if (this.processed.has(command.id)) return;
     this.require(command.revision === this.revision, 'Game state changed. Review the latest state and try again.');
-    this.require(this.clue.phase !== 'STARTING', 'Wait for the game-start countdown to finish.');
-    this.require(this.clue.phase !== 'NEXT_ROUND' || command.action.type === 'undo', 'Wait for the next-round transition to finish.');
+    this.require(this.clue.phase !== 'STARTING' || command.action.type === 'restartQuiz', 'Wait for the game-start countdown to finish.');
+    this.require(this.clue.phase !== 'NEXT_ROUND' || command.action.type === 'undo' || command.action.type === 'restartQuiz', 'Wait for the next-round transition to finish.');
+    this.require(this.clue.phase !== 'BUZZ_RESULT' || ['undo', 'reset', 'restartQuiz'].includes(command.action.type),
+      'Wait for the buzzer result before taking that action.');
+    this.require(this.clue.phase !== 'MEDIA_FINISH' || ['undo', 'reset', 'restartQuiz', 'restartMedia', 'skipMedia'].includes(command.action.type),
+      'Wait for media playback to finish or skip it.');
     const action = command.action;
     switch (action.type) {
       case 'setup':
@@ -294,44 +379,68 @@ export class GameEngine {
       case 'judgeReview': {
         this.require(this.clue.phase === 'REVIEW', 'There is no answer to review.');
         this.judgeTypedAnswer(this.clue.reviewQueue[this.clue.reviewIndex], action.correct);
-        if (this.clue.reviewQueue.every((entry) => entry.correct !== null)) this.beginNextRound();
+        this.reviewResultAt = this.now();
+        this.reviewResultId = randomUUID();
         break;
       }
       case 'nextReview':
         this.require(this.clue.phase === 'REVIEW', 'There is no answer to advance.');
         this.require(this.clue.reviewQueue[this.clue.reviewIndex]?.correct !== null, 'Judge the current answer before advancing.');
-        this.advanceReview(this.clue.reviewIndex + 1);
+        this.require(false, 'Wait for the review result to advance automatically.');
         break;
       case 'reset':
         this.require(this.clue.questionIndex >= 0 && this.clue.phase !== 'GAME_FINISHED', 'There is no question to reset.');
         this.open(this.clue.questionIndex);
         break;
+      case 'restartQuiz':
+        this.players.clear();
+        this.nextOrder = 0;
+        this.leaderboardIds = [];
+        this.history = [];
+        this.scoreEvents = [];
+        this.startCountdownAt = null;
+        this.nextRoundAt = null;
+        this.countdownId = null;
+        this.clearReviewResult();
+        this.buzzResult = null;
+        this.clearMediaFinish();
+        this.clue = emptyClue();
+        break;
       case 'restartMedia':
-        this.require(this.clue.phase === 'QUESTION_OPEN', 'Restart media while the question is open or paused.');
+        this.require(this.clue.phase === 'QUESTION_OPEN' || this.clue.phase === 'MEDIA_FINISH', 'Restart media while the question is open or finishing.');
         this.clue.mediaOffsetSeconds = -this.elapsed() / 1000;
         this.clue.mediaVersion++;
+        if (this.clue.phase === 'MEDIA_FINISH') {
+          this.mediaFinishElapsedMs = 0;
+          this.mediaFinishAt = this.now();
+          this.mediaFinishDurationMs = this.remainingPlaybackMs();
+        }
+        break;
+      case 'skipMedia':
+        this.require(this.clue.phase === 'MEDIA_FINISH', 'There is no finishing media to skip.');
+        this.finishMedia();
         break;
       case 'judge': {
         this.require(this.clue.phase === 'ANSWERING' && this.clue.activePlayerId && this.clue.pointsAtBuzz !== null,
           'No player is currently answering.');
         const player = this.players.get(this.clue.activePlayerId);
         this.require(player, 'Answering player not found.');
-        this.saveScore(player, action.correct ? this.clue.pointsAtBuzz : -this.clue.pointsAtBuzz,
+        const delta = action.correct ? this.clue.pointsAtBuzz : -this.clue.pointsAtBuzz;
+        this.saveScore(player, delta,
           `${player.name}: ${action.correct ? 'correct' : 'wrong'}`);
-        if (action.correct) this.close();
-        else {
+        const at = this.now();
+        if (!action.correct) {
           if (!this.clue.lockedOutIds.includes(player.id)) this.clue.lockedOutIds.push(player.id);
           if (this.settings.lockoutSeconds > 0) {
-            this.clue.lockedOutUntil[player.id] = this.now() + this.settings.lockoutSeconds * 1000;
+            this.clue.lockedOutUntil[player.id] = at + this.settings.lockoutSeconds * 1000;
           }
-          this.clue.activePlayerId = null;
-          this.clue.pointsAtBuzz = null;
-          this.clue.phase = 'QUESTION_OPEN';
-          this.clue.startedAt = this.now();
         }
+        this.buzzResult = { id: randomUUID(), playerId: player.id, correct: action.correct, delta, at };
+        this.clue.phase = 'BUZZ_RESULT';
         break;
       }
       case 'adjust': {
+        this.require(this.reviewResultAt === null, 'Wait for the review result before adjusting scores.');
         const player = this.players.get(action.playerId);
         this.require(player, 'Player not found.');
         this.saveScore(player, action.delta, `${player.name}: manual adjustment`);
@@ -342,6 +451,9 @@ export class GameEngine {
         this.require(entry, 'There is no score change to undo for this question.');
         this.nextRoundAt = null;
         this.countdownId = null;
+        this.clearReviewResult();
+        this.buzzResult = null;
+        this.clearMediaFinish();
         const submissions = this.clue.submissions;
         this.clue = { ...entry.clue, startedAt: entry.clue.startedAt === null ? null : this.now(),
           mediaVersion: this.clue.mediaVersion + 1 };
@@ -380,6 +492,9 @@ export class GameEngine {
     const question = this.quiz.questions[this.clue.questionIndex];
     const elapsed = this.elapsed();
     const now = this.now();
+    const displayElapsed = elapsed + this.visualFinishElapsed();
+    const finishRemaining = this.mediaFinishAt === null || this.mediaFinishDurationMs === null ? null
+      : Math.max(0, this.mediaFinishDurationMs - (now - this.mediaFinishAt));
     const publicQuestion = question ? {
       id: question.id, type: question.type, question: question.question, text: question.text,
       mode: question.mode, fixedPoints: question.fixedPoints, timerSeconds: question.timerSeconds,
@@ -406,15 +521,25 @@ export class GameEngine {
       activePlayerId: this.clue.activePlayerId, pointsAtBuzz: this.clue.pointsAtBuzz,
       currentPoints: question?.mode === 'typed' ? question.fixedPoints ?? 0 : this.clue.pointsAtBuzz ?? pointsAt(elapsed, this.settings),
       clueElapsedMs: elapsed, clockRunning: this.clue.startedAt !== null, paused: this.clue.paused,
-      revealProgress: Math.min(1, Math.max(0, elapsed / 1000 + this.clue.mediaOffsetSeconds) / (question?.reveal?.durationSeconds ?? 20)),
-      mediaPositionSeconds: (question?.playback?.startSeconds ?? 0) + Math.max(0, elapsed / 1000 + this.clue.mediaOffsetSeconds),
+      displayElapsedMs: displayElapsed,
+      displayClockRunning: this.clue.startedAt !== null || (this.mediaFinishAt !== null && (finishRemaining === null || finishRemaining > 0)),
+      mediaFinishRemainingMs: finishRemaining,
+      mediaFinishNeedsSkip: this.clue.phase === 'MEDIA_FINISH' && this.mediaFinishDurationMs === null,
+      revealProgress: Math.min(1, Math.max(0, displayElapsed / 1000 + this.clue.mediaOffsetSeconds) / (question?.reveal?.durationSeconds ?? 20)),
+      mediaPositionSeconds: (question?.playback?.startSeconds ?? 0) + Math.max(0, displayElapsed / 1000 + this.clue.mediaOffsetSeconds),
       mediaVersion: this.clue.mediaVersion,
       canUndo: host && this.history.length > 0,
       scoreEvents: host ? structuredClone(this.scoreEvents) : [],
       questionInstanceId: this.clue.questionInstanceId,
       submissionCount: this.clue.submissions.length,
       mySubmitted: !!playerId && this.clue.submissions.some((entry) => entry.playerId === playerId),
+      buzzResult: this.buzzResult === null ? null : {
+        id: this.buzzResult.id, playerId: this.buzzResult.playerId, correct: this.buzzResult.correct,
+        delta: this.buzzResult.delta, remainingMs: Math.max(0, BUZZ_RESULT_MS - (now - this.buzzResult.at)),
+      },
       review: this.clue.phase === 'REVIEW' ? structuredClone(this.clue.reviewQueue[this.clue.reviewIndex]) : null,
+      reviewResultId: this.reviewResultId,
+      reviewRemainingMs: this.reviewResultAt === null ? null : Math.max(0, REVIEW_RESULT_MS - (now - this.reviewResultAt)),
       reviewIndex: this.clue.reviewIndex,
       reviewCount: this.clue.reviewQueue.length,
       ...(host ? { hostSubmissions: structuredClone(this.clue.reviewQueue.length ? this.clue.reviewQueue : this.clue.submissions) } : {}),

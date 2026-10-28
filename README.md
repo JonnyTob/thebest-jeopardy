@@ -37,6 +37,10 @@ npm start
 Both modes serve the app and Socket.IO from **one port**, default `3000`, on all
 network interfaces. Set `PORT` to change it. Optionally set `HOST_PASSCODE` to a
 private value of at least eight characters; otherwise one is generated at launch.
+In development mode, the admin console has a **Restart Quiz** danger button. After
+confirmation it returns to the lobby and clears players, scores, answers and quiz
+progress; players must join again. Quiz setup remains unchanged. This control and
+its server command are unavailable in production.
 For example, in PowerShell:
 
 ```powershell
@@ -62,7 +66,9 @@ npm start
     "requireAdminPasscode": true,
     "maxPlayers": 12,
     "TimerEndOffsetSeconds": 0,
-    "countdownSound": "/media/sounds/countdown-beep.wav"
+    "countdownSound": "/media/sounds/countdown-beep.wav",
+    "reviewCorrectSound": "/media/sounds/countdown-beep.wav",
+    "reviewWrongSound": "/media/sounds/countdown-beep.wav"
   },
   "gameSetup": {
     "leaderboardCount": 8,
@@ -114,6 +120,14 @@ npm start
     **3, 2, 1**, not as a full countdown recording. This is a global server
     setting, not a per-quiz option. Restart after changing the setting; rebuild
     production after adding or replacing the WAV asset.
+  - `reviewCorrectSound` and `reviewWrongSound`: independent local WAV paths for
+    correct and wrong answers during TV review and buzzer rulings (including missing typed answers). Each defaults
+    to `/media/sounds/countdown-beep.wav` as a placeholder and can independently be
+    set to `null` to disable it. For custom sounds, place WAV files under
+    [src/public/media/](./src/public/media/) and use their `/media/...wav` paths.
+    They are global server settings; restart after changing them and rebuild
+    production after adding or replacing assets. They remain enabled by default
+    even if `countdownSound` is `null`.
 - **gameSetup**: defaults for the host's editable settings. An optional `title`
   overrides the title from the question file; omit it to use the quiz's own title.
   `maxAnswerLength` (1-500; default 100) limits typed answers for this quiz.
@@ -197,13 +211,26 @@ sharing the QR code.
   official answer until the host explicitly reveals it. Typed submissions are
   private to the host until each submission is displayed during review.
 - Server-arbitrated first buzz, a frozen points-at-buzz value, and no answer
-  countdown. Correct awards the frozen value; wrong deducts it, locks that player
-  out, and resumes the clue for everyone else.
+  countdown. Correct awards the frozen value; wrong deducts it and locks that
+  player out. The TV displays the result for two seconds with the same gold or
+  flying-money animation and sound as typed review. Clue time and media remain
+  frozen during the result. After a correct ruling, any remaining audio, video,
+  or tiled-image reveal resumes with buzzing closed and the score frozen; the
+  game advances when it finishes. Text, static images, and finished media advance
+  immediately after the result. Wrong reopens the same clue to eligible players.
+  Undo cancels the result or playback and restores the ruling.
+- The server uses clip start/end settings and probes local WAV, MP3 and MP4
+  durations at startup to time playback. If it cannot determine an endpoint, the
+  host must use **Skip finishing media** when ready. The host can also skip or
+  restart known media during this phase. Timing is server-based, not a guarantee
+  that the TV actually played the clip: browser autoplay restrictions, buffering,
+  missing files or a disconnected TV can interrupt playback. Enable TV media and
+  check the display; use **Restart media only** or skip when necessary.
 - In **Game setup**, set **Wrong-answer lockout seconds** to 1-300 to allow
   retries on the same question. The player's phone shows a countdown, and the
   host's player table shows the remaining seconds. The timer starts when the
-  host rules an answer wrong and continues during pauses, other players' answers,
-  and disconnections. Once it expires, the player can buzz when buzzers are open.
+  host rules an answer wrong and continues during the two-second result, pauses,
+  other players' answers, and disconnections. Once it expires, the player can buzz when buzzers are open.
   The default, **0**, preserves one attempt per question. Setup is locked after
   starting; resetting or advancing a question clears all lockouts.
 - Configurable starting/minimum points and decay steps. Defaults are
@@ -238,30 +265,36 @@ sharing the QR code.
   The host can see all submissions privately; other players see only the count.
   Use **Close submissions & start review** to close the clue and show the first
   answer on the TV in one step. Alternatively, use **Close submissions**, then
-  **Start answer review**. Mark each answer correct or
-  wrong, then use **Next review** for intermediate entries. Correct earns the question's fixed points;
+  **Start answer review**. Mark each answer correct or wrong. Correct earns the question's fixed points;
   wrong or missing answers earn zero. The leaderboard updates immediately.
   Review order is submission order, followed by non-submitters in join order.
   Players present when submissions close are included, even if disconnected;
-  later joiners are not included in that review. The final ruling automatically
-  advances, without another **Next review** or **Next question** click.
+  later joiners are not included in that review. Each ruling remains visible for
+  two seconds while gold bars fall for a correct answer or money flies away for a
+  wrong or missing answer. The next review starts automatically; the final ruling
+  advances to the next-round countdown or final standings. Undo cancels the hold.
+  Private fast approvals do not show this public animation or delay.
 - **Next-round transition:** moving to another question shows a synchronized
   three-second **NEXT ROUND / 3 -> 2 -> 1** countdown on TV, host and phones.
-  The next clue and its full timer/media start only when this ends. Buzzer
-  questions still advance with the host's **Next question** button; typed
-  questions advance after the final review ruling. If no question remains,
-  final standings appear immediately. Other game controls are blocked during
+  The next clue and its full timer/media start only when this ends. Correct buzzer
+  rulings advance after their result hold and any remaining clue playback; completed
+  typed reviews advance after their hold. The host can still manually advance a
+  skipped/closed buzzer question. If no question remains, final standings appear
+  after the hold and any remaining playback. Other game controls are blocked during
   transition, but **Undo last score change** cancels it and restores that ruling.
   Undo history clears when the next question opens, not when the countdown starts.
   Typed review no longer pauses for a separate official-answer reveal step.
-- **Countdown sound:** on the TV display, click **Enable countdown sound** once
+- **TV sounds:** on the TV display, click **Enable TV sounds** once
   before playing. The configured WAV plays for 3, 2 and 1 on the game-start and
   next-round countdowns; phones and the host console remain silent. The enable
   click may play a short preview. Browsers can require this gesture and may block
-  or fail to load the sound; use **Retry countdown sound** if prompted. Reconnects
+  or fail to load the sound; use **Retry TV sounds** if prompted. Reconnects
   and late enabling skip missed beeps. Timing is approximate on the network. Use
   only one active TV display to avoid duplicate audio. Media clues may still
-  require their own playback/audio unlock button.
+  require their own playback/audio unlock button. Review sounds use the same TV
+  enable button, even if countdown sound is disabled. The bundled beep placeholder
+  is pitched differently for correct and wrong results; custom WAVs play at their
+  original speed. A late or reconnected display skips stale effects.
 
 ### Optional fast approval for typed answers
 
@@ -353,10 +386,10 @@ The bundled quiz is also a playable examples catalog:
 | 10 | `last-call` | Text / buzzer | Return to buzzer mode after typed review, then finish the quiz |
 
 For typed questions, join from a real phone/browser, submit, then use
-**Close submissions & start review**, the correct/wrong ruling, and **Next review**
-between players. Starting review while open, including while paused, immediately
+**Close submissions & start review**, then the correct/wrong rulings. Each result
+advances automatically after two seconds. Starting review while open, including while paused, immediately
 closes submissions. Alternatively wait for automatic closure and choose
-**Start answer review**. The final ruling advances automatically via the
+**Start answer review**. After its result hold, the final ruling advances via the
 three-second next-round countdown (or finishes the quiz). A wrong or missing
 typed answer earns zero, unlike the negative penalty for a wrong buzzer answer.
 Clip endings do not close questions; typed submission deadlines do.

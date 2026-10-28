@@ -11,13 +11,15 @@ export function AdminPage() {
   const [passcode, setPasscode] = useState(() => sessionStorage.getItem(passcodeKey) ?? '');
   const [input, setInput] = useState('');
   const [requirePasscode, setRequirePasscode] = useState<boolean | null>(null);
+  const [development, setDevelopment] = useState(false);
   const [configError, setConfigError] = useState('');
   useEffect(() => {
     const controller = new AbortController();
     void fetch('/api/info', { signal: controller.signal }).then(async (response) => {
       if (!response.ok) throw new Error('Unable to load admin console settings.');
-      const info: { serverSettings: unknown } = await response.json();
+      const info: { serverSettings: unknown; development?: boolean } = await response.json();
       setRequirePasscode(serverSettingsSchema.parse(info.serverSettings).requireAdminPasscode);
+      setDevelopment(info.development === true);
     }).catch((cause: unknown) => {
       if (!controller.signal.aborted) {
         console.error('Unable to load admin console settings:', cause);
@@ -39,22 +41,25 @@ export function AdminPage() {
       <p>Enter the host passcode printed in the server terminal. Keep this screen off the TV.</p>
       <label>Host passcode<input type="password" autoComplete="current-password" required value={input} onChange={(event) => setInput(event.target.value)} /></label>
       <button className="primary wide">Unlock host console</button></form></main>;
-  return <SessionProvider key={passcode} role="host" passcode={passcode}><AdminConsole requirePasscode={requirePasscode} logout={() => {
+  return <SessionProvider key={passcode} role="host" passcode={passcode}><AdminConsole development={development} requirePasscode={requirePasscode} logout={() => {
     sessionStorage.removeItem(passcodeKey);
     setPasscode('');
     setInput('');
   }} /></SessionProvider>;
 }
 
-function AdminConsole({ logout, requirePasscode }: { logout: () => void; requirePasscode: boolean }) {
+export function AdminConsole({ logout, requirePasscode, development }: { logout: () => void; requirePasscode: boolean; development: boolean }) {
   const { connected, command, pending } = useSession();
   const state = useAnimatedState();
   const [tab, setTab] = useState<'live' | 'setup'>('live');
   const [confirm, setConfirm] = useState(false);
+  const [confirmRestart, setConfirmRestart] = useState(false);
   const [fastApproval, setFastApproval] = useState(false);
   const active = state?.players.find((p) => p.id === state.activePlayerId);
   const isOpen = state?.phase === 'QUESTION_OPEN';
   const answering = state?.phase === 'ANSWERING';
+  const buzzResult = state?.phase === 'BUZZ_RESULT' ? state.buzzResult : null;
+  const finishing = state?.phase === 'MEDIA_FINISH';
   const closed = state?.phase === 'QUESTION_CLOSED' || state?.phase === 'ANSWER_REVEALED';
   const typed = state?.question?.mode === 'typed';
   const readyForNext = state?.phase === 'REVIEW_COMPLETE' || (closed && (!typed || state?.phase === 'ANSWER_REVEALED'));
@@ -67,6 +72,15 @@ function AdminConsole({ logout, requirePasscode }: { logout: () => void; require
       <div className="header-actions"><Connection connected={connected} /><a href="/display" target="_blank" rel="noreferrer">Open TV &nearr;</a>
         {requirePasscode && <button className="quiet" onClick={logout}>Lock console</button>}</div></header>
     <SessionError />
+    {development && state && <section className="panel" aria-label="Development controls">
+      <span className="eyebrow">DEVELOPMENT ONLY</span>
+      {confirmRestart ? <div className="notice"><p>Restart the quiz from the lobby? All players, scores, answers and progress will be cleared. Players must join again. Quiz setup is kept.</p>
+        <button className="danger" disabled={!connected || pending} onClick={() => {
+          void command({ type: 'restartQuiz' }).then((ok) => { if (ok) { setConfirmRestart(false); setConfirm(false); } });
+        }}>Confirm restart quiz</button>
+        <button className="quiet" onClick={() => setConfirmRestart(false)}>Cancel</button></div>
+        : <button className="danger" disabled={!connected || pending} onClick={() => setConfirmRestart(true)}>Restart Quiz</button>}
+    </section>}
     {state?.serverSettings.requireAdminPasscode === false && <div className="notice" role="status">Admin passcode protection is disabled. Anyone who can reach this server can control the quiz.</div>}
     {!connected && <div className="notice" role="status">Host controls are disabled until connected. If the passcode was rejected, lock the console and try again.</div>}
     {!state ? <section className="panel"><h1>Connecting to the game...</h1></section>
@@ -90,13 +104,17 @@ function AdminConsole({ logout, requirePasscode }: { logout: () => void; require
             <h2>{nextRoundCountdownText(state.nextRoundCountdownMs)}</h2>
             <p>{connected ? 'The next question opens automatically after this three-second countdown.' : 'Connection lost. Waiting to reconnect...'}</p>
           </section>
-          : state.phase === 'GAME_FINISHED' ? <section className="panel"><h2>Final standings</h2><p>Scores are still adjustable below. Restart the server for a new session.</p></section>
+          : state.phase === 'GAME_FINISHED' ? <section className="panel"><h2>Final standings</h2><p>Scores are still adjustable below. {development ? 'Use Restart Quiz above for a new session.' : 'Restart the server for a new session.'}</p></section>
             : <div className="admin-game-grid">
               <section className="panel admin-question"><span className="eyebrow">CURRENT QUESTION / {state.question?.type.toUpperCase()} / {typed ? 'EVERYONE ANSWERS' : 'BUZZER'}</span>
                 <h2>{state.question?.question}</h2><div className="admin-media"><Media state={state} preview /></div>
                 <div className="private-answer"><span className="eyebrow">PRIVATE ANSWER / HOST ONLY</span><strong>{state.privateAnswer}</strong></div>
                 {typed ? <p>{state.question?.fixedPoints} fixed points / time remaining: {Math.max(0, Math.ceil((typedTimerMs(state) - state.clueElapsedMs) / 1000))}s</p> : <PointBar state={state} />}</section>
               <section className="panel game-actions"><span className="eyebrow">GAME ACTIONS</span>
+                {finishing && <div className="notice" role="status"><strong>Finishing the clue / score frozen</strong>
+                  <p>{!connected ? 'Connection lost. Waiting to reconnect...' : state.mediaFinishNeedsSkip
+                    ? 'Duration unknown. Skip media to continue when the clue has finished.'
+                    : `Advancing automatically when the clue finishes (${Math.ceil((state.mediaFinishRemainingMs ?? 0) / 1000)}s remaining).`}</p></div>}
                 {typed ? <>
                   <h2>{buzzerLabel(state)}</h2>
                   {state.phase === 'REVIEW' && state.review && <div className="notice">
@@ -108,16 +126,17 @@ function AdminConsole({ logout, requirePasscode }: { logout: () => void; require
                       onClick={() => { void command({ type: 'judgeReview', correct: true }); }}>Correct +{state.question?.fixedPoints}</button>
                       <button className="danger" disabled={disabled || state.review.correct !== null}
                         onClick={() => { void command({ type: 'judgeReview', correct: false }); }}>{state.review.answer === null ? 'No answer +0' : 'Wrong +0'}</button></div>
-                    <button className="primary" disabled={disabled || state.review.correct === null}
-                      onClick={() => { void command({ type: 'nextReview' }); }}>Next review &rarr;</button>
+                    {state.review.correct !== null && <p role="status">{connected ? 'Advancing automatically after the result...' : 'Connection lost. Waiting to reconnect...'}</p>}
                   </div>}
                   <button disabled={disabled || !(isOpen || state.phase === 'QUESTION_CLOSED')}
                     onClick={() => { void command({ type: 'startReview' }); }}>
                     {isOpen ? 'Close submissions & start review' : 'Start answer review'}</button>
                   {isOpen && <p className="muted">Submissions close automatically when time runs out. Starting review closes them immediately.</p>}
                 </> : <>
-                {active ? <div className="host-answering"><Avatar id={active.avatarId} /><div><h2>{active.name}</h2>
-                  <p>{state.pointsAtBuzz} frozen points / answering aloud</p></div></div> : <h2>{buzzerLabel(state)}</h2>}
+                {active && (answering || buzzResult) ? <div className="host-answering"><Avatar id={active.avatarId} /><div><h2>{active.name}</h2>
+                  {buzzResult ? <p role="status" className={buzzResult.correct ? 'positive' : 'negative'}>
+                    {buzzResult.correct ? 'Correct' : 'Wrong'} {buzzResult.delta > 0 ? '+' : ''}{buzzResult.delta} / {buzzResult.correct ? 'Advancing automatically' : 'Buzzers reopen automatically'}</p>
+                    : <p>{state.pointsAtBuzz} frozen points / answering aloud</p>}</div></div> : <h2>{buzzerLabel(state)}</h2>}
                 <div className="ruling-buttons"><button className="success" disabled={disabled || !answering}
                   onClick={() => { void command({ type: 'judge', correct: true }); }}>Correct +{state.pointsAtBuzz ?? state.currentPoints}</button>
                   <button className="danger" disabled={disabled || !answering}
@@ -125,7 +144,8 @@ function AdminConsole({ logout, requirePasscode }: { logout: () => void; require
                 </>}
                 <button disabled={disabled || !isOpen} onClick={() => { void command({ type: state.paused ? 'resume' : 'pause' }); }}>
                   {state.paused ? 'Resume clue' : 'Pause clue'} {typed ? '& submissions' : '& buzzers'}</button>
-                <button disabled={disabled || !isOpen} onClick={() => { void command({ type: 'restartMedia' }); }}>Restart media only</button>
+                <button disabled={disabled || !(isOpen || finishing)} onClick={() => { void command({ type: 'restartMedia' }); }}>Restart media only</button>
+                {finishing && <button className="primary" disabled={disabled} onClick={() => { void command({ type: 'skipMedia' }); }}>Skip finishing media</button>}
                 <button disabled={disabled || !(isOpen || answering)} onClick={() => { void command({ type: 'close' }); }}>
                   {typed ? 'Close submissions' : 'Close / skip question'}</button>
                 <button disabled={disabled || (typed ? state.phase !== 'REVIEW_COMPLETE' : state.phase !== 'QUESTION_CLOSED')} onClick={() => { void command({ type: 'reveal' }); }}>Reveal answer on TV</button>
@@ -180,7 +200,7 @@ function PlayerTable({ state }: { state: Snapshot }) {
     if (sort === 'connection') return Number(b.connected) - Number(a.connected) || a.joinedOrder - b.joinedOrder;
     return 0;
   });
-  const activeClue = state.phase === 'STARTING' || state.phase === 'NEXT_ROUND' || state.phase === 'QUESTION_OPEN' || state.phase === 'ANSWERING' || state.phase === 'REVIEW'
+  const activeClue = state.phase === 'STARTING' || state.phase === 'NEXT_ROUND' || state.phase === 'QUESTION_OPEN' || state.phase === 'ANSWERING' || state.phase === 'BUZZ_RESULT' || state.phase === 'MEDIA_FINISH' || state.phase === 'REVIEW'
     || (state.phase === 'QUESTION_CLOSED' && state.question?.mode === 'typed');
   return <section className="panel players-panel"><div className="table-heading"><h2>Players <span className="count-badge">{state.players.length}</span></h2>
     <input aria-label="Search players" placeholder="Search players" value={search} onChange={(event) => setSearch(event.target.value)} />
@@ -192,7 +212,7 @@ function PlayerTable({ state }: { state: Snapshot }) {
         <td className={player.score < 0 ? 'negative score-cell' : 'score-cell'}>{player.score.toLocaleString()}</td>
         <td><span className={player.connected ? 'positive' : 'muted'}>{player.connected ? 'Online' : 'Offline'}</span></td>
         <td><span className={`eligibility ${player.id === state.activePlayerId ? 'amber' : ''}`}>
-          {player.id === state.activePlayerId ? 'Answering' : state.lockedOutIds.includes(player.id) && activeClue
+          {player.id === state.activePlayerId && state.phase === 'ANSWERING' ? 'Answering' : state.lockedOutIds.includes(player.id) && activeClue
             ? `Locked out${state.lockoutRemainingMs[player.id] === undefined ? '' : ` (${Math.ceil(state.lockoutRemainingMs[player.id] / 1000)}s)`}` :
             state.phase === 'QUESTION_OPEN' && !state.paused && player.connected ? 'Ready' : 'Waiting'}</span></td>
         <td><ScoreAdjustment player={player} /></td><td><button className="quiet small" disabled={pending || !connected || activeClue}
@@ -207,7 +227,7 @@ function PlayerTable({ state }: { state: Snapshot }) {
 function ScoreAdjustment({ player }: { player: Player }) {
   const { command, pending, connected, state } = useSession();
   const [delta, setDelta] = useState('');
-  const disabled = pending || !connected || state?.phase === 'STARTING' || state?.phase === 'NEXT_ROUND';
+  const disabled = pending || !connected || state?.phase === 'STARTING' || state?.phase === 'NEXT_ROUND' || state?.phase === 'BUZZ_RESULT' || state?.phase === 'MEDIA_FINISH' || state?.reviewResultId != null;
   return <form className="score-adjust" onSubmit={(event) => {
     event.preventDefault();
     if (disabled) return;

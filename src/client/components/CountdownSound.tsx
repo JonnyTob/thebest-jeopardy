@@ -1,21 +1,27 @@
 import { useEffect, useRef, useState } from 'react';
-import { advanceCountdownSound, countdownDigit, initialCountdownSoundState, type CountdownPhase } from '../countdownSound';
+import { advanceCountdownSound, initialCountdownSoundState, type CountdownPhase } from '../countdownSound';
 
 type SoundStatus = 'locked' | 'unlocking' | 'enabled' | 'error';
 
-export function CountdownSound({ sound, id, phase, remaining, connected, receivedAt }: {
+export function CountdownSound({ sound, id, phase, remaining, connected, receivedAt,
+  reviewCorrectSound, reviewWrongSound, reviewResultId = null, reviewRemainingMs = null, reviewCorrect = null }: {
   sound: string | null; id: string | null; phase: CountdownPhase | null;
   remaining: number | null; connected: boolean; receivedAt: number;
+  reviewCorrectSound: string | null; reviewWrongSound: string | null;
+  reviewResultId?: string | null; reviewRemainingMs?: number | null; reviewCorrect?: boolean | null;
 }) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const dedupe = useRef(initialCountdownSoundState);
   const operation = useRef(0);
   const unlocking = useRef(false);
   const ready = useRef(false);
+  const source = useRef<string | null>(null);
+  const playingReview = useRef<string | null>(null);
+  const previousCountdown = useRef<string | null>(null);
+  const seenReviewResult = useRef<string | null>(null);
   const connection = useRef({ disconnectedAt: null as number | null });
   const [status, setStatus] = useState<SoundStatus>('locked');
   const [error, setError] = useState('');
-  const digit = countdownDigit(phase, remaining);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -25,25 +31,38 @@ export function CountdownSound({ sound, id, phase, remaining, connected, receive
     };
   }, []);
 
-  // A changed source requires another gesture; keep the same audio element.
+  // A changed configuration requires another gesture; keep the same audio element.
   useEffect(() => {
     operation.current++;
     audioRef.current?.pause();
     ready.current = false;
+    playingReview.current = null;
     unlocking.current = false;
     setStatus('locked');
     setError('');
-  }, [sound]);
+  }, [sound, reviewCorrectSound, reviewWrongSound]);
+
+  function selectSource(audio: HTMLAudioElement, path: string) {
+    if (source.current !== path) {
+      audio.src = path;
+      source.current = path;
+    }
+  }
 
   useEffect(() => {
-    // Cancel an obsolete play or unlock, but not on ordinary snapshot refreshes.
-    operation.current++;
-    audioRef.current?.pause();
-    if (unlocking.current) {
-      unlocking.current = false;
-      setStatus('locked');
+    // Let a short beep finish across digit changes and harmless clock resyncs.
+    // Starting a countdown must not interrupt an enable gesture already in flight.
+    const ended = previousCountdown.current !== null && previousCountdown.current !== id;
+    previousCountdown.current = id;
+    if (!connected || ended) {
+      operation.current++;
+      audioRef.current?.pause();
+      if (unlocking.current) {
+        unlocking.current = false;
+        setStatus('locked');
+      }
     }
-  }, [id, phase, digit, connected, sound]);
+  }, [id, connected]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -57,13 +76,16 @@ export function CountdownSound({ sound, id, phase, remaining, connected, receive
     if (!audio || !result.play) return;
     const currentOperation = ++operation.current;
     try {
+      playingReview.current = null;
+      selectSource(audio, sound!);
+      audio.playbackRate = 1;
       audio.currentTime = 0;
       void audio.play().catch((cause: unknown) => {
         if (operation.current !== currentOperation) return;
         ready.current = false;
         setStatus('error');
         setError(cause instanceof Error && cause.name === 'NotAllowedError'
-          ? 'Browser blocked countdown sound. Enable it again.'
+          ? 'Browser blocked TV sound. Enable it again.'
           : 'Countdown sound could not play. Check the WAV file and retry.');
       });
     } catch {
@@ -73,9 +95,44 @@ export function CountdownSound({ sound, id, phase, remaining, connected, receive
     }
   }, [id, phase, remaining, connected, receivedAt, sound]);
 
+  useEffect(() => {
+    if (playingReview.current && playingReview.current !== reviewResultId) {
+      operation.current++;
+      audioRef.current?.pause();
+      playingReview.current = null;
+    }
+    if (!reviewResultId || seenReviewResult.current === reviewResultId) return;
+    seenReviewResult.current = reviewResultId;
+    const audio = audioRef.current;
+    const reviewSound = reviewCorrect === true ? reviewCorrectSound : reviewWrongSound;
+    // Do not play stale effects on late join or reconnect.
+    if (!audio || !reviewSound || !ready.current || !connected || reviewCorrect === null
+      || reviewRemainingMs === null || reviewRemainingMs <= 1500
+      || connection.current.disconnectedAt !== null) return;
+    const currentOperation = ++operation.current;
+    try {
+      playingReview.current = reviewResultId;
+      selectSource(audio, reviewSound);
+      // The bundled beep is a temporary stand-in; custom sounds play at their original speed.
+      audio.playbackRate = reviewSound === '/media/sounds/countdown-beep.wav' ? (reviewCorrect ? 1.4 : 0.7) : 1;
+      audio.currentTime = 0;
+      void audio.play().catch(() => {
+        if (operation.current !== currentOperation) return;
+        ready.current = false;
+        setStatus('error');
+        setError('Review sound could not play. Check the WAV file and retry.');
+      });
+    } catch {
+      ready.current = false;
+      setStatus('error');
+      setError('Review sound could not play. Check the WAV file and retry.');
+    }
+  }, [reviewResultId, reviewRemainingMs, reviewCorrect, connected, receivedAt, reviewCorrectSound, reviewWrongSound]);
+
   function enable() {
     const audio = audioRef.current;
-    if (!audio || !sound || !connected || (phase !== null && (remaining === null || remaining <= 0))) return;
+    const previewSound = sound ?? reviewCorrectSound ?? reviewWrongSound;
+    if (!audio || !previewSound || !connected || (phase !== null && (remaining === null || remaining <= 0))) return;
     const currentOperation = ++operation.current;
     unlocking.current = true;
     ready.current = false;
@@ -83,10 +140,12 @@ export function CountdownSound({ sound, id, phase, remaining, connected, receive
     setError('');
     try {
       // Reload even after a missing file is fixed. play() must run in this gesture.
+      playingReview.current = null;
+      selectSource(audio, previewSound);
+      audio.playbackRate = 1;
       audio.load();
       void audio.play().then(() => {
         if (operation.current !== currentOperation) return;
-        audio.pause();
         unlocking.current = false;
         ready.current = true;
         setStatus('enabled');
@@ -95,31 +154,31 @@ export function CountdownSound({ sound, id, phase, remaining, connected, receive
         unlocking.current = false;
         setStatus('error');
         setError(cause instanceof Error && cause.name === 'NotAllowedError'
-          ? 'Browser blocked countdown sound. Try enabling it again.'
-          : 'Countdown sound could not load or play. Check the WAV file and retry.');
+          ? 'Browser blocked TV sound. Try enabling it again.'
+          : 'TV sound could not load or play. Check the WAV file and retry.');
       });
     } catch {
       unlocking.current = false;
       setStatus('error');
-      setError('Countdown sound could not load or play. Check the WAV file and retry.');
+      setError('TV sound could not load or play. Check the WAV file and retry.');
     }
   }
 
   return <div className="countdown-sound">
-    <audio ref={audioRef} src={sound ?? undefined} preload="auto" onError={() => {
+    <audio ref={audioRef} preload="auto" onError={() => {
       // An error event queued for an old load must not invalidate a successful retry.
-      if (!sound || !audioRef.current?.error) return;
+      if (!audioRef.current?.error) return;
       operation.current++;
       unlocking.current = false;
       ready.current = false;
       setStatus('error');
-      setError('Countdown sound could not load. Check the WAV file and retry.');
+      setError('Sound could not load. Check the WAV file and retry.');
     }} />
-    {sound ? <button type="button" className="small" onClick={enable}
+    {sound || reviewCorrectSound || reviewWrongSound ? <button type="button" className="small" onClick={enable}
       disabled={!connected || status === 'unlocking' || (phase !== null && (remaining === null || remaining <= 0))}>
-      {status === 'unlocking' ? 'Enabling countdown sound...' : status === 'enabled' ? 'Countdown sound enabled' :
-        status === 'error' ? 'Retry countdown sound' : 'Enable countdown sound'}
-    </button> : <span>Countdown sound disabled</span>}
+      {status === 'unlocking' ? 'Enabling TV sounds...' : status === 'enabled' ? 'TV sounds enabled' :
+        status === 'error' ? 'Retry TV sounds' : 'Enable TV sounds'}
+    </button> : <span>TV sounds disabled</span>}
     {error && <span className="countdown-sound-error" role="alert">{error}</span>}
   </div>;
 }

@@ -16,7 +16,7 @@ export function PlayPage() {
   const rank = state && player ? rankPlayers(state.players).findIndex((p) => p.id === playerId) + 1 : 0;
   const lockedOut = !!playerId && !!state?.lockedOutIds.includes(playerId);
   const lockoutRemaining = playerId ? state?.lockoutRemainingMs[playerId] : undefined;
-  const answering = !!playerId && state?.activePlayerId === playerId;
+  const answering = !!playerId && state?.phase === 'ANSWERING' && state.activePlayerId === playerId;
   const open = state?.phase === 'QUESTION_OPEN' && !state.paused;
   const canBuzz = connected && open && !lockedOut && !!player && !pending;
   let status = 'Waiting for the host';
@@ -24,7 +24,13 @@ export function PlayPage() {
   if (!connected) { status = 'Reconnecting'; detail = 'Your score and place are saved on the server.'; }
   else if (state?.phase === 'STARTING') { status = 'Game starting!'; detail = 'Watch the TV countdown. Answering opens when the first question appears.'; }
   else if (state?.phase === 'NEXT_ROUND') { status = `Next round: ${nextRoundCountdownText(state.nextRoundCountdownMs)}`; detail = 'Watch the TV. Buzzing opens when the next question appears.'; }
+  else if (state?.phase === 'MEDIA_FINISH') { status = 'Finishing the clue'; detail = 'Watch the TV. Buzzing is closed and scores are frozen.'; }
   else if (state?.phase === 'GAME_FINISHED') { status = 'That is a wrap!'; detail = 'Thanks for playing. See the TV for the final scores.'; }
+  else if (state?.phase === 'BUZZ_RESULT' && state.buzzResult) {
+    status = state.buzzResult.correct ? 'Correct answer!' : 'Wrong answer';
+    detail = state.buzzResult.correct ? 'Watch the TV. The next question is on its way.' : 'Buzzers reopen after the result.';
+    if (state.buzzResult.playerId === playerId) detail = `${state.buzzResult.delta > 0 ? '+' : ''}${state.buzzResult.delta} points. ${detail}`;
+  }
   else if (answering) { status = 'You buzzed first!'; detail = 'Say your answer out loud. The host will make the call.'; }
   else if (lockedOut && (state?.phase === 'QUESTION_OPEN' || state?.phase === 'ANSWERING')) {
     status = lockoutRemaining === undefined ? 'Locked out' : `Locked out: ${Math.ceil(lockoutRemaining / 1000)}s`;

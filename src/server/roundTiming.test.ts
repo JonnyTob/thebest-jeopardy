@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
-import { NEXT_ROUND_MS, START_COUNTDOWN_MS } from '../shared/game.js';
+import { NEXT_ROUND_MS, START_COUNTDOWN_MS, REVIEW_RESULT_MS } from '../shared/game.js';
 import { quizSchema, serverSettingsSchema, type HostAction } from '../shared/protocol.js';
 import { GameEngine } from './engine.js';
 
@@ -137,8 +137,11 @@ test('neither implicit nor explicit buzzer questions auto-close with timer metad
     assert.equal(game.snapshot().phase, 'ANSWERING');
     assert.equal(game.snapshot().clueElapsedMs, 1000000);
     command({ type: 'judge', correct: true });
-    assert.equal(game.snapshot().phase, 'QUESTION_CLOSED', 'buzzer judging still needs manual next');
+    assert.equal(game.snapshot().phase, 'BUZZ_RESULT');
     assert.equal(game.snapshot().nextRoundCountdownMs, null);
+    advance(2000);
+    game.tick();
+    assert.equal(game.snapshot().phase, 'NEXT_ROUND');
   }
 });
 
@@ -192,6 +195,8 @@ test('typed completion automatically transitions or finishes the last question o
         if (path === 'review') {
           command({ type: 'startReview' });
           command({ type: 'judgeReview', correct: true });
+          advance(REVIEW_RESULT_MS);
+          game.tick();
         } else if (path === 'closed') {
           command({ type: 'close' });
           command({ type: 'judgeSubmission', playerId: player!.id, correct: true });
@@ -247,14 +252,17 @@ test('next round retains the old clue through 2999ms, opens only on tick and sta
         const { game, player, command, advance } = setup({ mode: manual ? 'buzzer' : 'typed' });
         const first = game.snapshot();
         advance(500);
+        let trigger;
         if (manual) {
           game.buzz(player!.id);
-          command({ type: 'judge', correct: true });
+          trigger = command({ type: 'judge', correct: true });
         } else {
           game.submitAnswer(player!.id, first.questionInstanceId!, 'PRIVATE SUBMISSION');
           command({ type: 'startReview' });
+          trigger = command({ type: 'judgeReview', correct: true });
         }
-        const trigger = command(manual ? { type: 'next' } : { type: 'judgeReview', correct: true });
+        advance(REVIEW_RESULT_MS);
+        game.tick();
         const revision = game.revision;
         assert.equal(game.snapshot().phase, 'NEXT_ROUND');
         const countdownId = game.snapshot().countdownId;
@@ -316,10 +324,12 @@ test('next round retains the old clue through 2999ms, opens only on tick and sta
 });
 
 test('NEXT_ROUND rejects every host action except undo and rejects player play without mutating state', () => {
-  const { game, player, command } = setup();
+  const { game, player, command, advance } = setup();
   game.submitAnswer(player!.id, game.snapshot().questionInstanceId!, 'Answer');
   command({ type: 'startReview' });
   command({ type: 'judgeReview', correct: true });
+  advance(REVIEW_RESULT_MS);
+  game.tick();
   const before = game.snapshot(true);
   const actions: HostAction[] = [
     ...(['start', 'pause', 'resume', 'close', 'reveal', 'next', 'reset', 'restartMedia', 'startReview', 'nextReview'] as const)
@@ -357,6 +367,7 @@ test('undo cancels automatic transitions, restores final rulings and rearms a fr
           if (path === 'open-close') command({ type: 'close' });
           else if (path === 'open-review') command({ type: 'startReview' });
           else if (path === 'open-tick') { advance(2000); game.tick(); }
+          if (path === 'review') { advance(REVIEW_RESULT_MS); game.tick(); }
           assert.equal(game.snapshot().phase, last ? 'GAME_FINISHED' : 'NEXT_ROUND');
           const firstCountdownId = game.snapshot().countdownId;
           if (last) assert.equal(firstCountdownId, null);
@@ -382,6 +393,8 @@ test('undo cancels automatic transitions, restores final rulings and rearms a fr
           assert.equal(game.snapshot().phase, path === 'review' ? 'REVIEW' : 'QUESTION_CLOSED');
           if (path !== 'review') command({ type: 'startReview' });
           command({ type: 'judgeReview', correct });
+          advance(REVIEW_RESULT_MS);
+          game.tick();
           assert.equal(game.snapshot().phase, last ? 'GAME_FINISHED' : 'NEXT_ROUND');
           assert.equal(game.snapshot().nextRoundCountdownMs, last ? null : 3000);
           if (last) assert.equal(game.snapshot().countdownId, null);
@@ -397,12 +410,13 @@ test('undo cancels automatic transitions, restores final rulings and rearms a fr
   }
 });
 
-test('undo also cancels a manual buzzer transition and restores the answering state', () => {
+test('undo also cancels an automatic buzzer transition and restores the answering state', () => {
   const { game, player, command, advance } = setup({ mode: 'buzzer' });
   advance(6000);
   game.buzz(player!.id);
   command({ type: 'judge', correct: true });
-  command({ type: 'next' });
+  advance(2000);
+  game.tick();
   advance(2999);
   command({ type: 'undo' });
   assert.equal(game.snapshot().phase, 'ANSWERING');

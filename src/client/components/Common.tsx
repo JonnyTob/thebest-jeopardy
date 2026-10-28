@@ -54,6 +54,8 @@ export function buzzerLabel(state: Snapshot): string {
   if (state.phase === 'NEXT_ROUND') return 'NEXT ROUND';
   if (state.phase === 'GAME_FINISHED') return 'FINAL SCORES';
   if (state.phase === 'ANSWERING') return 'PLAYER ANSWERING';
+  if (state.phase === 'BUZZ_RESULT') return state.buzzResult?.correct ? 'CORRECT ANSWER' : 'WRONG ANSWER';
+  if (state.phase === 'MEDIA_FINISH') return 'FINISHING CLUE';
   if (state.phase === 'REVIEW') return 'REVIEWING ANSWERS';
   if (state.phase === 'REVIEW_COMPLETE') return 'REVIEW COMPLETE';
   if (state.paused) return 'HOST PAUSED';

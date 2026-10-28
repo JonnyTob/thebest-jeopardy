@@ -10,6 +10,165 @@ import { createApp } from './app.js';
 import { JsonQuizSettingsStorage } from './settings.js';
 import type { ClientEvents, ServerEvents, Snapshot, Result, HostAction } from '../shared/protocol.js';
 
+test('media finish broadcasts the visual clock and accepts skip only from an authenticated host', async (t) => {
+  let time = 0;
+  t.mock.method(performance, 'now', () => time);
+  const application = await createApp({ storage: { load: async () => ({ id: 1, title: 'Media socket quiz', questions: [
+    { id: 'one', type: 'audio', question: 'Current', answer: 'SECRET', media: '/media/examples/chimes.wav' },
+    { id: 'two', type: 'text', question: 'FUTURE', answer: 'SECRET TWO' },
+  ] }) }, passcode: 'test-host-passcode', serveClient: false });
+  const sockets: Socket<ServerEvents, ClientEvents>[] = [];
+  function waitFor(socket: Socket<ServerEvents, ClientEvents>, predicate: (state: Snapshot) => boolean) {
+    return new Promise<Snapshot>((resolve, reject) => {
+      const timeout = setTimeout(() => { socket.off('session:snapshot', listener); reject(new Error('Timed out waiting for media')); }, 5000);
+      function listener(state: Snapshot) {
+        if (!predicate(state)) return;
+        clearTimeout(timeout); socket.off('session:snapshot', listener); resolve(state);
+      }
+      socket.on('session:snapshot', listener);
+    });
+  }
+  try {
+    await new Promise<void>((resolve) => application.httpServer.listen(0, '127.0.0.1', resolve));
+    const address = application.httpServer.address();
+    assert.ok(address && typeof address !== 'string');
+    const connect = async (auth: Record<string, string>) => {
+      const socket: Socket<ServerEvents, ClientEvents> = io(`http://127.0.0.1:${address.port}`, { auth, autoConnect: false, reconnection: false });
+      sockets.push(socket);
+      const initial = waitFor(socket, () => true); socket.connect();
+      return { socket, state: await initial };
+    };
+    const { socket: host } = await connect({ role: 'host', passcode: 'test-host-passcode' });
+    const { socket: display } = await connect({ role: 'display' });
+    const { socket: player } = await connect({ role: 'player' });
+    const joined = await player.timeout(5000).emitWithAck('player:join', { name: 'Alice', avatarId: 'fox' });
+    assert.ok(joined.ok);
+    const send = async (socket: Socket<ServerEvents, ClientEvents>, action: HostAction) => socket.timeout(5000).emitWithAck('host:command', {
+      id: randomUUID(), revision: application.engine.revision, action,
+    });
+    assert.ok((await send(host, { type: 'start' })).ok);
+    const opened = waitFor(display, (state) => state.phase === 'QUESTION_OPEN');
+    time = 4000; await opened;
+    time = 5000;
+    assert.ok((await player.timeout(5000).emitWithAck('player:buzz')).ok);
+    assert.ok((await send(host, { type: 'judge', correct: true })).ok);
+    const finishing = waitFor(display, (state) => state.phase === 'MEDIA_FINISH');
+    time = 7000;
+    const started = await finishing;
+    assert.equal(started.mediaFinishRemainingMs, 7000);
+    assert.equal(started.clockRunning, false);
+    assert.equal(started.displayClockRunning, true);
+    const updated = waitFor(display, (state) => state.phase === 'MEDIA_FINISH' && state.mediaPositionSeconds === 3);
+    time = 9000;
+    const moving = await updated;
+    assert.equal(moving.clueElapsedMs, 1000);
+    assert.equal(moving.mediaFinishRemainingMs, 5000);
+    assert.doesNotMatch(JSON.stringify(moving), /SECRET|FUTURE/);
+    const reconnect = await connect({ role: 'player', token: joined.data.token });
+    assert.equal(reconnect.state.mediaPositionSeconds, 3);
+    assert.equal(reconnect.state.displayClockRunning, true);
+    assert.equal((await send(player, { type: 'skipMedia' })).ok, false);
+    assert.equal(application.engine.snapshot().phase, 'MEDIA_FINISH');
+    assert.ok((await send(host, { type: 'skipMedia' })).ok);
+    assert.equal(application.engine.snapshot().phase, 'NEXT_ROUND');
+    assert.equal(application.engine.snapshot().nextRoundCountdownMs, 3000);
+  } finally {
+    for (const socket of sockets) socket.disconnect();
+    await application.close();
+  }
+});
+
+test('buzzer result and automatic transitions broadcast to players and displays including reconnects', async (t) => {
+  let time = 0;
+  t.mock.method(performance, 'now', () => time);
+  const application = await createApp({
+    storage: { load: async () => ({ id: 100001, title: 'Buzzer socket quiz', questions: [
+      { id: 'one', type: 'text', question: 'First', answer: 'SECRET ONE' },
+      { id: 'two', type: 'text', question: 'Second', answer: 'SECRET TWO' },
+    ] }) },
+    passcode: 'test-host-passcode', serveClient: false, gameSetup: { lockoutSeconds: 1 },
+  });
+  const sockets: Socket<ServerEvents, ClientEvents>[] = [];
+  function waitFor(socket: Socket<ServerEvents, ClientEvents>, predicate: (state: Snapshot) => boolean) {
+    return new Promise<Snapshot>((resolve, reject) => {
+      const timeout = setTimeout(() => { socket.off('session:snapshot', listener); reject(new Error('Timed out waiting for snapshot')); }, 5000);
+      function listener(state: Snapshot) {
+        if (!predicate(state)) return;
+        clearTimeout(timeout);
+        socket.off('session:snapshot', listener);
+        resolve(state);
+      }
+      socket.on('session:snapshot', listener);
+    });
+  }
+  try {
+    await new Promise<void>((resolve) => application.httpServer.listen(0, '127.0.0.1', resolve));
+    const address = application.httpServer.address();
+    assert.ok(address && typeof address !== 'string');
+    const connect = async (auth: Record<string, string>) => {
+      const socket: Socket<ServerEvents, ClientEvents> = io(`http://127.0.0.1:${address.port}`, { auth, autoConnect: false, reconnection: false });
+      sockets.push(socket);
+      const initial = waitFor(socket, () => true);
+      socket.connect();
+      return { socket, state: await initial };
+    };
+    const { socket: host } = await connect({ role: 'host', passcode: 'test-host-passcode' });
+    const { socket: display } = await connect({ role: 'display' });
+    const { socket: player } = await connect({ role: 'player' });
+    const joined = await player.timeout(5000).emitWithAck('player:join', { name: 'Alice', avatarId: 'fox' });
+    assert.ok(joined.ok);
+    const send = async (action: HostAction) => host.timeout(5000).emitWithAck('host:command', {
+      id: randomUUID(), revision: application.engine.revision, action,
+    });
+    assert.ok((await send({ type: 'start' })).ok);
+    const open = waitFor(display, (state) => state.phase === 'QUESTION_OPEN');
+    time = 4000;
+    const first = await open;
+    assert.ok((await player.timeout(5000).emitWithAck('player:buzz')).ok);
+    const wrongBroadcast = waitFor(display, (state) => state.phase === 'BUZZ_RESULT');
+    assert.ok((await send({ type: 'judge', correct: false })).ok);
+    const wrong = await wrongBroadcast;
+    assert.equal(wrong.buzzResult?.playerId, joined.data.playerId);
+    assert.equal(wrong.buzzResult?.correct, false);
+    assert.equal(wrong.buzzResult?.delta, -500);
+    assert.equal(wrong.buzzResult?.remainingMs, 2000);
+    assert.equal(wrong.players[0].score, -500);
+    assert.equal((await player.timeout(5000).emitWithAck('player:buzz')).ok, false);
+    assert.equal((await send({ type: 'adjust', playerId: joined.data.playerId, delta: 50 })).ok, false);
+    time = 5000;
+    const reconnect = await connect({ role: 'player', token: joined.data.token });
+    assert.equal(reconnect.state.buzzResult?.id, wrong.buzzResult?.id);
+    assert.equal(reconnect.state.buzzResult?.remainingMs, 1000);
+    assert.deepEqual(reconnect.state.lockedOutIds, []);
+    const reopened = waitFor(display, (state) => state.phase === 'QUESTION_OPEN' && state.buzzResult === null);
+    time = 7000;
+    const resumed = await reopened;
+    assert.equal(resumed.questionInstanceId, first.questionInstanceId);
+    assert.equal(resumed.clueElapsedMs, 0);
+    assert.equal(resumed.clockRunning, true);
+    assert.ok((await player.timeout(5000).emitWithAck('player:buzz')).ok);
+    const correctBroadcast = waitFor(display, (state) => state.phase === 'BUZZ_RESULT');
+    assert.ok((await send({ type: 'judge', correct: true })).ok);
+    const correct = await correctBroadcast;
+    assert.notEqual(correct.buzzResult?.id, wrong.buzzResult?.id);
+    assert.equal(correct.buzzResult?.delta, 500);
+    assert.equal(correct.buzzResult?.correct, true);
+    assert.doesNotMatch(JSON.stringify(correct), /SECRET/);
+    const next = waitFor(player, (state) => state.phase === 'NEXT_ROUND');
+    time = 10000;
+    const transition = await next;
+    assert.equal(transition.buzzResult, null);
+    assert.equal(transition.nextRoundCountdownMs, 3000);
+    assert.equal(transition.questionInstanceId, first.questionInstanceId);
+    const second = waitFor(display, (state) => state.phase === 'QUESTION_OPEN' && state.questionIndex === 1);
+    time = 13000;
+    assert.equal((await second).clueElapsedMs, 0);
+  } finally {
+    for (const socket of sockets) socket.disconnect();
+    await application.close();
+  }
+});
+
 test('server interval broadcasts typed auto-close, next-round countdowns and fresh clues without leaking future content', async (t) => {
   let time = 0;
   t.mock.method(performance, 'now', () => time);
@@ -147,7 +306,22 @@ test('server interval broadcasts typed auto-close, next-round countdowns and fre
     await lastClosed;
     await send({ type: 'startReview' });
     const finished = waitFor(display, (state) => state.phase === 'GAME_FINISHED');
+    const resultBroadcast = waitFor(display, (state) => state.reviewResultId !== null);
     await send({ type: 'judgeReview', correct: false });
+    const result = application.engine.snapshot();
+    assert.equal(result.phase, 'REVIEW');
+    assert.ok(result.reviewResultId);
+    assert.equal(result.reviewRemainingMs, 2000);
+    const displayResult = await resultBroadcast;
+    assert.equal(displayResult.reviewResultId, result.reviewResultId);
+    assert.equal(displayResult.reviewRemainingMs, 2000);
+    assert.equal(displayResult.review?.correct, false);
+    time = 17999;
+    const reviewReconnect = await connect({ role: 'player', token: joined.data.token });
+    assert.equal(reviewReconnect.state.reviewResultId, result.reviewResultId);
+    assert.equal(reviewReconnect.state.reviewRemainingMs, 1001);
+    assert.equal(reviewReconnect.state.review?.correct, false);
+    time = 19000;
     const final = await finished;
     assert.equal(final.nextRoundCountdownMs, null);
     assert.equal(final.players[0].score, 250);
@@ -184,7 +358,8 @@ test('server nickname and player limits are advertised and enforced, including r
     };
     const info = await (await fetch(`${url}/api/info`)).json();
     assert.deepEqual(info.serverSettings, { maxPlayerNameLength: 32, maxPlayers: 1, requireAdminPasscode: true,
-      TimerEndOffsetSeconds: 0, countdownSound: '/media/sounds/countdown-beep.wav' });
+      TimerEndOffsetSeconds: 0, countdownSound: '/media/sounds/countdown-beep.wav',
+      reviewCorrectSound: '/media/sounds/countdown-beep.wav', reviewWrongSound: '/media/sounds/countdown-beep.wav' });
     assert.deepEqual(application.engine.snapshot().serverSettings, info.serverSettings);
     const host = await connect({ role: 'host', passcode: 'test-host-passcode' });
     const alice = await connect({ role: 'player' });

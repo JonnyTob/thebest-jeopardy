@@ -5,7 +5,7 @@ import { io, type Socket } from 'socket.io-client';
 import { GameEngine } from './engine.js';
 import { createApp } from './app.js';
 import { quizSchema, settingsSchema, type ClientEvents, type HostAction, type ServerEvents, type Snapshot } from '../shared/protocol.js';
-import { START_COUNTDOWN_MS, NEXT_ROUND_MS } from '../shared/game.js';
+import { START_COUNTDOWN_MS, NEXT_ROUND_MS, REVIEW_RESULT_MS } from '../shared/game.js';
 
 const quiz = quizSchema.parse({
   id: 100001, title: 'Mixed quiz', questions: [
@@ -67,7 +67,8 @@ test('one-click review atomically closes open typed submissions before or after 
     command({ type: 'judgeReview', correct: true });
     game.command(reviewCommand);
     assert.equal(game.snapshot().review?.correct, true, 'Duplicate start must not reset review');
-    command({ type: 'nextReview' });
+    advance(REVIEW_RESULT_MS);
+    game.tick();
     assert.equal(game.snapshot().review?.playerId, alice.id);
     assert.throws(() => command({ type: 'startReview' }), /open or closed typed-answer/);
   }
@@ -126,14 +127,18 @@ test('typed answers remain private and final, obey the host close and are review
   assert.equal(game.snapshot().leaderboardIds[0], bob.id);
   assert.equal(game.snapshot().review?.correct, true);
   assert.throws(() => command({ type: 'judgeReview', correct: true }), /already/);
-  command({ type: 'nextReview' });
+  advance(REVIEW_RESULT_MS);
+  game.tick();
   assert.equal(game.snapshot().review?.playerId, alice.id);
   command({ type: 'judgeReview', correct: false });
   assert.equal(alice.score, 0);
-  command({ type: 'nextReview' });
+  advance(REVIEW_RESULT_MS);
+  game.tick();
   assert.deepEqual(game.snapshot().review, { playerId: carol.id, answer: null, correct: null });
   assert.throws(() => command({ type: 'judgeReview', correct: true }), /missing answer/);
   command({ type: 'judgeReview', correct: false });
+  advance(REVIEW_RESULT_MS);
+  game.tick();
   assert.equal(game.snapshot().phase, 'NEXT_ROUND');
   assert.equal(game.snapshot().revealedAnswer, null);
   assert.equal(JSON.stringify(game.snapshot()).includes('SECRET'), false);
@@ -144,7 +149,7 @@ test('typed answers remain private and final, obey the host close and are review
 });
 
 test('fast approval scores privately and TV review skips judged first, middle and last entries', () => {
-  const { game, alice, bob, carol, command } = setup();
+  const { game, alice, bob, carol, command, advance } = setup();
   const dave = game.join({ name: 'Dave', avatarId: 'bear' });
   const eve = game.join({ name: 'Eve', avatarId: 'panda' });
   command({ type: 'start' });
@@ -179,9 +184,12 @@ test('fast approval scores privately and TV review skips judged first, middle an
   assert.equal(game.snapshot().reviewCount, 5);
   assert.throws(() => command({ type: 'judgeSubmission', playerId: dave.id, correct: true }), /before starting review/);
   command({ type: 'judgeReview', correct: false });
-  command({ type: 'nextReview' });
+  advance(REVIEW_RESULT_MS);
+  game.tick();
   assert.equal(game.snapshot().review?.playerId, dave.id);
   command({ type: 'judgeReview', correct: true });
+  advance(REVIEW_RESULT_MS);
+  game.tick();
   assert.equal(game.snapshot().phase, 'NEXT_ROUND');
   assert.equal(game.snapshot().review, null);
 });

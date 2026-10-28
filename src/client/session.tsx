@@ -6,7 +6,7 @@ import { clearPlayerToken, readPlayerToken, savePlayerToken } from './playerToke
 import { branding } from './branding';
 
 type GameSocket = Socket<ServerEvents, ClientEvents>;
-interface Session {
+export interface Session {
   state: Snapshot | null;
   receivedAt: number;
   connected: boolean;
@@ -19,7 +19,7 @@ interface Session {
   buzz: () => Promise<boolean>;
   submitAnswer: (answer: string, questionInstanceId: string) => Promise<boolean>;
 }
-const Context = createContext<Session | null>(null);
+export const SessionContext = createContext<Session | null>(null);
 
 function commandId(): string {
   // randomUUID is unavailable on ordinary HTTP LAN origins.
@@ -121,36 +121,46 @@ export function SessionProvider({ role, passcode, children }: {
     return result.ok;
   });
 
-  return <Context.Provider value={{ state, receivedAt, connected, playerId, error, pending, clearError: () => setError(null), command, join, buzz, submitAnswer }}>
+  return <SessionContext.Provider value={{ state, receivedAt, connected, playerId, error, pending, clearError: () => setError(null), command, join, buzz, submitAnswer }}>
     {children}
-  </Context.Provider>;
+  </SessionContext.Provider>;
 }
 
 export function useSession(): Session {
-  const context = useContext(Context);
+  const context = useContext(SessionContext);
   if (!context) throw new Error('Game views require a SessionProvider.');
   return context;
 }
 
 export function useAnimatedState(): Snapshot | null {
   const { state, receivedAt, connected } = useSession();
+  return useAnimatedSnapshot(state, receivedAt, connected);
+}
+
+export function useAnimatedSnapshot(state: Snapshot | null, receivedAt: number, connected: boolean): Snapshot | null {
   const [now, setNow] = useState(() => performance.now());
   useEffect(() => {
-    if ((!state?.clockRunning && state?.phase !== 'STARTING' && state?.phase !== 'NEXT_ROUND') || !connected) return;
+    if ((!state?.clockRunning && !state?.displayClockRunning && state?.phase !== 'STARTING' && state?.phase !== 'NEXT_ROUND') || !connected) return;
     const timer = setInterval(() => setNow(performance.now()), 50);
     return () => clearInterval(timer);
-  }, [state?.clockRunning, state?.phase, connected]);
+  }, [state?.clockRunning, state?.displayClockRunning, state?.phase, connected]);
   if (!state) return null;
   const extra = connected ? Math.max(0, now - receivedAt) : 0;
   const clueExtra = state.clockRunning ? extra : 0;
+  const displayExtra = state.displayClockRunning
+    ? Math.min(extra, state.phase === 'MEDIA_FINISH' ? state.mediaFinishRemainingMs ?? Infinity : Infinity) : 0;
+  const finishRemaining = state.mediaFinishRemainingMs === null ? null : Math.max(0, state.mediaFinishRemainingMs - displayExtra);
   const elapsed = state.clueElapsedMs + clueExtra;
   return { ...state, clockRunning: state.clockRunning && connected,
+    displayClockRunning: state.displayClockRunning && connected && (state.phase !== 'MEDIA_FINISH' || finishRemaining === null || finishRemaining > 0),
+    displayElapsedMs: state.displayElapsedMs + displayExtra,
+    mediaFinishRemainingMs: finishRemaining,
     startCountdownMs: state.startCountdownMs === null ? null
       : Math.max(0, state.startCountdownMs - (state.phase === 'STARTING' ? extra : 0)),
     nextRoundCountdownMs: state.nextRoundCountdownMs === null ? null
       : Math.max(0, state.nextRoundCountdownMs - (state.phase === 'NEXT_ROUND' ? extra : 0)),
     clueElapsedMs: elapsed, currentPoints: state.question?.mode === 'typed'
       ? state.question.fixedPoints ?? state.currentPoints : state.pointsAtBuzz ?? pointsAt(elapsed, state.settings),
-    revealProgress: Math.min(1, state.revealProgress + clueExtra / ((state.question?.reveal?.durationSeconds ?? 20) * 1000)),
-    mediaPositionSeconds: state.mediaPositionSeconds + clueExtra / 1000 };
+    revealProgress: Math.min(1, state.revealProgress + displayExtra / ((state.question?.reveal?.durationSeconds ?? 20) * 1000)),
+    mediaPositionSeconds: state.mediaPositionSeconds + displayExtra / 1000 };
 }

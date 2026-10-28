@@ -10,7 +10,9 @@
     "requireAdminPasscode": false,
     "maxPlayers": 12,
     "TimerEndOffsetSeconds": 0,
-    "countdownSound": "/media/sounds/countdown-beep.wav"
+    "countdownSound": "/media/sounds/countdown-beep.wav",
+    "reviewCorrectSound": "/media/sounds/countdown-beep.wav",
+    "reviewWrongSound": "/media/sounds/countdown-beep.wav"
   },
   "gameSetup": {
     "leaderboardCount": 8,
@@ -19,6 +21,6 @@
     "dropPoints": 20,
     "dropEverySeconds": 1,
     "lockoutSeconds": 2,
-    "maxAnswerLength": 100
+    "maxAnswerLength": 20
   }
 }

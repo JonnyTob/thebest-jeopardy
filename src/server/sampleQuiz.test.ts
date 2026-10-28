@@ -6,7 +6,8 @@ import { test } from 'node:test';
 import type { HostAction } from '../shared/protocol.js';
 import { GameEngine } from './engine.js';
 import { JsonQuizStorage } from './storage.js';
-import { START_COUNTDOWN_MS, NEXT_ROUND_MS } from '../shared/game.js';
+import { START_COUNTDOWN_MS, NEXT_ROUND_MS, REVIEW_RESULT_MS } from '../shared/game.js';
+import { probeMediaDurations } from './mediaDurations.js';
 
 const storage = new JsonQuizStorage(path.resolve('src/data/questions.json'));
 
@@ -49,7 +50,8 @@ test('sample quiz demonstrates both modes for every media type with real local a
 test('sample quiz plays through mixed buzzer and typed questions to completion', async () => {
   const quiz = await storage.load();
   let time = 0;
-  const game = new GameEngine(quiz, () => time);
+  const durations = await probeMediaDurations(quiz, path.resolve('src/public/media'));
+  const game = new GameEngine(quiz, () => time, undefined, durations);
   const player = game.join({ name: 'Sample player', avatarId: 'fox' });
   const command = (action: HostAction) => game.command({ id: randomUUID(), revision: game.revision, action });
   let expectedScore = 0;
@@ -70,14 +72,21 @@ test('sample quiz plays through mixed buzzer and typed questions to completion',
       command({ type: 'close' });
       command({ type: 'startReview' });
       command({ type: 'judgeReview', correct: true });
+      time += REVIEW_RESULT_MS;
+      game.tick();
       expectedScore += question.fixedPoints!;
     } else {
       game.buzz(player.id);
       expectedScore += game.snapshot().pointsAtBuzz!;
       command({ type: 'judge', correct: true });
-      command({ type: 'reveal' });
-      assert.equal(game.snapshot().revealedAnswer, question.answer);
-      command({ type: 'next' });
+      time += 2000;
+      game.tick();
+      if (game.snapshot().phase === 'MEDIA_FINISH') {
+        const remaining = game.snapshot().mediaFinishRemainingMs;
+        assert.notEqual(remaining, null, 'Sample media must have a known endpoint');
+        time += remaining!;
+        game.tick();
+      }
     }
     assert.equal(player.score, expectedScore);
     assert.equal(game.snapshot().revealedAnswer, null);

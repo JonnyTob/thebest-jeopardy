@@ -62,7 +62,7 @@ function Playback({ state, question }: { state: Snapshot; question: PublicQuesti
     const media = mediaRef.current;
     if (!media) return;
     void media.play().then(() => {
-      if (!currentState.current.clockRunning) media.pause();
+      if (!currentState.current.displayClockRunning) media.pause();
       setNeedsUnlock(false);
       setError('');
     }).catch((cause: unknown) => {
@@ -78,14 +78,18 @@ function Playback({ state, question }: { state: Snapshot; question: PublicQuesti
     if (!media || !ready) return;
     const end = Math.min(question.playback?.endSeconds ?? Infinity, Number.isFinite(media.duration) ? media.duration : Infinity);
     const target = Math.min(state.mediaPositionSeconds, end);
-    if (state.mediaVersion !== lastMediaVersion.current || Math.abs(media.currentTime - target) > 0.8) media.currentTime = target;
+    const finishEnd = state.phase === 'MEDIA_FINISH' && state.mediaFinishRemainingMs !== null
+      ? state.mediaPositionSeconds + state.mediaFinishRemainingMs / 1000 : Infinity;
+    if (state.mediaVersion !== lastMediaVersion.current || Math.abs(media.currentTime - target) > 0.8
+      || (!state.displayClockRunning && Math.abs(media.currentTime - target) > 0.01)) media.currentTime = target;
     lastMediaVersion.current = state.mediaVersion;
-    const atEnd = target >= end;
+    if (media.currentTime > Math.min(end, finishEnd)) media.currentTime = Math.min(end, finishEnd);
+    const atEnd = target >= end || media.currentTime >= Math.min(end, finishEnd);
     setEnded(atEnd);
-    if (state.clockRunning && !atEnd) {
+    if (state.displayClockRunning && !atEnd) {
       if (media.paused && !needsUnlock) play();
     } else media.pause();
-  }, [state.mediaPositionSeconds, state.clockRunning, state.mediaVersion, ready, question.playback?.endSeconds, needsUnlock]);
+  }, [state.mediaPositionSeconds, state.displayClockRunning, state.mediaVersion, state.phase, state.mediaFinishRemainingMs, ready, question.playback?.endSeconds, needsUnlock]);
 
   useEffect(() => {
     if (question.type !== 'audio') return;
@@ -125,8 +129,13 @@ function Playback({ state, question }: { state: Snapshot; question: PublicQuesti
     onEnded: () => setEnded(true),
     onPlay: enableVisualizer,
     onTimeUpdate: () => {
-      if (question.playback?.endSeconds && mediaRef.current && mediaRef.current.currentTime >= question.playback.endSeconds) {
-        mediaRef.current.pause();
+      const media = mediaRef.current;
+      const finishEnd = state.phase === 'MEDIA_FINISH' && state.mediaFinishRemainingMs !== null
+        ? state.mediaPositionSeconds + state.mediaFinishRemainingMs / 1000 : Infinity;
+      const end = Math.min(question.playback?.endSeconds ?? Infinity, finishEnd);
+      if (media && media.currentTime >= end) {
+        media.pause();
+        if (media.currentTime > end) media.currentTime = end;
         setEnded(true);
       }
     },
@@ -137,14 +146,16 @@ function Playback({ state, question }: { state: Snapshot; question: PublicQuesti
       : <><audio {...mediaProps} ref={(element) => { mediaRef.current = element; }} />
         <div className="audio-clue"><span className="eyebrow">LISTEN CLOSELY</span>
           <canvas ref={canvasRef} width={600} height={220} aria-label="Audio frequency spectrum" />
-          <span>{ended ? 'Clip ended / buzzing stays open' : state.clockRunning ? 'Listen. Recognize. Buzz.' : 'Playback paused'}</span>
+          <span>{state.phase === 'MEDIA_FINISH' ? (ended ? 'Clip ended / buzzing closed' : 'Finishing the clue / buzzing closed')
+            : ended ? (state.phase === 'QUESTION_OPEN' ? 'Clip ended / buzzing stays open' : 'Clip ended')
+              : state.displayClockRunning ? 'Listen. Recognize. Buzz.' : 'Playback paused'}</span>
         </div></>}
     {(needsUnlock || (question.type === 'audio' && question.visualizer?.enabled !== false && !visualizerReady)) && <button className="media-unlock primary" onClick={() => {
       enableVisualizer();
-      if (state.clockRunning && !ended) play();
+      if (state.displayClockRunning && !ended) play();
       else setNeedsUnlock(false);
     }}>Enable TV {question.type === 'audio' ? 'audio & visualizer' : 'playback'}</button>}
-    {ended && question.type === 'video' && <span className="media-caption">Clip ended / buzzing stays open</span>}
+    {ended && question.type === 'video' && <span className="media-caption">{state.phase === 'QUESTION_OPEN' ? 'Clip ended / buzzing stays open' : 'Clip ended'}</span>}
     {error && <div className="media-error" role="alert">{error}</div>}
   </div>;
 }

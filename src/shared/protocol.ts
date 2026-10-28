@@ -78,9 +78,21 @@ export const serverSettingsSchema = z.object({
   TimerEndOffsetSeconds: z.number().int().min(0).max(300).default(0),
   countdownSound: localMedia.refine((value) => /\.wav$/i.test(value), 'Countdown sound must be a WAV file')
     .nullable().default('/media/sounds/countdown-beep.wav'),
+  reviewCorrectSound: localMedia.refine((value) => /\.wav$/i.test(value), 'Review correct sound must be a WAV file')
+    .nullable().default('/media/sounds/countdown-beep.wav'),
+  reviewWrongSound: localMedia.refine((value) => /\.wav$/i.test(value), 'Review wrong sound must be a WAV file')
+    .nullable().default('/media/sounds/countdown-beep.wav'),
 }).strict();
 export type ServerSettings = z.infer<typeof serverSettingsSchema>;
-export type Phase = 'LOBBY' | 'STARTING' | 'NEXT_ROUND' | 'QUESTION_OPEN' | 'ANSWERING' | 'QUESTION_CLOSED' | 'REVIEW' | 'REVIEW_COMPLETE' | 'ANSWER_REVEALED' | 'GAME_FINISHED';
+export type Phase = 'LOBBY' | 'STARTING' | 'NEXT_ROUND' | 'QUESTION_OPEN' | 'ANSWERING' | 'BUZZ_RESULT' | 'MEDIA_FINISH' | 'QUESTION_CLOSED' | 'REVIEW' | 'REVIEW_COMPLETE' | 'ANSWER_REVEALED' | 'GAME_FINISHED';
+export interface BuzzResult {
+  id: string;
+  playerId: string;
+  correct: boolean;
+  delta: number;
+  /** Server-calculated time until automatic transition; zero until the next tick. */
+  remainingMs: number;
+}
 export interface TypedReview {
   playerId: string;
   answer: string | null;
@@ -125,6 +137,12 @@ export interface Snapshot {
   clueElapsedMs: number;
   clockRunning: boolean;
   paused: boolean;
+  /** Visual clock includes post-ruling playback; the scoring clock remains frozen. */
+  displayElapsedMs: number;
+  displayClockRunning: boolean;
+  /** Null outside MEDIA_FINISH or when its duration is unknown. */
+  mediaFinishRemainingMs: number | null;
+  mediaFinishNeedsSkip: boolean;
   revealProgress: number;
   mediaPositionSeconds: number;
   mediaVersion: number;
@@ -133,7 +151,13 @@ export interface Snapshot {
   questionInstanceId: string | null;
   submissionCount: number;
   mySubmitted: boolean;
+  /** Public buzzer ruling, present only during BUZZ_RESULT. */
+  buzzResult: BuzzResult | null;
   review: TypedReview | null;
+  /** Unique to each public judgment; null outside its result hold. */
+  reviewResultId: string | null;
+  /** Server-calculated time until automatic advancement; zero until the next tick. */
+  reviewRemainingMs: number | null;
   reviewIndex: number;
   reviewCount: number;
   hostSubmissions?: TypedReview[];
@@ -151,7 +175,7 @@ export const hostCommandSchema = z.object({
   id: z.string().uuid(),
   revision: z.number().int().nonnegative(),
   action: z.discriminatedUnion('type', [
-    z.object({ type: z.enum(['start', 'pause', 'resume', 'close', 'reveal', 'next', 'reset', 'restartMedia', 'undo', 'startReview', 'nextReview']) }),
+    z.object({ type: z.enum(['start', 'pause', 'resume', 'close', 'reveal', 'next', 'reset', 'restartQuiz', 'restartMedia', 'skipMedia', 'undo', 'startReview', 'nextReview']) }),
     z.object({ type: z.literal('judge'), correct: z.boolean() }),
     z.object({ type: z.literal('judgeReview'), correct: z.boolean() }),
     z.object({ type: z.literal('judgeSubmission'), playerId: z.string().uuid(), correct: z.boolean() }),

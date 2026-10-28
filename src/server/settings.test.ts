@@ -14,6 +14,74 @@ const defaults = {
 };
 const branding = { name: 'Kaboot', logoText: 'K', tagline: 'Buzz in. Get booted.' };
 
+test('review sounds validate local WAV paths independently and are global-server-only', () => {
+  const defaultSound = '/media/sounds/countdown-beep.wav';
+  const directory = mkdtempSync(path.join(tmpdir(), 'quiz-review-sound-settings-'));
+  const file = path.join(directory, 'settings.json');
+  const storage = new JsonQuizSettingsStorage(path.join(directory, 'quizzes'));
+  const config = { branding, server: { port: 3000 }, gameSetup: defaults };
+  const settings = { ...defaults, title: 'Quiz' };
+  try {
+    storage.save(100001, settings);
+    for (const key of ['reviewCorrectSound', 'reviewWrongSound'] as const) {
+      const other = key === 'reviewCorrectSound' ? 'reviewWrongSound' : 'reviewCorrectSound';
+      assert.equal(serverSettingsSchema.parse({})[key], defaultSound);
+      for (const value of [null, defaultSound, '/media/custom/my-sound_2.WAV', '/media/beep.wav']) {
+        const input = { [key]: value, countdownSound: null };
+        const parsed = serverSettingsSchema.parse(input);
+        assert.equal(parsed[key], value);
+        assert.equal(parsed[other], defaultSound);
+        assert.equal(parsed.countdownSound, null);
+        writeFileSync(file, JSON.stringify({ ...config, server: { ...config.server, ...input } }));
+        const loaded = loadGlobalSettings(file, {}).server;
+        assert.equal(loaded[key], value);
+        assert.equal(loaded[other], defaultSound);
+        assert.equal(loaded.countdownSound, null);
+      }
+      for (const value of ['', '/media/sounds/beep.mp3', '/media/sounds/beep.wav.mp3',
+        '/media/sounds/beep.wav?x=1', '/media/sounds/beep.wav#fragment', '/media/../secret.wav',
+        '/media/sounds/../../secret.wav', '/media/%2e%2e/secret.wav', '/media/sounds\\beep.wav',
+        '/private/beep.wav', 'media/beep.wav', 'https://example.com/media/beep.wav',
+        '//example.com/media/beep.wav', '/media/white space.wav', 123, false, {}, []]) {
+        assert.equal(serverSettingsSchema.safeParse({ [key]: value }).success, false, `${key}: ${String(value)}`);
+        writeFileSync(file, JSON.stringify({ ...config, server: { ...config.server, [key]: value } }));
+        assert.throws(() => loadGlobalSettings(file, {}), /Unable to load global settings/);
+      }
+      for (const invalid of [
+        { ...config, [key]: defaultSound },
+        { ...config, gameSetup: { ...defaults, [key]: defaultSound } },
+        { ...config, server: { ...config.server, [key.toLowerCase()]: defaultSound } },
+      ]) {
+        writeFileSync(file, JSON.stringify(invalid));
+        assert.throws(() => loadGlobalSettings(file, {}), /Unable to load global settings/);
+      }
+      for (const invalid of [
+        { gameSetup: { [key]: defaultSound } },
+        { gameSetup: {}, server: { [key]: defaultSound } },
+        { gameSetup: {}, [key]: defaultSound },
+      ]) {
+        writeFileSync(path.join(directory, 'quizzes', '100001.json'), JSON.stringify(invalid));
+        assert.throws(() => storage.load(100001), /Invalid quiz settings/);
+      }
+      const command = hostCommandSchema.parse({ id: randomUUID(), revision: 0,
+        action: { type: 'setup', settings: { ...settings, [key]: null } } });
+      if (command.action.type !== 'setup') assert.fail('Expected setup command');
+      assert.deepEqual(command.action.settings, settings);
+      storage.save(100001, { ...settings, [key]: defaultSound });
+      assert.deepEqual(storage.load(100001), settings);
+      assert.deepEqual(JSON.parse(readFileSync(path.join(directory, 'quizzes', '100001.json'), 'utf8')), { gameSetup: settings });
+    }
+    writeFileSync(file, JSON.stringify({ ...config, server: { ...config.server,
+      countdownSound: '/media/countdown.wav', reviewCorrectSound: null, reviewWrongSound: '/media/wrong.wav' } }));
+    const loaded = loadGlobalSettings(file, {}).server;
+    assert.equal(loaded.countdownSound, '/media/countdown.wav');
+    assert.equal(loaded.reviewCorrectSound, null);
+    assert.equal(loaded.reviewWrongSound, '/media/wrong.wav');
+  } finally {
+    rmSync(directory, { recursive: true });
+  }
+});
+
 test('countdownSound defaults to a local WAV, accepts null and safe custom WAV paths, and is server-only', () => {
   const defaultSound = '/media/sounds/countdown-beep.wav';
   assert.equal(serverSettingsSchema.parse({}).countdownSound, defaultSound);
@@ -116,14 +184,16 @@ test('global sections load defaults, respect environment overrides and reject in
   const file = path.join(directory, 'settings.json');
   try {
     const serverDefaults = { maxPlayerNameLength: 24, requireAdminPasscode: true, maxPlayers: 12,
-      TimerEndOffsetSeconds: 0, countdownSound: '/media/sounds/countdown-beep.wav' };
+      TimerEndOffsetSeconds: 0, countdownSound: '/media/sounds/countdown-beep.wav',
+      reviewCorrectSound: '/media/sounds/countdown-beep.wav', reviewWrongSound: '/media/sounds/countdown-beep.wav' };
     const config = { branding, server: { port: 3000, joinOrigin: 'http://example.com:3000' }, gameSetup: defaults };
     writeFileSync(file, JSON.stringify(config));
     assert.deepEqual(loadGlobalSettings(file, {}), { ...config, server: { ...config.server, ...serverDefaults } });
     assert.deepEqual(loadGlobalSettings(file, { PORT: '4000', JOIN_ORIGIN: 'http://example.com:4000' }).server,
       { port: 4000, joinOrigin: 'http://example.com:4000', ...serverDefaults });
     const customServer = { ...config.server, maxPlayerNameLength: 32, requireAdminPasscode: false, maxPlayers: 20,
-      TimerEndOffsetSeconds: 15, countdownSound: '/media/custom/countdown.wav' };
+      TimerEndOffsetSeconds: 15, countdownSound: '/media/custom/countdown.wav',
+      reviewCorrectSound: '/media/custom/correct.wav', reviewWrongSound: '/media/custom/wrong.wav' };
     writeFileSync(file, JSON.stringify({ ...config, server: customServer }));
     assert.deepEqual(loadGlobalSettings(file, {}).server, customServer);
     writeFileSync(file, JSON.stringify(config));
