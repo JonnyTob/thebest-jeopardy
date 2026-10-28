@@ -149,6 +149,7 @@ export const hostCommandSchema = z.object({
     z.object({ type: z.enum(['start', 'pause', 'resume', 'close', 'reveal', 'next', 'reset', 'restartMedia', 'undo', 'startReview', 'nextReview']) }),
     z.object({ type: z.literal('judge'), correct: z.boolean() }),
     z.object({ type: z.literal('judgeReview'), correct: z.boolean() }),
+    z.object({ type: z.literal('judgeSubmission'), playerId: z.string().uuid(), correct: z.boolean() }),
     z.object({ type: z.literal('adjust'), playerId: z.string(), delta: z.number().int().min(-100000).max(100000).refine((v) => v !== 0) }),
     z.object({ type: z.literal('removePlayer'), playerId: z.string() }),
     z.object({ type: z.literal('setup'), settings: settingsSchema }),

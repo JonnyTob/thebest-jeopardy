@@ -141,6 +141,154 @@ test('typed answers remain private and final, obey the host close and are review
   assert.equal(game.snapshot().phase, 'ANSWERING');
 });
 
+test('fast approval scores privately and TV review skips judged first, middle and last entries', () => {
+  const { game, alice, bob, carol, command } = setup();
+  const dave = game.join({ name: 'Dave', avatarId: 'bear' });
+  const eve = game.join({ name: 'Eve', avatarId: 'panda' });
+  command({ type: 'start' });
+  const instance = game.snapshot().questionInstanceId!;
+  for (const player of [alice, bob, carol, dave, eve]) game.submitAnswer(player.id, instance, `Private ${player.name}`);
+  command({ type: 'close' });
+  command({ type: 'judgeSubmission', playerId: alice.id, correct: true });
+  command({ type: 'judgeSubmission', playerId: carol.id, correct: false });
+  game.setConnected(eve.id, false);
+  const lastRuling = { id: randomUUID(), revision: game.revision,
+    action: { type: 'judgeSubmission', playerId: eve.id, correct: true } } as const;
+  game.command(lastRuling);
+  game.command(lastRuling);
+  assert.equal(alice.score, 250);
+  assert.equal(carol.score, 0);
+  assert.equal(eve.score, 250, 'a duplicate command must not award points twice');
+  assert.equal(game.snapshot(true).scoreEvents.length, 3);
+  assert.equal(game.snapshot().phase, 'QUESTION_CLOSED');
+  assert.equal(game.snapshot().review, null);
+  assert.equal(game.snapshot().leaderboardIds[0], alice.id);
+  for (const snapshot of [game.snapshot(), game.snapshot(false, alice.id), game.snapshot(false, eve.id)]) {
+    assert.equal(JSON.stringify(snapshot).includes('Private'), false);
+    assert.equal(snapshot.hostSubmissions, undefined);
+  }
+  assert.deepEqual(game.snapshot(true).hostSubmissions?.map((entry) => entry.correct), [true, null, false, null, true]);
+  assert.throws(() => command({ type: 'judgeSubmission', playerId: alice.id, correct: false }), /already/);
+  assert.throws(() => game.command({ id: randomUUID(), revision: game.revision - 1,
+    action: { type: 'judgeSubmission', playerId: bob.id, correct: true } }), /state changed/);
+  command({ type: 'startReview' });
+  assert.equal(game.snapshot().review?.playerId, bob.id);
+  assert.equal(game.snapshot().reviewIndex, 1);
+  assert.equal(game.snapshot().reviewCount, 5);
+  assert.throws(() => command({ type: 'judgeSubmission', playerId: dave.id, correct: true }), /before starting review/);
+  command({ type: 'judgeReview', correct: false });
+  command({ type: 'nextReview' });
+  assert.equal(game.snapshot().review?.playerId, dave.id);
+  command({ type: 'judgeReview', correct: true });
+  command({ type: 'nextReview' });
+  assert.equal(game.snapshot().phase, 'REVIEW_COMPLETE');
+  assert.equal(game.snapshot().review, null);
+});
+
+test('fast approval enforces phase, roster and missing-answer rules and completes fully judged queues', () => {
+  const { game, alice, bob, carol, command } = setup();
+  const judge = (playerId: string, correct: boolean) => command({ type: 'judgeSubmission', playerId, correct });
+  assert.throws(() => judge(alice.id, true), /before starting review/);
+  command({ type: 'start' });
+  game.submitAnswer(alice.id, game.snapshot().questionInstanceId!, 'Private answer');
+  assert.throws(() => judge(bob.id, false), /not found/);
+  command({ type: 'pause' });
+  judge(alice.id, true);
+  assert.equal(alice.score, 250);
+  assert.equal(game.snapshot().paused, true);
+  command({ type: 'close' });
+  const late = game.join({ name: 'Late', avatarId: 'frog' });
+  assert.throws(() => judge(late.id, true), /not found/);
+  assert.throws(() => judge(bob.id, true), /missing answer/);
+  assert.throws(() => judge(alice.id, true), /already/);
+  judge(bob.id, false);
+  judge(carol.id, false);
+  assert.equal(game.snapshot().phase, 'QUESTION_CLOSED');
+  assert.equal(game.snapshot().review, null);
+  assert.throws(() => command({ type: 'next' }), /Review/);
+  command({ type: 'startReview' });
+  assert.equal(game.snapshot().phase, 'REVIEW_COMPLETE');
+  assert.equal(game.snapshot().review, null);
+  assert.equal(JSON.stringify(game.snapshot()).includes('Private answer'), false);
+  command({ type: 'reveal' });
+  assert.equal(game.snapshot().revealedAnswer, 'SECRET');
+  command({ type: 'next' });
+  command({ type: 'close' });
+  assert.throws(() => judge(alice.id, true), /before starting review/);
+});
+
+test('live fast approval keeps submissions open and skips judged answers when review starts', () => {
+  const { game, alice, bob, carol, command, advance } = setup();
+  command({ type: 'start' });
+  const instance = game.snapshot().questionInstanceId!;
+  game.submitAnswer(alice.id, instance, 'Private correct');
+  command({ type: 'judgeSubmission', playerId: alice.id, correct: true });
+  advance(500);
+  assert.equal(game.snapshot().phase, 'QUESTION_OPEN');
+  assert.equal(game.snapshot().clockRunning, true);
+  assert.equal(game.snapshot().clueElapsedMs, 500);
+  game.submitAnswer(bob.id, instance, 'Private wrong');
+  command({ type: 'judgeSubmission', playerId: bob.id, correct: false });
+  game.submitAnswer(carol.id, instance, 'Remaining answer');
+  assert.equal(alice.score, 250);
+  assert.equal(bob.score, 0);
+  assert.equal(JSON.stringify(game.snapshot(false, alice.id)).includes('Private'), false);
+  assert.equal(game.snapshot().review, null);
+  command({ type: 'startReview' });
+  assert.equal(game.snapshot().review?.playerId, carol.id);
+  assert.deepEqual(game.snapshot(true).hostSubmissions?.map((entry) => entry.correct), [true, false, null]);
+});
+
+test('undo of live approval restores judgments and preserves later submissions across close and review', () => {
+  for (const correct of [true, false]) {
+    for (const startReview of [true, false]) {
+      const { game, alice, bob, carol, command } = setup();
+      command({ type: 'start' });
+      const instance = game.snapshot().questionInstanceId!;
+      game.submitAnswer(alice.id, instance, 'First');
+      command({ type: 'judgeSubmission', playerId: alice.id, correct: false });
+      game.submitAnswer(bob.id, instance, 'Second');
+      command({ type: 'judgeSubmission', playerId: bob.id, correct });
+      game.submitAnswer(carol.id, instance, 'Later submission');
+      command({ type: 'close' });
+      if (startReview) command({ type: 'startReview' });
+      command({ type: 'undo' });
+      assert.equal(game.snapshot().phase, 'QUESTION_OPEN');
+      assert.equal(game.snapshot().submissionCount, 3);
+      assert.equal(bob.score, 0);
+      assert.deepEqual(game.snapshot(true).hostSubmissions?.map((entry) => entry.correct), [false, null, null]);
+      assert.equal(game.snapshot(true).hostSubmissions?.[2].answer, 'Later submission');
+      command({ type: 'startReview' });
+      assert.equal(game.snapshot().review?.playerId, bob.id);
+    }
+  }
+});
+
+test('undo restores private correct, wrong and missing rulings even after review completes', () => {
+  for (const outcome of ['correct', 'wrong', 'missing'] as const) {
+    const { game, alice, bob, carol, command } = setup();
+    command({ type: 'removePlayer', playerId: bob.id });
+    command({ type: 'removePlayer', playerId: carol.id });
+    command({ type: 'start' });
+    if (outcome !== 'missing') game.submitAnswer(alice.id, game.snapshot().questionInstanceId!, 'Private');
+    command({ type: 'close' });
+    command({ type: 'judgeSubmission', playerId: alice.id, correct: outcome === 'correct' });
+    assert.equal(alice.score, outcome === 'correct' ? 250 : 0);
+    assert.equal(game.snapshot(true).hostSubmissions?.[0].correct, outcome === 'correct');
+    assert.equal(game.snapshot(true).scoreEvents.length, 1);
+    command({ type: 'startReview' });
+    assert.equal(game.snapshot().phase, 'REVIEW_COMPLETE');
+    command({ type: 'undo' });
+    assert.equal(game.snapshot().phase, 'QUESTION_CLOSED');
+    assert.equal(alice.score, 0);
+    assert.equal(game.snapshot(true).hostSubmissions?.[0].correct, null);
+    assert.equal(game.snapshot(true).scoreEvents.length, 0);
+    assert.equal(game.snapshot().review, null);
+    command({ type: 'startReview' });
+    assert.equal(game.snapshot().review?.playerId, alice.id);
+  }
+});
+
 test('paused submissions, reconnect, reset, undo and empty reviews preserve their rules', () => {
   const { game, alice, bob, command, advance } = setup();
   command({ type: 'start' });
@@ -247,6 +395,18 @@ test('sockets send answers only to host until current review and restore submiss
     assert.equal(snapshots.get(reconnected)?.mySubmitted, true);
     const repeat = await reconnected.timeout(5000).emitWithAck('player:submitAnswer', { questionInstanceId: id, answer: 'Again' });
     assert.equal(repeat.ok, false);
+    assert.ok((await send({ type: 'close' })).ok);
+    const unauthorized = await player.timeout(5000).emitWithAck('host:command', {
+      id: randomUUID(), revision: application.engine.revision,
+      action: { type: 'judgeSubmission', playerId: joined.data.playerId, correct: true },
+    });
+    assert.equal(unauthorized.ok, false);
+    assert.ok((await send({ type: 'judgeSubmission', playerId: joined.data.playerId, correct: true })).ok);
+    const fastReconnect = await connect({ role: 'player', token: joined.data.token });
+    assert.equal(snapshots.get(fastReconnect)?.review, null);
+    assert.equal(snapshots.get(fastReconnect)?.players[0].score, 250);
+    assert.equal(publicPayloads.some((payload) => payload.includes('PRIVATE GUESS')), false);
+    assert.ok((await send({ type: 'undo' })).ok);
     const displayReceived = new Promise<Snapshot>((resolve) => {
       display.on('session:snapshot', function listener(state) {
         if (state.review?.answer === 'PRIVATE GUESS') {

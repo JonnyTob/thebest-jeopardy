@@ -176,6 +176,24 @@ export class GameEngine {
     this.scoreEvents = this.scoreEvents.slice(0, 100);
   }
 
+  private judgeTypedAnswer(entry: TypedReview | undefined, correct: boolean) {
+    this.require(entry, 'Review player not found.');
+    this.require(entry.correct === null, 'This answer has already been reviewed.');
+    this.require(!correct || entry.answer !== null, 'A missing answer cannot be marked correct.');
+    const player = this.players.get(entry.playerId);
+    this.require(player, 'Review player not found.');
+    const points = this.quiz.questions[this.clue.questionIndex].fixedPoints;
+    this.require(points !== undefined, 'Question points are missing.');
+    this.saveScore(player, correct ? points : 0, `${player.name}: ${correct ? 'correct' : entry.answer === null ? 'no answer' : 'wrong'}`);
+    entry.correct = correct;
+  }
+
+  private advanceReview(fromIndex: number) {
+    const next = this.clue.reviewQueue.findIndex((entry, index) => index >= fromIndex && entry.correct === null);
+    this.clue.reviewIndex = next < 0 ? this.clue.reviewQueue.length : next;
+    this.clue.phase = next < 0 ? 'REVIEW_COMPLETE' : 'REVIEW';
+  }
+
   command(command: HostCommand, saveSettings?: (settings: Settings) => void) {
     if (this.processed.has(command.id)) return;
     this.require(command.revision === this.revision, 'Game state changed. Review the latest state and try again.');
@@ -227,27 +245,24 @@ export class GameEngine {
           this.quiz.questions[this.clue.questionIndex]?.mode === 'typed',
           'Start review from an open or closed typed-answer question.');
         if (this.clue.phase === 'QUESTION_OPEN') this.close();
-        this.clue.reviewIndex = 0;
-        this.clue.phase = this.clue.reviewQueue.length ? 'REVIEW' : 'REVIEW_COMPLETE';
+        this.advanceReview(0);
         break;
+      case 'judgeSubmission': {
+        this.require(['QUESTION_OPEN', 'QUESTION_CLOSED'].includes(this.clue.phase) && this.quiz.questions[this.clue.questionIndex]?.mode === 'typed',
+          'Fast approval is only available on open or closed typed questions before starting review.');
+        const entries = this.clue.phase === 'QUESTION_OPEN' ? this.clue.submissions : this.clue.reviewQueue;
+        this.judgeTypedAnswer(entries.find((entry) => entry.playerId === action.playerId), action.correct);
+        break;
+      }
       case 'judgeReview': {
         this.require(this.clue.phase === 'REVIEW', 'There is no answer to review.');
-        const entry = this.clue.reviewQueue[this.clue.reviewIndex];
-        this.require(entry && entry.correct === null, 'This answer has already been reviewed.');
-        this.require(!action.correct || entry.answer !== null, 'A missing answer cannot be marked correct.');
-        const player = this.players.get(entry.playerId);
-        this.require(player, 'Review player not found.');
-        const points = this.quiz.questions[this.clue.questionIndex].fixedPoints;
-        this.require(points !== undefined, 'Question points are missing.');
-        this.saveScore(player, action.correct ? points : 0, `${player.name}: ${action.correct ? 'correct' : entry.answer === null ? 'no answer' : 'wrong'}`);
-        entry.correct = action.correct;
+        this.judgeTypedAnswer(this.clue.reviewQueue[this.clue.reviewIndex], action.correct);
         break;
       }
       case 'nextReview':
         this.require(this.clue.phase === 'REVIEW', 'There is no answer to advance.');
         this.require(this.clue.reviewQueue[this.clue.reviewIndex]?.correct !== null, 'Judge the current answer before advancing.');
-        this.clue.reviewIndex++;
-        if (this.clue.reviewIndex >= this.clue.reviewQueue.length) this.clue.phase = 'REVIEW_COMPLETE';
+        this.advanceReview(this.clue.reviewIndex + 1);
         break;
       case 'reset':
         this.require(this.clue.questionIndex >= 0 && this.clue.phase !== 'GAME_FINISHED', 'There is no question to reset.');
@@ -291,7 +306,12 @@ export class GameEngine {
         this.clue = { ...entry.clue, startedAt: entry.clue.startedAt === null ? null : this.now(),
           mediaVersion: this.clue.mediaVersion + 1 };
         if (this.clue.phase === 'QUESTION_OPEN' && this.quiz.questions[this.clue.questionIndex]?.mode === 'typed') {
-          this.clue.submissions = submissions;
+          const previous = new Map(this.clue.submissions.map((submission) => [submission.playerId, submission]));
+          // Retain answers received since the score operation, but restore the
+          // saved judgments so undo cannot leave a reverted award marked correct.
+          this.clue.submissions = submissions.map((submission) => ({
+            ...submission, correct: previous.get(submission.playerId)?.correct ?? null,
+          }));
         }
         for (const [id, score] of entry.scores) {
           const player = this.players.get(id);

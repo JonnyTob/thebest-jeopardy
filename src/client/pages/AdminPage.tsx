@@ -50,6 +50,7 @@ function AdminConsole({ logout, requirePasscode }: { logout: () => void; require
   const { state, connected, command, pending } = useSession();
   const [tab, setTab] = useState<'live' | 'setup'>('live');
   const [confirm, setConfirm] = useState(false);
+  const [fastApproval, setFastApproval] = useState(false);
   const active = state?.players.find((p) => p.id === state.activePlayerId);
   const isOpen = state?.phase === 'QUESTION_OPEN';
   const answering = state?.phase === 'ANSWERING';
@@ -130,10 +131,26 @@ function AdminConsole({ logout, requirePasscode }: { logout: () => void; require
                   : <button className="quiet" disabled={disabled} onClick={() => setConfirm(true)}>Reset this question...</button>}
               </section>
             </div>}
-        {typed && state.phase !== 'GAME_FINISHED' && <section className="panel"><h2>Typed answers ({state.submissionCount} submitted)</h2>
-          {state.hostSubmissions?.length ? <ol>{state.hostSubmissions.map((entry) => <li key={entry.playerId}>
-            <strong>{state.players.find((player) => player.id === entry.playerId)?.name ?? 'Unknown player'}:</strong>{' '}
-            {entry.answer ?? 'No answer'}{entry.correct !== null && (entry.correct ? ' / Correct' : ' / +0')}
+        {typed && state.phase !== 'GAME_FINISHED' && <section className="panel">
+          <div className="typed-answers-heading"><h2>Typed answers ({state.submissionCount} submitted)</h2>
+            <label className="fast-approval-toggle"><input type="checkbox" checked={fastApproval}
+              onChange={(event) => setFastApproval(event.target.checked)} />Fast approval</label></div>
+          {fastApproval && isOpen && <p className="muted">Mark submitted answers here privately while others keep answering. TV review skips answers already judged.</p>}
+          {state.phase === 'QUESTION_CLOSED' && <p>{state.hostSubmissions?.filter((entry) => entry.correct === null).length ?? 0} awaiting review.
+            {' '}Start answer review to show only those answers, or complete review if all are judged.</p>}
+          {state.hostSubmissions?.length ? <ol className="host-submissions">{state.hostSubmissions.map((entry) => <li key={entry.playerId}>
+            <div className="submission-row">
+              <strong className="submission-player">Player: {state.players.find((player) => player.id === entry.playerId)?.name ?? 'Unknown player'}</strong>
+              <div className="submission-text">Answer: {entry.answer ?? 'No answer'}
+                {entry.correct !== null && <span className={entry.correct ? 'positive' : 'muted'}>{entry.correct ? ` / Correct +${state.question?.fixedPoints}` : ' / Wrong or missing +0'}</span>}</div>
+            <div className="submission-rulings" title={!fastApproval ? 'Enable Fast approval to judge here.' : undefined}>
+              <button className="success small" disabled={disabled || !fastApproval || !(isOpen || state.phase === 'QUESTION_CLOSED') || entry.correct !== null || entry.answer === null}
+                aria-label={`Mark ${state.players.find((player) => player.id === entry.playerId)?.name ?? 'player'} correct`}
+                onClick={() => { void command({ type: 'judgeSubmission', playerId: entry.playerId, correct: true }); }}>Correct +{state.question?.fixedPoints}</button>
+              <button className="danger small" disabled={disabled || !fastApproval || !(isOpen || state.phase === 'QUESTION_CLOSED') || entry.correct !== null}
+                aria-label={`Mark ${state.players.find((player) => player.id === entry.playerId)?.name ?? 'player'} wrong or missing`}
+                onClick={() => { void command({ type: 'judgeSubmission', playerId: entry.playerId, correct: false }); }}>{entry.answer === null ? 'No answer +0' : 'Wrong +0'}</button>
+            </div></div>
           </li>)}</ol> : <p>No answers submitted yet.</p>}</section>}
         <div className="admin-bottom-grid"><PlayerTable state={state} /><section className="panel game-log"><span className="eyebrow">SCORE LOG</span><h2>The night's numbers</h2>
           <button disabled={disabled || !state.canUndo} onClick={() => { void command({ type: 'undo' }); }}>Undo last score change</button>

@@ -233,6 +233,29 @@ sharing the QR code.
   later joiners are not included in that review. The host can reveal the official
   answer or move to the next question after review finishes.
 
+### Optional fast approval for typed answers
+
+Enable **Fast approval** in the host's **Typed answers** pane to judge answers privately
+without showing each one on the TV. This is manual judging, not automatic
+answer matching. The checkbox defaults to off and affects only the host controls.
+
+1. Enable **Fast approval** and mark submitted answers **Correct** or **Wrong**
+  immediately, even while others are still answering or the question is paused.
+  Correct earns the fixed points immediately; wrong earns zero.
+2. **Close submissions** freezes the roster and adds missing answers, which can
+  be marked **No answer** for zero points. Private judging remains available.
+3. Use **Start answer review** (or **Close submissions & start review**) to display only the remaining unjudged entries,
+   in the original order. Already-judged answers never appear in that TV review.
+   If every entry was judged privately, starting review completes it immediately.
+
+Quick rulings are available before TV review starts, both while submissions are
+open and after they close. Normal review remains available whether the checkbox is on or off.
+Undo applies to private rulings too, including zero-point rulings; it restores
+the previous score and judgment state and can return the question to open or closed.
+Answers received after a ruling are retained when that ruling is undone.
+The host list retains all entries and their outcomes. TV review numbering still
+refers to positions in the full roster, so skipping judged entries can skip numbers.
+
 **Undo semantics:** Undo restores the latest score operation and its saved
 question state, elapsed time, scores, and eligibility. Undoing a ruling restores
 the answering player so the host can judge again. It never restores stale
