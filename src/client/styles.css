@@ -283,6 +283,9 @@ td:last-child, th:last-child { padding-right: 0; }
 .winner-score { color: var(--magenta); font-size: clamp(1.3rem, 3vw, 3rem); }
 .tv-offline { position: absolute; top: 0; left: 0; right: 0; z-index: 10; padding: 14px; text-align: center; background: #82213f; color: white; }
 .tv-errors { position: absolute; bottom: 18px; left: 22px; right: 22px; z-index: 10; }
+.countdown-sound { position: fixed; right: 18px; bottom: 18px; z-index: 110; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; max-width: min(420px, 45vw); font-size: .75rem; color: #e4d5f2; }
+.countdown-sound > span { padding: 6px 9px; border-radius: 8px; background: #23143aee; }
+.countdown-sound .countdown-sound-error { color: #ffe0ed; background: #661e43f2; border: 1px solid #ff8cbf; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 @media (max-width: 1250px) {
   .admin-shell { padding: 20px; }

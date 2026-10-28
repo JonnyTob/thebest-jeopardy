@@ -136,16 +136,19 @@ export function useAnimatedState(): Snapshot | null {
   const { state, receivedAt, connected } = useSession();
   const [now, setNow] = useState(() => performance.now());
   useEffect(() => {
-    if ((!state?.clockRunning && state?.phase !== 'STARTING') || !connected) return;
+    if ((!state?.clockRunning && state?.phase !== 'STARTING' && state?.phase !== 'NEXT_ROUND') || !connected) return;
     const timer = setInterval(() => setNow(performance.now()), 50);
     return () => clearInterval(timer);
   }, [state?.clockRunning, state?.phase, connected]);
   if (!state) return null;
-  const extra = (state.clockRunning || state.phase === 'STARTING') && connected ? Math.max(0, now - receivedAt) : 0;
+  const extra = connected ? Math.max(0, now - receivedAt) : 0;
   const clueExtra = state.clockRunning ? extra : 0;
   const elapsed = state.clueElapsedMs + clueExtra;
   return { ...state, clockRunning: state.clockRunning && connected,
-    startCountdownMs: state.startCountdownMs === null ? null : Math.max(0, state.startCountdownMs - extra),
+    startCountdownMs: state.startCountdownMs === null ? null
+      : Math.max(0, state.startCountdownMs - (state.phase === 'STARTING' ? extra : 0)),
+    nextRoundCountdownMs: state.nextRoundCountdownMs === null ? null
+      : Math.max(0, state.nextRoundCountdownMs - (state.phase === 'NEXT_ROUND' ? extra : 0)),
     clueElapsedMs: elapsed, currentPoints: state.question?.mode === 'typed'
       ? state.question.fixedPoints ?? state.currentPoints : state.pointsAtBuzz ?? pointsAt(elapsed, state.settings),
     revealProgress: Math.min(1, state.revealProgress + clueExtra / ((state.question?.reveal?.durationSeconds ?? 20) * 1000)),

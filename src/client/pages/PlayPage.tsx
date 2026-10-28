@@ -2,11 +2,12 @@ import { useState, type FormEvent } from 'react';
 import { avatars, type AvatarId, type Snapshot } from '../../shared/protocol';
 import { rankPlayers } from '../../shared/game';
 import { useAnimatedState, useSession } from '../session';
-import { Avatar, Brand, Connection, QuizName, SessionError } from '../components/Common';
+import { Avatar, Brand, Connection, QuizName, SessionError, nextRoundCountdownText, typedTimerMs } from '../components/Common';
 import { branding } from '../branding';
 
 export function PlayPage() {
-  const { state, connected, playerId, join, buzz, pending } = useSession();
+  const { connected, playerId, join, buzz, pending } = useSession();
+  const state = useAnimatedState();
   const [name, setName] = useState('');
   const [avatar, setAvatar] = useState<AvatarId>('fox');
   const player = state?.players.find((p) => p.id === playerId);
@@ -22,6 +23,7 @@ export function PlayPage() {
   let detail = 'The next question is on its way.';
   if (!connected) { status = 'Reconnecting'; detail = 'Your score and place are saved on the server.'; }
   else if (state?.phase === 'STARTING') { status = 'Game starting!'; detail = 'Watch the TV countdown. Answering opens when the first question appears.'; }
+  else if (state?.phase === 'NEXT_ROUND') { status = `Next round: ${nextRoundCountdownText(state.nextRoundCountdownMs)}`; detail = 'Watch the TV. Buzzing opens when the next question appears.'; }
   else if (state?.phase === 'GAME_FINISHED') { status = 'That is a wrap!'; detail = 'Thanks for playing. See the TV for the final scores.'; }
   else if (answering) { status = 'You buzzed first!'; detail = 'Say your answer out loud. The host will make the call.'; }
   else if (lockedOut && (state?.phase === 'QUESTION_OPEN' || state?.phase === 'ANSWERING')) {
@@ -63,7 +65,7 @@ export function PlayPage() {
       {state?.question?.mode === 'typed' && state.phase !== 'GAME_FINISHED'
         ? <TypedAnswer key={state.questionInstanceId} state={state} />
         : <><section className={`buzzer-card ${answering ? 'is-answering' : ''}`}>
-        <span className="eyebrow">{state?.phase === 'LOBBY' ? 'LOBBY' : state?.phase === 'STARTING' ? 'GET READY' : `QUESTION ${(state?.questionIndex ?? 0) + 1} / ${state?.questionCount}`}</span>
+        <span className="eyebrow">{state?.phase === 'LOBBY' ? 'LOBBY' : state?.phase === 'STARTING' || state?.phase === 'NEXT_ROUND' ? 'GET READY' : `QUESTION ${(state?.questionIndex ?? 0) + 1} / ${state?.questionCount}`}</span>
         <h2 role="status">{status}</h2><p>{detail}</p>
         <button className="buzz-button" disabled={!canBuzz} onClick={() => { void buzz(); }}>
           <span>{answering ? 'FIRST!' : lockedOut && lockoutRemaining !== undefined && (open || state?.phase === 'ANSWERING')
@@ -80,18 +82,21 @@ export function PlayPage() {
 
 function TypedAnswer({ state }: { state: Snapshot }) {
   const { connected, pending, submitAnswer } = useSession();
-  const animated = useAnimatedState();
   const [answer, setAnswer] = useState('');
   const open = state.phase === 'QUESTION_OPEN' && !state.paused;
-  const remaining = Math.max(0, Math.ceil(((state.question?.timerSeconds ?? 0) * 1000
-    - (animated?.clueElapsedMs ?? state.clueElapsedMs)) / 1000));
+  const remaining = Math.max(0, Math.ceil((typedTimerMs(state) - state.clueElapsedMs) / 1000));
   function submit(event: FormEvent) {
     event.preventDefault();
     if (state.questionInstanceId) void submitAnswer(answer, state.questionInstanceId);
   }
+  if (state.phase === 'NEXT_ROUND') return <section className="panel typed-answer">
+    <span className="eyebrow">GET READY</span>
+    <h2 role="status">{connected ? `Next round: ${nextRoundCountdownText(state.nextRoundCountdownMs)}` : 'Reconnecting'}</h2>
+    <p>{connected ? 'Watch the TV. Answering opens when the next question appears.' : 'Waiting to reconnect. Your score is saved on the server.'}</p>
+  </section>;
   return <section className="panel typed-answer"><span className="eyebrow">EVERYONE ANSWERS / {state.question?.fixedPoints} POINTS</span>
     <h2>{state.mySubmitted ? 'Answer submitted' : open ? 'Your answer' : state.paused ? 'Host paused' : 'Submissions closed'}</h2>
-    {state.phase === 'QUESTION_OPEN' && <p>Timer: {remaining}s {remaining === 0 && '/ waiting for the host to close submissions'}</p>}
+    {state.phase === 'QUESTION_OPEN' && <p>Time remaining: {remaining}s</p>}
     {state.mySubmitted ? <p>Your answer is locked in. Watch the TV for review.</p>
       : open ? <form onSubmit={submit}><label>Type your answer
         <input value={answer} maxLength={state.settings.maxAnswerLength} required

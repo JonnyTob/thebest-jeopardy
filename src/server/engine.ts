@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
-import { pointsAt, rankPlayers, START_COUNTDOWN_MS } from '../shared/game.js';
+import { pointsAt, rankPlayers, START_COUNTDOWN_MS, NEXT_ROUND_MS } from '../shared/game.js';
 import { serverSettingsSchema, type HostCommand, type JoinRequest, type Phase, type Player, type Quiz, type ScoreEvent, type Settings, type Snapshot, type ServerSettings, type TypedReview } from '../shared/protocol.js';
 
 export class GameError extends Error {}
@@ -38,6 +38,8 @@ export class GameEngine {
   private scoreEvents: ScoreEvent[] = [];
   private processed = new Set<string>();
   private startCountdownAt: number | null = null;
+  private nextRoundAt: number | null = null;
+  private countdownId: string | null = null;
   private clue: ClueState = {
     phase: 'LOBBY', questionIndex: -1, elapsedMs: 0, startedAt: null,
     paused: false, lockedOutIds: [], lockedOutUntil: {}, activePlayerId: null, pointsAtBuzz: null,
@@ -61,6 +63,36 @@ export class GameEngine {
       this.startCountdownAt = null;
       this.open(0);
       this.revision++;
+    } else if (this.clue.phase === 'NEXT_ROUND' && this.nextRoundAt !== null
+      && this.now() - this.nextRoundAt >= NEXT_ROUND_MS) {
+      this.open(this.clue.questionIndex + 1);
+      this.revision++;
+    } else if (this.clue.phase === 'QUESTION_OPEN' && !this.clue.paused && this.elapsed() >= this.submissionDeadline()) {
+      this.close();
+      this.clue.elapsedMs = this.submissionDeadline();
+      if (this.clue.reviewQueue.every((entry) => entry.correct !== null)) this.beginNextRound();
+      this.revision++;
+    }
+  }
+
+  private submissionDeadline(): number {
+    const question = this.quiz.questions[this.clue.questionIndex];
+    return question?.mode === 'typed'
+      ? ((question.timerSeconds ?? 0) + this.serverSettings.TimerEndOffsetSeconds) * 1000 : Infinity;
+  }
+
+  private beginNextRound() {
+    this.freeze();
+    this.clue.paused = false;
+    this.rank();
+    if (this.clue.questionIndex + 1 >= this.quiz.questions.length) {
+      this.clue.phase = 'GAME_FINISHED';
+      this.nextRoundAt = null;
+      this.countdownId = null;
+    } else {
+      this.clue.phase = 'NEXT_ROUND';
+      this.nextRoundAt = this.now();
+      this.countdownId = randomUUID();
     }
   }
 
@@ -124,6 +156,7 @@ export class GameEngine {
   submitAnswer(playerId: string, instanceId: string, value: string) {
     this.require(this.players.get(playerId)?.connected, 'Join the game before answering.');
     this.require(this.clue.phase === 'QUESTION_OPEN' && !this.clue.paused, 'Submissions are not open.');
+    this.require(this.elapsed() < this.submissionDeadline(), 'Submissions are not open. The timer has ended.');
     this.require(this.quiz.questions[this.clue.questionIndex]?.mode === 'typed', 'This question does not accept typed answers.');
     this.require(instanceId === this.clue.questionInstanceId, 'This question has changed. Check the current question.');
     const answer = value.trim();
@@ -135,6 +168,8 @@ export class GameEngine {
   }
 
   private open(index: number) {
+    this.nextRoundAt = null;
+    this.countdownId = null;
     this.rank();
     this.history = [];
     this.clue = {
@@ -192,12 +227,14 @@ export class GameEngine {
     const next = this.clue.reviewQueue.findIndex((entry, index) => index >= fromIndex && entry.correct === null);
     this.clue.reviewIndex = next < 0 ? this.clue.reviewQueue.length : next;
     this.clue.phase = next < 0 ? 'REVIEW_COMPLETE' : 'REVIEW';
+    if (next < 0) this.beginNextRound();
   }
 
   command(command: HostCommand, saveSettings?: (settings: Settings) => void) {
     if (this.processed.has(command.id)) return;
     this.require(command.revision === this.revision, 'Game state changed. Review the latest state and try again.');
     this.require(this.clue.phase !== 'STARTING', 'Wait for the game-start countdown to finish.');
+    this.require(this.clue.phase !== 'NEXT_ROUND' || command.action.type === 'undo', 'Wait for the next-round transition to finish.');
     const action = command.action;
     switch (action.type) {
       case 'setup':
@@ -209,16 +246,13 @@ export class GameEngine {
         this.require(this.clue.phase === 'LOBBY', 'The game has already started.');
         this.clue.phase = 'STARTING';
         this.startCountdownAt = this.now();
+        this.countdownId = randomUUID();
         break;
       case 'next':
         this.require(['QUESTION_CLOSED', 'REVIEW_COMPLETE', 'ANSWER_REVEALED'].includes(this.clue.phase), 'Close the current question before advancing.');
         this.require(this.quiz.questions[this.clue.questionIndex]?.mode !== 'typed' || this.clue.phase !== 'QUESTION_CLOSED',
           'Review all answers before advancing.');
-        if (this.clue.questionIndex + 1 >= this.quiz.questions.length) {
-          this.clue.phase = 'GAME_FINISHED';
-          this.history = [];
-          this.rank();
-        } else this.open(this.clue.questionIndex + 1);
+        this.beginNextRound();
         break;
       case 'pause':
         this.require(this.clue.phase === 'QUESTION_OPEN' && !this.clue.paused, 'Only an open clue can be paused.');
@@ -233,6 +267,8 @@ export class GameEngine {
       case 'close':
         this.require(this.isActive(), 'There is no active question to close.');
         this.close();
+        if (this.quiz.questions[this.clue.questionIndex]?.mode === 'typed'
+          && this.clue.reviewQueue.every((entry) => entry.correct !== null)) this.beginNextRound();
         break;
       case 'reveal':
         this.require(this.clue.phase === 'QUESTION_CLOSED' || this.clue.phase === 'REVIEW_COMPLETE', 'Close the question before revealing its answer.');
@@ -252,11 +288,13 @@ export class GameEngine {
           'Fast approval is only available on open or closed typed questions before starting review.');
         const entries = this.clue.phase === 'QUESTION_OPEN' ? this.clue.submissions : this.clue.reviewQueue;
         this.judgeTypedAnswer(entries.find((entry) => entry.playerId === action.playerId), action.correct);
+        if (this.clue.phase === 'QUESTION_CLOSED' && entries.every((entry) => entry.correct !== null)) this.beginNextRound();
         break;
       }
       case 'judgeReview': {
         this.require(this.clue.phase === 'REVIEW', 'There is no answer to review.');
         this.judgeTypedAnswer(this.clue.reviewQueue[this.clue.reviewIndex], action.correct);
+        if (this.clue.reviewQueue.every((entry) => entry.correct !== null)) this.beginNextRound();
         break;
       }
       case 'nextReview':
@@ -302,6 +340,8 @@ export class GameEngine {
       case 'undo': {
         const entry = this.history.pop();
         this.require(entry, 'There is no score change to undo for this question.');
+        this.nextRoundAt = null;
+        this.countdownId = null;
         const submissions = this.clue.submissions;
         this.clue = { ...entry.clue, startedAt: entry.clue.startedAt === null ? null : this.now(),
           mediaVersion: this.clue.mediaVersion + 1 };
@@ -349,6 +389,9 @@ export class GameEngine {
       revision: this.revision, quizId: this.quiz.id, settings: { ...this.settings }, phase: this.clue.phase,
       startCountdownMs: this.startCountdownAt === null ? null
         : Math.max(0, START_COUNTDOWN_MS - (now - this.startCountdownAt)),
+      nextRoundCountdownMs: this.nextRoundAt === null ? null
+        : Math.max(0, NEXT_ROUND_MS - (now - this.nextRoundAt)),
+      countdownId: this.countdownId,
       serverSettings: { ...this.serverSettings },
       coverImage: this.quiz.coverImage ?? null,
       questionIndex: this.clue.questionIndex, questionCount: this.quiz.questions.length,

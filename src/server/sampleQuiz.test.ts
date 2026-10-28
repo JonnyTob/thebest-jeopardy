@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import type { HostAction } from '../shared/protocol.js';
 import { GameEngine } from './engine.js';
 import { JsonQuizStorage } from './storage.js';
-import { START_COUNTDOWN_MS } from '../shared/game.js';
+import { START_COUNTDOWN_MS, NEXT_ROUND_MS } from '../shared/game.js';
 
 const storage = new JsonQuizStorage(path.resolve('src/data/questions.json'));
 
@@ -70,17 +70,26 @@ test('sample quiz plays through mixed buzzer and typed questions to completion',
       command({ type: 'close' });
       command({ type: 'startReview' });
       command({ type: 'judgeReview', correct: true });
-      command({ type: 'nextReview' });
       expectedScore += question.fixedPoints!;
     } else {
       game.buzz(player.id);
       expectedScore += game.snapshot().pointsAtBuzz!;
       command({ type: 'judge', correct: true });
+      command({ type: 'reveal' });
+      assert.equal(game.snapshot().revealedAnswer, question.answer);
+      command({ type: 'next' });
     }
     assert.equal(player.score, expectedScore);
-    command({ type: 'reveal' });
-    assert.equal(game.snapshot().revealedAnswer, question.answer);
-    command({ type: 'next' });
+    assert.equal(game.snapshot().revealedAnswer, null);
+    if (index + 1 < quiz.questions.length) {
+      assert.equal(game.snapshot().phase, 'NEXT_ROUND');
+      assert.equal(game.snapshot().questionIndex, index);
+      assert.equal(game.snapshot().nextRoundCountdownMs, 3000);
+      time += NEXT_ROUND_MS;
+      game.tick();
+      assert.equal(game.snapshot().phase, 'QUESTION_OPEN');
+      assert.equal(game.snapshot().clueElapsedMs, 0);
+    }
   }
   assert.equal(game.snapshot().phase, 'GAME_FINISHED');
 });

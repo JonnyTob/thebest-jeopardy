@@ -8,7 +8,9 @@
     "port": 3000,
     "maxPlayerNameLength": 10,
     "requireAdminPasscode": false,
-    "maxPlayers": 12
+    "maxPlayers": 12,
+    "TimerEndOffsetSeconds": 0,
+    "countdownSound": "/media/sounds/countdown-beep.wav"
   },
   "gameSetup": {
     "leaderboardCount": 8,

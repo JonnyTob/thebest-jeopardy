@@ -75,9 +75,12 @@ export const serverSettingsSchema = z.object({
   maxPlayerNameLength: z.number().int().min(1).max(100).default(24),
   requireAdminPasscode: z.boolean().default(true),
   maxPlayers: z.number().int().min(1).max(1000).default(12),
+  TimerEndOffsetSeconds: z.number().int().min(0).max(300).default(0),
+  countdownSound: localMedia.refine((value) => /\.wav$/i.test(value), 'Countdown sound must be a WAV file')
+    .nullable().default('/media/sounds/countdown-beep.wav'),
 }).strict();
 export type ServerSettings = z.infer<typeof serverSettingsSchema>;
-export type Phase = 'LOBBY' | 'STARTING' | 'QUESTION_OPEN' | 'ANSWERING' | 'QUESTION_CLOSED' | 'REVIEW' | 'REVIEW_COMPLETE' | 'ANSWER_REVEALED' | 'GAME_FINISHED';
+export type Phase = 'LOBBY' | 'STARTING' | 'NEXT_ROUND' | 'QUESTION_OPEN' | 'ANSWERING' | 'QUESTION_CLOSED' | 'REVIEW' | 'REVIEW_COMPLETE' | 'ANSWER_REVEALED' | 'GAME_FINISHED';
 export interface TypedReview {
   playerId: string;
   answer: string | null;
@@ -105,6 +108,8 @@ export interface Snapshot {
   serverSettings: ServerSettings;
   phase: Phase;
   startCountdownMs: number | null;
+  nextRoundCountdownMs: number | null;
+  countdownId: string | null;
   questionIndex: number;
   questionCount: number;
   question: PublicQuestion | null;

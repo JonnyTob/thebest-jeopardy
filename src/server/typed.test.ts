@@ -5,7 +5,7 @@ import { io, type Socket } from 'socket.io-client';
 import { GameEngine } from './engine.js';
 import { createApp } from './app.js';
 import { quizSchema, settingsSchema, type ClientEvents, type HostAction, type ServerEvents, type Snapshot } from '../shared/protocol.js';
-import { START_COUNTDOWN_MS } from '../shared/game.js';
+import { START_COUNTDOWN_MS, NEXT_ROUND_MS } from '../shared/game.js';
 
 const quiz = quizSchema.parse({
   id: 100001, title: 'Mixed quiz', questions: [
@@ -39,7 +39,7 @@ test('typed question validation requires fixed points and timer while old questi
     minimumPoints: 100, dropPoints: 100, dropEverySeconds: 5, maxAnswerLength: 501 }).success, false);
 });
 
-test('one-click review atomically closes open typed submissions before or after the guide timer, including when paused', () => {
+test('one-click review atomically closes open typed submissions before or after the deadline before tick, including when paused', () => {
   for (const [elapsed, paused] of [[1000, false], [3000, false], [1000, true]] as const) {
     const { game, alice, bob, carol, command, advance } = setup();
     assert.throws(() => command({ type: 'startReview' }), /open or closed typed-answer/);
@@ -81,9 +81,11 @@ test('one-click review handles empty queues and rejects buzzer questions without
   time += START_COUNTDOWN_MS;
   game.tick();
   command({ type: 'startReview' });
-  assert.equal(game.snapshot().phase, 'REVIEW_COMPLETE');
+  assert.equal(game.snapshot().phase, 'NEXT_ROUND');
+  assert.equal(game.snapshot().nextRoundCountdownMs, 3000);
   assert.equal(game.snapshot().clockRunning, false);
-  command({ type: 'next' });
+  time += NEXT_ROUND_MS;
+  game.tick();
   assert.throws(() => command({ type: 'startReview' }), /open or closed typed-answer/);
   assert.equal(game.snapshot().phase, 'QUESTION_OPEN');
   assert.equal(game.snapshot().clockRunning, true);
@@ -100,7 +102,7 @@ test('typed answers remain private and final, obey the host close and are review
   assert.throws(() => game.submitAnswer(alice.id, 'stale', 'hello'), /changed/);
   game.submitAnswer(bob.id, instance, '  Matrix  ');
   assert.throws(() => game.submitAnswer(bob.id, instance, 'Change'), /already/);
-  advance(3000);
+  advance(1999);
   game.submitAnswer(alice.id, instance, 'Alien');
   assert.equal(game.snapshot().currentPoints, 250);
   assert.equal(game.snapshot().submissionCount, 2);
@@ -132,11 +134,11 @@ test('typed answers remain private and final, obey the host close and are review
   assert.deepEqual(game.snapshot().review, { playerId: carol.id, answer: null, correct: null });
   assert.throws(() => command({ type: 'judgeReview', correct: true }), /missing answer/);
   command({ type: 'judgeReview', correct: false });
-  command({ type: 'nextReview' });
-  assert.equal(game.snapshot().phase, 'REVIEW_COMPLETE');
-  command({ type: 'reveal' });
-  assert.equal(game.snapshot().revealedAnswer, 'SECRET');
-  command({ type: 'next' });
+  assert.equal(game.snapshot().phase, 'NEXT_ROUND');
+  assert.equal(game.snapshot().revealedAnswer, null);
+  assert.equal(JSON.stringify(game.snapshot()).includes('SECRET'), false);
+  advance(NEXT_ROUND_MS);
+  game.tick();
   game.buzz(alice.id);
   assert.equal(game.snapshot().phase, 'ANSWERING');
 });
@@ -180,13 +182,12 @@ test('fast approval scores privately and TV review skips judged first, middle an
   command({ type: 'nextReview' });
   assert.equal(game.snapshot().review?.playerId, dave.id);
   command({ type: 'judgeReview', correct: true });
-  command({ type: 'nextReview' });
-  assert.equal(game.snapshot().phase, 'REVIEW_COMPLETE');
+  assert.equal(game.snapshot().phase, 'NEXT_ROUND');
   assert.equal(game.snapshot().review, null);
 });
 
 test('fast approval enforces phase, roster and missing-answer rules and completes fully judged queues', () => {
-  const { game, alice, bob, carol, command } = setup();
+  const { game, alice, bob, carol, command, advance } = setup();
   const judge = (playerId: string, correct: boolean) => command({ type: 'judgeSubmission', playerId, correct });
   assert.throws(() => judge(alice.id, true), /before starting review/);
   command({ type: 'start' });
@@ -203,16 +204,14 @@ test('fast approval enforces phase, roster and missing-answer rules and complete
   assert.throws(() => judge(alice.id, true), /already/);
   judge(bob.id, false);
   judge(carol.id, false);
-  assert.equal(game.snapshot().phase, 'QUESTION_CLOSED');
-  assert.equal(game.snapshot().review, null);
-  assert.throws(() => command({ type: 'next' }), /Review/);
-  command({ type: 'startReview' });
-  assert.equal(game.snapshot().phase, 'REVIEW_COMPLETE');
+  assert.equal(game.snapshot().phase, 'NEXT_ROUND');
+  assert.throws(() => command({ type: 'next' }), /next-round transition/);
+  assert.throws(() => command({ type: 'startReview' }), /next-round transition/);
   assert.equal(game.snapshot().review, null);
   assert.equal(JSON.stringify(game.snapshot()).includes('Private answer'), false);
-  command({ type: 'reveal' });
-  assert.equal(game.snapshot().revealedAnswer, 'SECRET');
-  command({ type: 'next' });
+  assert.equal(game.snapshot().revealedAnswer, null);
+  advance(NEXT_ROUND_MS);
+  game.tick();
   command({ type: 'close' });
   assert.throws(() => judge(alice.id, true), /before starting review/);
 });
@@ -276,8 +275,7 @@ test('undo restores private correct, wrong and missing rulings even after review
     assert.equal(alice.score, outcome === 'correct' ? 250 : 0);
     assert.equal(game.snapshot(true).hostSubmissions?.[0].correct, outcome === 'correct');
     assert.equal(game.snapshot(true).scoreEvents.length, 1);
-    command({ type: 'startReview' });
-    assert.equal(game.snapshot().phase, 'REVIEW_COMPLETE');
+    assert.equal(game.snapshot().phase, 'NEXT_ROUND');
     command({ type: 'undo' });
     assert.equal(game.snapshot().phase, 'QUESTION_CLOSED');
     assert.equal(alice.score, 0);
@@ -325,9 +323,9 @@ test('paused submissions, reconnect, reset, undo and empty reviews preserve thei
   emptyTime += START_COUNTDOWN_MS;
   empty.tick();
   send({ type: 'close' });
-  send({ type: 'startReview' });
-  assert.equal(empty.snapshot().phase, 'REVIEW_COMPLETE');
-  send({ type: 'next' });
+  assert.equal(empty.snapshot().phase, 'NEXT_ROUND');
+  emptyTime += NEXT_ROUND_MS;
+  empty.tick();
   assert.equal(empty.snapshot().question?.id, 'buzzer');
 });
 

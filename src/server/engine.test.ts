@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { GameEngine } from './engine.js';
 import type { HostAction, Quiz } from '../shared/protocol.js';
-import { START_COUNTDOWN_MS } from '../shared/game.js';
+import { START_COUNTDOWN_MS, NEXT_ROUND_MS } from '../shared/game.js';
 
 const quiz: Quiz = {
   id: 100001,
@@ -33,9 +33,14 @@ test('game-start countdown hides the first clue, rejects early play and opens on
     ] }, () => time);
     const player = game.join({ name: 'Alice', avatarId: 'fox' });
     const start = { id: randomUUID(), revision: game.revision, action: { type: 'start' } } as const;
+    assert.equal(game.snapshot().countdownId, null);
     game.command(start);
     const revision = game.revision;
     assert.equal(game.snapshot().phase, 'STARTING');
+    const countdownId = game.snapshot().countdownId;
+    assert.ok(countdownId);
+    assert.equal(game.snapshot(true).countdownId, countdownId);
+    assert.equal(game.snapshot(false, player.id).countdownId, countdownId);
     assert.equal(game.snapshot().startCountdownMs, 4000);
     assert.equal(game.snapshot().question, null);
     assert.equal(game.snapshot(true).privateAnswer, undefined);
@@ -57,6 +62,7 @@ test('game-start countdown hides the first clue, rejects early play and opens on
     game.setConnected(player.id, false);
     game.setConnected(player.id, true);
     game.command(start);
+    assert.equal(game.snapshot().countdownId, countdownId, 'reconnect and duplicate start preserve the countdown ID');
     assert.equal(game.snapshot().startCountdownMs, 2750, 'Duplicate start must not restart the countdown');
     time = 3999;
     game.tick();
@@ -69,6 +75,7 @@ test('game-start countdown hides the first clue, rejects early play and opens on
     game.tick();
     assert.equal(game.revision, beforeOpen + 1);
     assert.equal(game.snapshot().phase, 'QUESTION_OPEN');
+    assert.equal(game.snapshot().countdownId, null);
     assert.equal(game.snapshot().startCountdownMs, null);
     assert.equal(game.snapshot().questionIndex, 0);
     assert.equal(game.snapshot().clueElapsedMs, 0);
@@ -81,6 +88,7 @@ test('game-start countdown hides the first clue, rejects early play and opens on
     game.tick();
     assert.equal(game.revision, afterPlay);
     assert.equal(game.snapshot().questionInstanceId, instance);
+    assert.equal(game.snapshot().countdownId, null);
     assert.throws(() => game.command({ id: randomUUID(), revision: start.revision, action: { type: 'reset' } }), /state changed/);
   }
 });
@@ -97,7 +105,7 @@ test('a late server tick opens the first clue with its full time budget', () => 
 });
 
 test('quiz ID stays stable across title edits, question resets and new sessions', () => {
-  const { game, command } = setup();
+  const { game, command, advance } = setup();
   assert.equal(game.snapshot().quizId, quiz.id);
   assert.equal(game.snapshot(true).quizId, quiz.id);
   command({ type: 'setup', settings: { ...game.settings, title: 'Renamed Quiz' } });
@@ -107,6 +115,10 @@ test('quiz ID stays stable across title edits, question resets and new sessions'
   command({ type: 'reset' });
   command({ type: 'close' });
   command({ type: 'next' });
+  assert.equal(game.snapshot().quizId, quiz.id);
+  advance(NEXT_ROUND_MS);
+  game.tick();
+  assert.equal(game.snapshot().questionIndex, 1);
   assert.equal(game.snapshot().quizId, quiz.id);
   assert.equal(new GameEngine(quiz).snapshot().quizId, quiz.id);
 });
@@ -210,7 +222,7 @@ test('duplicate command is idempotent and stale commands cannot rule on a later 
 });
 
 test('public snapshots never contain private answers until explicit reveal', () => {
-  const { game, command } = setup();
+  const { game, command, advance } = setup();
   assert.equal(JSON.stringify(game.snapshot()).includes('SECRET'), false);
   command({ type: 'start' });
   assert.equal(game.snapshot(true).privateAnswer, 'SECRET FIRST');
@@ -221,6 +233,9 @@ test('public snapshots never contain private answers until explicit reveal', () 
   assert.equal(game.snapshot().revealedAnswer, 'SECRET FIRST');
   command({ type: 'next' });
   assert.equal(JSON.stringify(game.snapshot()).includes('SECRET'), false);
+  assert.equal(game.snapshot().phase, 'NEXT_ROUND');
+  advance(NEXT_ROUND_MS);
+  game.tick();
   command({ type: 'close' });
   command({ type: 'next' });
   assert.equal(game.snapshot().phase, 'GAME_FINISHED');
@@ -365,6 +380,9 @@ test('default lockouts last the whole question; timed lockouts clear on reset an
   timed.command({ type: 'judge', correct: false });
   timed.command({ type: 'close' });
   timed.command({ type: 'next' });
+  assert.equal(timed.game.snapshot().phase, 'NEXT_ROUND');
+  timed.advance(NEXT_ROUND_MS);
+  timed.game.tick();
   assert.deepEqual(timed.game.snapshot().lockedOutIds, []);
   assert.deepEqual(timed.game.snapshot().lockoutRemainingMs, {});
 });

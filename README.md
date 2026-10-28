@@ -60,7 +60,9 @@ npm start
     "joinOrigin": "http://192.168.1.42:3000",
     "maxPlayerNameLength": 24,
     "requireAdminPasscode": true,
-    "maxPlayers": 12
+    "maxPlayers": 12,
+    "TimerEndOffsetSeconds": 0,
+    "countdownSound": "/media/sounds/countdown-beep.wav"
   },
   "gameSetup": {
     "leaderboardCount": 8,
@@ -100,6 +102,18 @@ npm start
     players, including disconnected players, until the host removes them.
     Reconnecting an existing player does not use another slot. New players
     cannot join a full game; phones show the limit and the server also enforces it.
+  - `TimerEndOffsetSeconds`: extra answering time for typed questions, **0** by
+    default (whole seconds, 0-300). Submissions automatically close at the question's
+    `timerSeconds` plus this offset. For example, 30 + 2 closes after 32 seconds
+    of unpaused clue time. All countdowns include the offset. This is global-only,
+    not editable through Game setup or per-quiz overrides. Restart after changing it.
+  - `countdownSound`: local WAV path for the TV countdown beep, default
+    `/media/sounds/countdown-beep.wav`. Set to `null` to disable it, or use a
+    different local path such as `/media/sounds/my-beep.wav`. Place a short single beep under
+    [src/public/media/](./src/public/media/); it is played once for each of
+    **3, 2, 1**, not as a full countdown recording. This is a global server
+    setting, not a per-quiz option. Restart after changing the setting; rebuild
+    production after adding or replacing the WAV asset.
 - **gameSetup**: defaults for the host's editable settings. An optional `title`
   overrides the title from the question file; omit it to use the quiz's own title.
   `maxAnswerLength` (1-500; default 100) limits typed answers for this quiz.
@@ -214,24 +228,40 @@ sharing the QR code.
   the first question open and its clue clock, points, reveal and media begin.
   Buzzing, submissions and host game controls are disabled during the countdown.
   Reconnecting displays resume the current step rather than replaying it;
-  later questions and question resets do not repeat it. The animation is silent
-  and respects the browser's reduced-motion preference.
+  later questions and question resets do not repeat it. The animation respects
+  the browser's reduced-motion preference.
 - **Everyone answers** questions accept one final typed submission per player.
-  A guide timer counts down on the TV, host and phones, but submissions remain
-  open until the host closes the clue. Pausing pauses the timer and submissions.
-  The TV clue also shows a shrinking countdown bar using the question's
-  `timerSeconds`. It freezes when paused or closed and stays empty at zero;
-  it does not affect the fixed points or automatically close submissions.
+  The server automatically closes submissions at `timerSeconds` plus the global
+  `server.TimerEndOffsetSeconds`. Pausing pauses the timer and submissions.
+  TV, host and phone countdowns include this offset; the TV bar shrinks over that
+  full duration. It freezes when paused or closed; points remain fixed.
   The host can see all submissions privately; other players see only the count.
   Use **Close submissions & start review** to close the clue and show the first
   answer on the TV in one step. Alternatively, use **Close submissions**, then
   **Start answer review**. Mark each answer correct or
-  wrong, then advance manually. Correct earns the question's fixed points;
+  wrong, then use **Next review** for intermediate entries. Correct earns the question's fixed points;
   wrong or missing answers earn zero. The leaderboard updates immediately.
   Review order is submission order, followed by non-submitters in join order.
   Players present when submissions close are included, even if disconnected;
-  later joiners are not included in that review. The host can reveal the official
-  answer or move to the next question after review finishes.
+  later joiners are not included in that review. The final ruling automatically
+  advances, without another **Next review** or **Next question** click.
+- **Next-round transition:** moving to another question shows a synchronized
+  three-second **NEXT ROUND / 3 -> 2 -> 1** countdown on TV, host and phones.
+  The next clue and its full timer/media start only when this ends. Buzzer
+  questions still advance with the host's **Next question** button; typed
+  questions advance after the final review ruling. If no question remains,
+  final standings appear immediately. Other game controls are blocked during
+  transition, but **Undo last score change** cancels it and restores that ruling.
+  Undo history clears when the next question opens, not when the countdown starts.
+  Typed review no longer pauses for a separate official-answer reveal step.
+- **Countdown sound:** on the TV display, click **Enable countdown sound** once
+  before playing. The configured WAV plays for 3, 2 and 1 on the game-start and
+  next-round countdowns; phones and the host console remain silent. The enable
+  click may play a short preview. Browsers can require this gesture and may block
+  or fail to load the sound; use **Retry countdown sound** if prompted. Reconnects
+  and late enabling skip missed beeps. Timing is approximate on the network. Use
+  only one active TV display to avoid duplicate audio. Media clues may still
+  require their own playback/audio unlock button.
 
 ### Optional fast approval for typed answers
 
@@ -246,7 +276,10 @@ answer matching. The checkbox defaults to off and affects only the host controls
   be marked **No answer** for zero points. Private judging remains available.
 3. Use **Start answer review** (or **Close submissions & start review**) to display only the remaining unjudged entries,
    in the original order. Already-judged answers never appear in that TV review.
-   If every entry was judged privately, starting review completes it immediately.
+  If every roster entry is already judged when submissions close (manually or
+  automatically), the next-round transition starts immediately. The final private
+  ruling after closure also advances automatically. Judging all received answers
+  while submissions are still open does not close them early.
 
 Quick rulings are available before TV review starts, both while submissions are
 open and after they close. Normal review remains available whether the checkbox is on or off.
@@ -259,7 +292,8 @@ refers to positions in the full roster, so skipping judged entries can skip numb
 **Undo semantics:** Undo restores the latest score operation and its saved
 question state, elapsed time, scores, and eligibility. Undoing a ruling restores
 the answering player so the host can judge again. It never restores stale
-connection status. Undo history is cleared on next/reset or player removal.
+connection status. Undo history is cleared when the next question opens, on reset,
+or on player removal. Undo during the next-round countdown cancels advancement.
 Reset reopens the current question at full value and clears lockouts and typed
 submissions, but does
 not erase previously awarded/deducted scores. Media restart restarts playback /
@@ -309,24 +343,23 @@ The bundled quiz is also a playable examples catalog:
 | --- | --- | --- | --- |
 | 1 | `warm-up` | Text / buzzer | Omitted `mode` defaults to buzzer; separate headline and clue text |
 | 2 | `mystery-image` | Image / buzzer | Deterministic 8 x 6 tile reveal over 20 seconds; buzz freezes it |
-| 3 | `everyone-answers-text` | Text / typed | Everyone submits privately; 250 fixed points and a 30-second guide timer |
+| 3 | `everyone-answers-text` | Text / typed | Everyone submits privately; 250 fixed points and a 30-second timer plus global offset |
 | 4 | `static-image` | Image / buzzer | Explicit `mode` and `static` reveal; count the five gold stars |
-| 5 | `everyone-answers-image` | Image / typed | 6 x 4 tiles with a different seed; 15-second reveal independent of the 25-second guide timer |
+| 5 | `everyone-answers-image` | Image / typed | 6 x 4 tiles with a different seed; 15-second reveal independent of the 25-second timer plus global offset |
 | 6 | `audio-buzzer` | Audio / buzzer | Full eight-second original chime clip with live spectrum visualization |
 | 7 | `everyone-answers-audio` | Audio / typed | Only seconds 4.5-8 of the same clip; visualization disabled; 300 fixed points |
 | 8 | `video-buzzer` | Video / buzzer | Full original silent moving-shapes clip; aspect-preserving playback |
-| 9 | `everyone-answers-video` | Video / typed | Seconds 2-6 of the clip; 150 fixed points and a 20-second guide timer |
+| 9 | `everyone-answers-video` | Video / typed | Seconds 2-6 of the clip; 150 fixed points and a 20-second timer plus global offset |
 | 10 | `last-call` | Text / buzzer | Return to buzzer mode after typed review, then finish the quiz |
 
 For typed questions, join from a real phone/browser, submit, then use
 **Close submissions & start review**, the correct/wrong ruling, and **Next review**
-for every player. The combined button works before or after the guide timer
-expires, including while paused. It immediately freezes submissions and the
-review queue; there is no need to wait for zero or close the question separately.
-You can still use **Close submissions** followed by **Start answer review**.
-Reveal or advance once review is complete. A wrong or missing typed answer earns
-zero, unlike the symmetric negative penalty for a wrong buzzer answer.
-Neither guide timers nor clip endings automatically close a question.
+between players. Starting review while open, including while paused, immediately
+closes submissions. Alternatively wait for automatic closure and choose
+**Start answer review**. The final ruling advances automatically via the
+three-second next-round countdown (or finishes the quiz). A wrong or missing
+typed answer earns zero, unlike the negative penalty for a wrong buzzer answer.
+Clip endings do not close questions; typed submission deadlines do.
 The `players` helper only joins players; it does not submit typed answers.
 
 All referenced media is bundled and works offline: the original rocket image,
@@ -335,13 +368,15 @@ then three descending notes), and a silent 1280 x 720 MP4 of moving coloured
 shapes. The latter three live in [src/public/media/examples/](./src/public/media/examples/).
 The MP4 uses H.264 for broad browser compatibility.
 Audio/video plays on the TV only and may need its playback-unlock button.
+The bundled countdown beep is [Beep Tone Sound SFX by qubodup](https://opengameart.org/content/beep-tone-sound-sfx),
+made available under [CC0](https://creativecommons.org/publicdomain/zero/1.0/).
 No commercial music, movie clips, remote URLs, or missing placeholder files are
 needed for the bundled quiz.
 
 Each question may use `"mode": "buzzer"` for the original first-buzz flow, or
 `"mode": "typed"` for everyone to answer privately. Omitted `mode` defaults to
 the original buzzer behaviour, so existing quiz files continue to work. A typed
-question requires its own fixed point value and guide timer in seconds:
+question requires its own fixed point value and submission timer in seconds:
 
 ```json
 {

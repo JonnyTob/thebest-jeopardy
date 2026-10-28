@@ -1,6 +1,7 @@
 import type { Player, Settings } from './protocol.js';
 
 export const START_COUNTDOWN_MS = 4000;
+export const NEXT_ROUND_MS = 3000;
 
 export function startCountdownText(remainingMs: number): string {
   return remainingMs > 1000 ? String(Math.ceil(remainingMs / 1000) - 1) : "LET'S GO!";

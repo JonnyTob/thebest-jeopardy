@@ -6,6 +6,7 @@ import path from 'node:path';
 import { JsonQuizSettingsStorage, loadGlobalSettings } from './settings.js';
 import { GameEngine } from './engine.js';
 import { randomUUID } from 'node:crypto';
+import { hostCommandSchema, serverSettingsSchema } from '../shared/protocol.js';
 
 const defaults = {
   leaderboardCount: 8, startPoints: 500, minimumPoints: 100, dropPoints: 100,
@@ -13,17 +14,116 @@ const defaults = {
 };
 const branding = { name: 'Kaboot', logoText: 'K', tagline: 'Buzz in. Get booted.' };
 
+test('countdownSound defaults to a local WAV, accepts null and safe custom WAV paths, and is server-only', () => {
+  const defaultSound = '/media/sounds/countdown-beep.wav';
+  assert.equal(serverSettingsSchema.parse({}).countdownSound, defaultSound);
+  const directory = mkdtempSync(path.join(tmpdir(), 'quiz-sound-settings-'));
+  const file = path.join(directory, 'settings.json');
+  const storage = new JsonQuizSettingsStorage(path.join(directory, 'quizzes'));
+  const config = { branding, server: { port: 3000 }, gameSetup: defaults };
+  try {
+    for (const countdownSound of [null, defaultSound, '/media/custom/my-sound_2.WAV', '/media/beep.wav']) {
+      assert.equal(serverSettingsSchema.parse({ countdownSound }).countdownSound, countdownSound);
+      writeFileSync(file, JSON.stringify({ ...config, server: { ...config.server, countdownSound } }));
+      assert.equal(loadGlobalSettings(file, {}).server.countdownSound, countdownSound);
+    }
+    for (const countdownSound of ['', '/media/sounds/beep.mp3', '/media/sounds/beep.wav?x=1',
+      '/media/sounds/beep.wav#fragment', '/media/../secret.wav', '/media/%2e%2e/secret.wav',
+      '/media/sounds\\beep.wav', '/private/beep.wav', 'media/beep.wav',
+      'https://example.com/media/beep.wav', '//example.com/media/beep.wav', 123, false, {}]) {
+      assert.equal(serverSettingsSchema.safeParse({ countdownSound }).success, false, String(countdownSound));
+      writeFileSync(file, JSON.stringify({ ...config, server: { ...config.server, countdownSound } }));
+      assert.throws(() => loadGlobalSettings(file, {}), /Unable to load global settings/);
+    }
+    for (const invalid of [
+      { ...config, countdownSound: defaultSound },
+      { ...config, gameSetup: { ...defaults, countdownSound: defaultSound } },
+    ]) {
+      writeFileSync(file, JSON.stringify(invalid));
+      assert.throws(() => loadGlobalSettings(file, {}), /Unable to load global settings/);
+    }
+    writeFileSync(file, JSON.stringify(config));
+    assert.equal(loadGlobalSettings(file, {}).server.countdownSound, defaultSound);
+    storage.save(100001, { ...defaults, title: 'Quiz' });
+    for (const invalid of [
+      { gameSetup: { countdownSound: defaultSound } },
+      { gameSetup: {}, server: { countdownSound: defaultSound } },
+      { gameSetup: {}, countdownSound: defaultSound },
+    ]) {
+      writeFileSync(path.join(directory, 'quizzes', '100001.json'), JSON.stringify(invalid));
+      assert.throws(() => storage.load(100001), /Invalid quiz settings/);
+    }
+    const settings = { ...defaults, title: 'Quiz' };
+    const command = hostCommandSchema.parse({ id: randomUUID(), revision: 0,
+      action: { type: 'setup', settings: { ...settings, countdownSound: null } } });
+    if (command.action.type !== 'setup') assert.fail('Expected setup command');
+    assert.deepEqual(command.action.settings, settings);
+  } finally {
+    rmSync(directory, { recursive: true });
+  }
+});
+
+test('TimerEndOffsetSeconds defaults to zero, validates integer seconds and is global-server-only', () => {
+  assert.equal(serverSettingsSchema.parse({}).TimerEndOffsetSeconds, 0);
+  const directory = mkdtempSync(path.join(tmpdir(), 'quiz-timer-settings-'));
+  const file = path.join(directory, 'settings.json');
+  const storage = new JsonQuizSettingsStorage(path.join(directory, 'quizzes'));
+  const config = { branding, server: { port: 3000 }, gameSetup: defaults };
+  try {
+    for (const TimerEndOffsetSeconds of [0, 1, 150, 300]) {
+      assert.equal(serverSettingsSchema.parse({ TimerEndOffsetSeconds }).TimerEndOffsetSeconds, TimerEndOffsetSeconds);
+      writeFileSync(file, JSON.stringify({ ...config, server: { ...config.server, TimerEndOffsetSeconds } }));
+      assert.equal(loadGlobalSettings(file, {}).server.TimerEndOffsetSeconds, TimerEndOffsetSeconds);
+    }
+    for (const TimerEndOffsetSeconds of [-1, 301, 0.5, '1', null, true, NaN, Infinity]) {
+      assert.equal(serverSettingsSchema.safeParse({ TimerEndOffsetSeconds }).success, false);
+      writeFileSync(file, JSON.stringify({ ...config, server: { ...config.server, TimerEndOffsetSeconds } }));
+      assert.throws(() => loadGlobalSettings(file, {}), /Unable to load global settings/);
+    }
+    for (const invalid of [
+      { ...config, TimerEndOffsetSeconds: 10 },
+      { ...config, gameSetup: { ...defaults, TimerEndOffsetSeconds: 10 } },
+      { ...config, server: { ...config.server, timerEndOffsetSeconds: 10 } },
+    ]) {
+      writeFileSync(file, JSON.stringify(invalid));
+      assert.throws(() => loadGlobalSettings(file, {}), /Unable to load global settings/);
+    }
+    const settings = { ...defaults, title: 'Quiz' };
+    storage.save(100001, settings);
+    for (const invalid of [
+      { gameSetup: { TimerEndOffsetSeconds: 10 } },
+      { gameSetup: {}, server: { TimerEndOffsetSeconds: 10 } },
+      { gameSetup: {}, TimerEndOffsetSeconds: 10 },
+    ]) {
+      writeFileSync(path.join(directory, 'quizzes', '100001.json'), JSON.stringify(invalid));
+      assert.throws(() => storage.load(100001), /Invalid quiz settings/);
+    }
+    const command = hostCommandSchema.parse({ id: randomUUID(), revision: 0,
+      action: { type: 'setup', settings: { ...settings, TimerEndOffsetSeconds: 10 } } });
+    assert.equal(command.action.type, 'setup');
+    if (command.action.type !== 'setup') assert.fail('Expected setup command');
+    assert.deepEqual(command.action.settings, settings, 'host setup cannot introduce a server-only setting');
+    storage.save(100001, { ...settings, ...{ TimerEndOffsetSeconds: 10 } });
+    assert.deepEqual(storage.load(100001), settings);
+    assert.deepEqual(JSON.parse(readFileSync(path.join(directory, 'quizzes', '100001.json'), 'utf8')), { gameSetup: settings });
+  } finally {
+    rmSync(directory, { recursive: true });
+  }
+});
+
 test('global sections load defaults, respect environment overrides and reject invalid configuration', () => {
   const directory = mkdtempSync(path.join(tmpdir(), 'quiz-global-settings-'));
   const file = path.join(directory, 'settings.json');
   try {
-    const serverDefaults = { maxPlayerNameLength: 24, requireAdminPasscode: true, maxPlayers: 12 };
+    const serverDefaults = { maxPlayerNameLength: 24, requireAdminPasscode: true, maxPlayers: 12,
+      TimerEndOffsetSeconds: 0, countdownSound: '/media/sounds/countdown-beep.wav' };
     const config = { branding, server: { port: 3000, joinOrigin: 'http://example.com:3000' }, gameSetup: defaults };
     writeFileSync(file, JSON.stringify(config));
     assert.deepEqual(loadGlobalSettings(file, {}), { ...config, server: { ...config.server, ...serverDefaults } });
     assert.deepEqual(loadGlobalSettings(file, { PORT: '4000', JOIN_ORIGIN: 'http://example.com:4000' }).server,
       { port: 4000, joinOrigin: 'http://example.com:4000', ...serverDefaults });
-    const customServer = { ...config.server, maxPlayerNameLength: 32, requireAdminPasscode: false, maxPlayers: 20 };
+    const customServer = { ...config.server, maxPlayerNameLength: 32, requireAdminPasscode: false, maxPlayers: 20,
+      TimerEndOffsetSeconds: 15, countdownSound: '/media/custom/countdown.wav' };
     writeFileSync(file, JSON.stringify({ ...config, server: customServer }));
     assert.deepEqual(loadGlobalSettings(file, {}).server, customServer);
     writeFileSync(file, JSON.stringify(config));

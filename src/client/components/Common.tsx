@@ -51,6 +51,7 @@ export function SessionError() {
 export function buzzerLabel(state: Snapshot): string {
   if (state.phase === 'LOBBY') return 'WAITING TO START';
   if (state.phase === 'STARTING') return 'GET READY';
+  if (state.phase === 'NEXT_ROUND') return 'NEXT ROUND';
   if (state.phase === 'GAME_FINISHED') return 'FINAL SCORES';
   if (state.phase === 'ANSWERING') return 'PLAYER ANSWERING';
   if (state.phase === 'REVIEW') return 'REVIEWING ANSWERS';
@@ -58,6 +59,14 @@ export function buzzerLabel(state: Snapshot): string {
   if (state.paused) return 'HOST PAUSED';
   if (state.phase === 'QUESTION_OPEN') return state.question?.mode === 'typed' ? 'ANSWERS OPEN' : 'BUZZ NOW';
   return 'QUESTION CLOSED';
+}
+
+export function nextRoundCountdownText(remainingMs: number | null): string {
+  return remainingMs !== null && remainingMs > 0 ? String(Math.ceil(remainingMs / 1000)) : "LET'S GO!";
+}
+
+export function typedTimerMs(state: Snapshot): number {
+  return Math.max(0, (state.question?.timerSeconds ?? 0) + (state.serverSettings.TimerEndOffsetSeconds ?? 0)) * 1000;
 }
 
 export function PointBar({ state }: { state: Snapshot }) {

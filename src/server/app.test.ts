@@ -4,10 +4,160 @@ import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { performance } from 'node:perf_hooks';
 import { io, type Socket } from 'socket.io-client';
 import { createApp } from './app.js';
 import { JsonQuizSettingsStorage } from './settings.js';
-import type { ClientEvents, ServerEvents, Snapshot, Result } from '../shared/protocol.js';
+import type { ClientEvents, ServerEvents, Snapshot, Result, HostAction } from '../shared/protocol.js';
+
+test('server interval broadcasts typed auto-close, next-round countdowns and fresh clues without leaking future content', async (t) => {
+  let time = 0;
+  t.mock.method(performance, 'now', () => time);
+  const application = await createApp({
+    storage: { load: async () => ({ id: 100001, title: 'Timed socket quiz', questions: [
+      { id: 'one', type: 'text', mode: 'typed', fixedPoints: 250, timerSeconds: 2,
+        question: 'Current clue', answer: 'CURRENT SECRET' },
+      { id: 'two', type: 'text', mode: 'typed', fixedPoints: 400, timerSeconds: 2,
+        question: 'FUTURE CLUE', answer: 'FUTURE SECRET' },
+    ] }) },
+    passcode: 'test-host-passcode', serveClient: false, serverSettings: { TimerEndOffsetSeconds: 1 },
+  });
+  const sockets: Socket<ServerEvents, ClientEvents>[] = [];
+  const publicStates: Snapshot[] = [];
+  function waitFor(socket: Socket<ServerEvents, ClientEvents>, predicate: (state: Snapshot) => boolean) {
+    return new Promise<Snapshot>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        socket.off('session:snapshot', listener);
+        reject(new Error('Timed out waiting for expected snapshot'));
+      }, 5000);
+      function listener(state: Snapshot) {
+        if (!predicate(state)) return;
+        clearTimeout(timeout);
+        socket.off('session:snapshot', listener);
+        resolve(state);
+      }
+      socket.on('session:snapshot', listener);
+    });
+  }
+  try {
+    await new Promise<void>((resolve) => application.httpServer.listen(0, '127.0.0.1', resolve));
+    const address = application.httpServer.address();
+    assert.ok(address && typeof address !== 'string');
+    const connect = async (auth: Record<string, string>) => {
+      const socket: Socket<ServerEvents, ClientEvents> = io(`http://127.0.0.1:${address.port}`,
+        { auth, autoConnect: false, reconnection: false });
+      sockets.push(socket);
+      if (auth.role !== 'host') socket.on('session:snapshot', (state) => publicStates.push(state));
+      const initial = waitFor(socket, () => true);
+      socket.connect();
+      return { socket, state: await initial };
+    };
+    const { socket: host } = await connect({ role: 'host', passcode: 'test-host-passcode' });
+    const { socket: display } = await connect({ role: 'display' });
+    const { socket: player } = await connect({ role: 'player' });
+    const joined = await player.timeout(5000).emitWithAck('player:join', { name: 'Alice', avatarId: 'fox' });
+    assert.ok(joined.ok);
+    const send = async (action: HostAction) => {
+      const result = await host.timeout(5000).emitWithAck('host:command', {
+        id: randomUUID(), revision: application.engine.revision, action,
+      });
+      assert.ok(result.ok, JSON.stringify(result));
+    };
+    await send({ type: 'start' });
+    assert.equal(application.engine.snapshot().startCountdownMs, 4000);
+    const startId = application.engine.snapshot().countdownId;
+    assert.ok(startId);
+    const startingReconnect = await connect({ role: 'player', token: joined.data.token });
+    assert.equal(startingReconnect.state.phase, 'STARTING');
+    assert.equal(startingReconnect.state.countdownId, startId);
+    assert.equal((await connect({ role: 'display' })).state.countdownId, startId);
+    const opened = waitFor(player, (state) => state.phase === 'QUESTION_OPEN');
+    time = 4000;
+    const first = await opened;
+    assert.equal(first.countdownId, null);
+    assert.equal(first.clueElapsedMs, 0);
+    assert.equal(first.serverSettings.TimerEndOffsetSeconds, 1);
+    const submitted = await player.timeout(5000).emitWithAck('player:submitAnswer', {
+      questionInstanceId: first.questionInstanceId!, answer: 'PRIVATE GUESS',
+    });
+    assert.ok(submitted.ok);
+    const beforeDeadline = waitFor(display, (state) => state.clueElapsedMs === 2999);
+    time = 6999;
+    assert.equal((await beforeDeadline).phase, 'QUESTION_OPEN');
+    const closed = waitFor(display, (state) => state.phase === 'QUESTION_CLOSED');
+    time = 7000;
+    assert.equal((await closed).clueElapsedMs, 3000);
+    await send({ type: 'judgeSubmission', playerId: joined.data.playerId, correct: true });
+    assert.equal(application.engine.snapshot().phase, 'NEXT_ROUND');
+    const nextId = application.engine.snapshot().countdownId;
+    assert.ok(nextId);
+    assert.notEqual(nextId, startId);
+    const reconnect = await connect({ role: 'player', token: joined.data.token });
+    assert.equal(reconnect.state.phase, 'NEXT_ROUND');
+    assert.equal(reconnect.state.countdownId, nextId);
+    assert.equal(reconnect.state.nextRoundCountdownMs, 3000);
+    assert.equal(reconnect.state.mySubmitted, true);
+    assert.equal(reconnect.state.review, null);
+    const revision = application.engine.revision;
+    const countdown = waitFor(display, (state) => state.nextRoundCountdownMs === 2000);
+    time = 8000;
+    const countdownState = await countdown;
+    assert.equal(countdownState.revision, revision, 'countdowns broadcast even without revision changes');
+    assert.equal(countdownState.countdownId, nextId);
+    const undone = waitFor(display, (state) => state.phase === 'QUESTION_CLOSED');
+    await send({ type: 'undo' });
+    const undoneState = await undone;
+    assert.equal(undoneState.nextRoundCountdownMs, null);
+    assert.equal(undoneState.countdownId, null);
+    time = 11000;
+    const afterUndo = await connect({ role: 'display' });
+    assert.equal(afterUndo.state.phase, 'QUESTION_CLOSED');
+    assert.equal(afterUndo.state.players[0].score, 0);
+    await send({ type: 'judgeSubmission', playerId: joined.data.playerId, correct: true });
+    const rearmedId = application.engine.snapshot().countdownId;
+    assert.ok(rearmedId);
+    assert.notEqual(rearmedId, nextId);
+    assert.notEqual(rearmedId, startId);
+    const lastMillisecond = waitFor(display, (state) => state.nextRoundCountdownMs === 1);
+    time = 13999;
+    const transition = await lastMillisecond;
+    assert.equal(transition.countdownId, rearmedId);
+    assert.equal(transition.questionInstanceId, first.questionInstanceId);
+    for (const state of publicStates) {
+      assert.equal(state.hostSubmissions, undefined);
+      assert.equal(state.privateAnswer, undefined);
+      assert.doesNotMatch(JSON.stringify(state), /PRIVATE GUESS|CURRENT SECRET|FUTURE/);
+    }
+    const next = waitFor(player, (state) => state.phase === 'QUESTION_OPEN' && state.questionIndex === 1);
+    time = 14000;
+    const second = await next;
+    assert.equal(second.question?.question, 'FUTURE CLUE');
+    assert.notEqual(second.questionInstanceId, first.questionInstanceId);
+    assert.equal(second.clueElapsedMs, 0);
+    assert.equal(second.nextRoundCountdownMs, null);
+    assert.equal(second.countdownId, null);
+    assert.equal(second.mySubmitted, false);
+    const stale = await player.timeout(5000).emitWithAck('player:submitAnswer', {
+      questionInstanceId: first.questionInstanceId!, answer: 'Old answer',
+    });
+    assert.equal(stale.ok, false);
+    if (!stale.ok) assert.match(stale.error, /changed/);
+    const lastClosed = waitFor(display, (state) => state.phase === 'QUESTION_CLOSED' && state.questionIndex === 1);
+    time = 17000;
+    await lastClosed;
+    await send({ type: 'startReview' });
+    const finished = waitFor(display, (state) => state.phase === 'GAME_FINISHED');
+    await send({ type: 'judgeReview', correct: false });
+    const final = await finished;
+    assert.equal(final.nextRoundCountdownMs, null);
+    assert.equal(final.players[0].score, 250);
+    assert.equal(final.questionIndex, 1);
+    for (const state of publicStates) assert.doesNotMatch(JSON.stringify(state), /PRIVATE GUESS|CURRENT SECRET|FUTURE SECRET/);
+  } finally {
+    for (const socket of sockets) socket.disconnect();
+    await application.close();
+  }
+});
 
 test('server nickname and player limits are advertised and enforced, including reconnects and removal', async () => {
   const application = await createApp({
@@ -33,7 +183,8 @@ test('server nickname and player limits are advertised and enforced, including r
       return socket;
     };
     const info = await (await fetch(`${url}/api/info`)).json();
-    assert.deepEqual(info.serverSettings, { maxPlayerNameLength: 32, maxPlayers: 1, requireAdminPasscode: true });
+    assert.deepEqual(info.serverSettings, { maxPlayerNameLength: 32, maxPlayers: 1, requireAdminPasscode: true,
+      TimerEndOffsetSeconds: 0, countdownSound: '/media/sounds/countdown-beep.wav' });
     assert.deepEqual(application.engine.snapshot().serverSettings, info.serverSettings);
     const host = await connect({ role: 'host', passcode: 'test-host-passcode' });
     const alice = await connect({ role: 'player' });
@@ -133,6 +284,7 @@ test('global defaults and per-quiz overrides reach the host, save through socket
       questions: [{ id: 'one', type: 'text', question: 'Clue', answer: 'Answer' }] }) },
     passcode: 'test-host-passcode', serveClient: false, settingsStorage,
     gameSetup: { title: 'Global title', startPoints: 700, lockoutSeconds: 20 },
+    serverSettings: { TimerEndOffsetSeconds: 7 },
   };
   try {
     writeFileSync(path.join(directory, '100001.json'), '{"gameSetup":{"title":"Quiz title","lockoutSeconds":10}}');
@@ -155,11 +307,17 @@ test('global defaults and per-quiz overrides reach the host, save through socket
         socket.connect();
       });
       assert.deepEqual(snapshot.settings, application.engine.settings);
+      assert.equal(snapshot.serverSettings.TimerEndOffsetSeconds, 7);
+      const info = await (await fetch(`http://127.0.0.1:${address.port}/api/info`)).json();
+      assert.equal(info.serverSettings.TimerEndOffsetSeconds, 7);
       const saved = { ...snapshot.settings, title: 'Persisted title', lockoutSeconds: 15 };
       const result = await socket.timeout(5000).emitWithAck('host:command', {
-        id: randomUUID(), revision: snapshot.revision, action: { type: 'setup', settings: saved },
+        id: randomUUID(), revision: snapshot.revision,
+        action: { type: 'setup', settings: { ...saved, ...{ TimerEndOffsetSeconds: 300 } } },
       });
       assert.ok(result.ok);
+      assert.equal(application.engine.snapshot().serverSettings.TimerEndOffsetSeconds, 7);
+      assert.deepEqual(application.engine.settings, saved);
       assert.deepEqual(JSON.parse(readFileSync(path.join(directory, '100001.json'), 'utf8')), { gameSetup: saved });
       assert.deepEqual(settingsStorage.load(100002), {});
     } finally {
@@ -171,6 +329,7 @@ test('global defaults and per-quiz overrides reach the host, save through socket
       assert.equal(restarted.engine.settings.title, 'Persisted title');
       assert.equal(restarted.engine.settings.lockoutSeconds, 15);
       assert.equal(restarted.engine.settings.startPoints, 700);
+      assert.equal(restarted.engine.snapshot().serverSettings.TimerEndOffsetSeconds, 7);
     } finally {
       await restarted.close();
     }
@@ -356,6 +515,15 @@ test('development serves all pages, modules and public media without exposing se
       assert.equal(response.status, 200, route);
       await response.text();
     }
+    const soundPath = application.engine.snapshot().serverSettings.countdownSound;
+    assert.equal(soundPath, '/media/sounds/countdown-beep.wav');
+    const sound = await fetch(base + soundPath);
+    assert.equal(sound.status, 200);
+    assert.match(sound.headers.get('content-type') ?? '', /audio\/(wav|wave|x-wav)/i);
+    const bytes = Buffer.from(await sound.arrayBuffer());
+    assert.deepEqual(bytes, readFileSync(path.resolve('src/public', soundPath.slice(1))));
+    assert.equal(bytes.toString('ascii', 0, 4), 'RIFF');
+    assert.equal(bytes.toString('ascii', 8, 12), 'WAVE');
     for (const file of ['src/data/questions.json', 'settings.json']) {
       const response = await fetch(`${base}/@fs${path.resolve(file)}`);
       assert.equal(response.status, 403);

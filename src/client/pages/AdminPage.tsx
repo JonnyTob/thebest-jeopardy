@@ -1,8 +1,8 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { rankPlayers, startCountdownText } from '../../shared/game';
 import { serverSettingsSchema, settingsSchema, type Player, type Settings, type Snapshot } from '../../shared/protocol';
-import { SessionProvider, useSession } from '../session';
-import { Avatar, Brand, Connection, JoinLink, PointBar, QuizName, SessionError, buzzerLabel } from '../components/Common';
+import { SessionProvider, useAnimatedState, useSession } from '../session';
+import { Avatar, Brand, Connection, JoinLink, PointBar, QuizName, SessionError, buzzerLabel, nextRoundCountdownText, typedTimerMs } from '../components/Common';
 import { Media } from '../components/Media';
 
 const passcodeKey = 'quiz-night-host-passcode';
@@ -47,7 +47,8 @@ export function AdminPage() {
 }
 
 function AdminConsole({ logout, requirePasscode }: { logout: () => void; requirePasscode: boolean }) {
-  const { state, connected, command, pending } = useSession();
+  const { connected, command, pending } = useSession();
+  const state = useAnimatedState();
   const [tab, setTab] = useState<'live' | 'setup'>('live');
   const [confirm, setConfirm] = useState(false);
   const [fastApproval, setFastApproval] = useState(false);
@@ -57,7 +58,8 @@ function AdminConsole({ logout, requirePasscode }: { logout: () => void; require
   const closed = state?.phase === 'QUESTION_CLOSED' || state?.phase === 'ANSWER_REVEALED';
   const typed = state?.question?.mode === 'typed';
   const readyForNext = state?.phase === 'REVIEW_COMPLETE' || (closed && (!typed || state?.phase === 'ANSWER_REVEALED'));
-  const disabled = !connected || pending || state?.phase === 'STARTING';
+  const undoDisabled = !connected || pending || state?.phase === 'STARTING';
+  const disabled = undoDisabled || state?.phase === 'NEXT_ROUND';
   return <main className="admin-shell">
     <header className="admin-header"><Brand subtitle="Private host console" />
       <nav aria-label="Host sections"><button className={tab === 'live' ? 'active' : ''} onClick={() => setTab('live')}>Live game</button>
@@ -72,6 +74,7 @@ function AdminConsole({ logout, requirePasscode }: { logout: () => void; require
         <section className="panel game-heading"><div><span className="eyebrow">{state.phase === 'LOBBY' ? "LET'S GET EVERYONE IN" : 'YOU CALL THE SHOTS'}</span>
           <h1><QuizName title={state.settings.title} id={state.quizId} /></h1><p>{state.phase === 'LOBBY' ? 'Lobby open / waiting for players' :
             state.phase === 'STARTING' ? 'Starting game / first question opens after the countdown' :
+            state.phase === 'NEXT_ROUND' ? 'Next round / answering opens after the countdown' :
             state.phase === 'GAME_FINISHED' ? 'Game finished / final standings' :
               `Question ${state.questionIndex + 1} of ${state.questionCount} / ${buzzerLabel(state).toLowerCase()}`}</p></div>
           <div className={`phase-pill ${answering ? 'amber' : ''}`}>{state.phase.replaceAll('_', ' ')}</div></section>
@@ -82,12 +85,17 @@ function AdminConsole({ logout, requirePasscode }: { logout: () => void; require
             <h2>{startCountdownText(state.startCountdownMs ?? 0)}</h2>
             <p>Watch the TV. The first question, media and answering open after the four-second countdown.</p>
           </section>
+          : state.phase === 'NEXT_ROUND' ? <section className="panel" role="status" aria-live="polite" aria-atomic="true">
+            <span className="eyebrow">NEXT ROUND</span>
+            <h2>{nextRoundCountdownText(state.nextRoundCountdownMs)}</h2>
+            <p>{connected ? 'The next question opens automatically after this three-second countdown.' : 'Connection lost. Waiting to reconnect...'}</p>
+          </section>
           : state.phase === 'GAME_FINISHED' ? <section className="panel"><h2>Final standings</h2><p>Scores are still adjustable below. Restart the server for a new session.</p></section>
             : <div className="admin-game-grid">
               <section className="panel admin-question"><span className="eyebrow">CURRENT QUESTION / {state.question?.type.toUpperCase()} / {typed ? 'EVERYONE ANSWERS' : 'BUZZER'}</span>
                 <h2>{state.question?.question}</h2><div className="admin-media"><Media state={state} preview /></div>
                 <div className="private-answer"><span className="eyebrow">PRIVATE ANSWER / HOST ONLY</span><strong>{state.privateAnswer}</strong></div>
-                {typed ? <p>{state.question?.fixedPoints} fixed points / timer: {Math.max(0, Math.ceil(((state.question?.timerSeconds ?? 0) * 1000 - state.clueElapsedMs) / 1000))}s / host closes submissions</p> : <PointBar state={state} />}</section>
+                {typed ? <p>{state.question?.fixedPoints} fixed points / time remaining: {Math.max(0, Math.ceil((typedTimerMs(state) - state.clueElapsedMs) / 1000))}s</p> : <PointBar state={state} />}</section>
               <section className="panel game-actions"><span className="eyebrow">GAME ACTIONS</span>
                 {typed ? <>
                   <h2>{buzzerLabel(state)}</h2>
@@ -106,7 +114,7 @@ function AdminConsole({ logout, requirePasscode }: { logout: () => void; require
                   <button disabled={disabled || !(isOpen || state.phase === 'QUESTION_CLOSED')}
                     onClick={() => { void command({ type: 'startReview' }); }}>
                     {isOpen ? 'Close submissions & start review' : 'Start answer review'}</button>
-                  {isOpen && <p className="muted">The timer is a guide. Starting review closes submissions immediately.</p>}
+                  {isOpen && <p className="muted">Submissions close automatically when time runs out. Starting review closes them immediately.</p>}
                 </> : <>
                 {active ? <div className="host-answering"><Avatar id={active.avatarId} /><div><h2>{active.name}</h2>
                   <p>{state.pointsAtBuzz} frozen points / answering aloud</p></div></div> : <h2>{buzzerLabel(state)}</h2>}
@@ -124,7 +132,7 @@ function AdminConsole({ logout, requirePasscode }: { logout: () => void; require
                 <button className="primary" disabled={disabled || !readyForNext} onClick={() => { void command({ type: 'next' }); }}>
                   {state.questionIndex === state.questionCount - 1 ? 'Finish quiz' : 'Next question'} &rarr;</button>
                 <div className="action-divider" />
-                <button disabled={disabled || !state.canUndo} onClick={() => { void command({ type: 'undo' }); }}>Undo last score change</button>
+                <button disabled={undoDisabled || !state.canUndo} onClick={() => { void command({ type: 'undo' }); }}>Undo last score change</button>
                 {confirm ? <div className="notice"><p>Reopen this clue and clear lockouts and typed answers? Existing scores stay unchanged.</p>
                   <button className="danger" disabled={disabled} onClick={() => { void command({ type: 'reset' }).then((ok) => { if (ok) setConfirm(false); }); }}>Confirm reset</button>
                   <button className="quiet" onClick={() => setConfirm(false)}>Cancel</button></div>
@@ -153,7 +161,7 @@ function AdminConsole({ logout, requirePasscode }: { logout: () => void; require
             </div></div>
           </li>)}</ol> : <p>No answers submitted yet.</p>}</section>}
         <div className="admin-bottom-grid"><PlayerTable state={state} /><section className="panel game-log"><span className="eyebrow">SCORE LOG</span><h2>The night's numbers</h2>
-          <button disabled={disabled || !state.canUndo} onClick={() => { void command({ type: 'undo' }); }}>Undo last score change</button>
+          <button disabled={undoDisabled || !state.canUndo} onClick={() => { void command({ type: 'undo' }); }}>Undo last score change</button>
           {state.scoreEvents.length ? <ol>{state.scoreEvents.map((event) => <li key={event.id}><span>{event.description}</span>
             <strong className={event.delta < 0 ? 'negative' : 'positive'}>{event.delta > 0 ? '+' : ''}{event.delta}</strong></li>)}</ol>
             : <p className="muted">No score changes yet. All rulings and manual adjustments appear here.</p>}</section></div>
@@ -172,7 +180,7 @@ function PlayerTable({ state }: { state: Snapshot }) {
     if (sort === 'connection') return Number(b.connected) - Number(a.connected) || a.joinedOrder - b.joinedOrder;
     return 0;
   });
-  const activeClue = state.phase === 'STARTING' || state.phase === 'QUESTION_OPEN' || state.phase === 'ANSWERING' || state.phase === 'REVIEW'
+  const activeClue = state.phase === 'STARTING' || state.phase === 'NEXT_ROUND' || state.phase === 'QUESTION_OPEN' || state.phase === 'ANSWERING' || state.phase === 'REVIEW'
     || (state.phase === 'QUESTION_CLOSED' && state.question?.mode === 'typed');
   return <section className="panel players-panel"><div className="table-heading"><h2>Players <span className="count-badge">{state.players.length}</span></h2>
     <input aria-label="Search players" placeholder="Search players" value={search} onChange={(event) => setSearch(event.target.value)} />
@@ -199,12 +207,14 @@ function PlayerTable({ state }: { state: Snapshot }) {
 function ScoreAdjustment({ player }: { player: Player }) {
   const { command, pending, connected, state } = useSession();
   const [delta, setDelta] = useState('');
+  const disabled = pending || !connected || state?.phase === 'STARTING' || state?.phase === 'NEXT_ROUND';
   return <form className="score-adjust" onSubmit={(event) => {
     event.preventDefault();
+    if (disabled) return;
     void command({ type: 'adjust', playerId: player.id, delta: Number(delta) }).then((ok) => { if (ok) setDelta(''); });
-  }}><input type="number" step="1" min="-100000" max="100000" required placeholder="+/-"
+  }}><input type="number" step="1" min="-100000" max="100000" required placeholder="+/-" disabled={disabled}
     aria-label={`Adjust ${player.name}'s score`} value={delta} onChange={(event) => setDelta(event.target.value)} />
-    <button className="small" disabled={pending || !connected || state?.phase === 'STARTING' || !delta || Number(delta) === 0}>Apply</button></form>;
+    <button className="small" disabled={disabled || !delta || Number(delta) === 0}>Apply</button></form>;
 }
 
 function Setup({ state }: { state: Snapshot }) {

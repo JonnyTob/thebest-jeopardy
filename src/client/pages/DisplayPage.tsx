@@ -1,12 +1,13 @@
 import { useAnimatedState, useSession } from '../session';
-import { Avatar, Brand, Connection, JoinLink, PointBar, QuizName, SessionError, buzzerLabel } from '../components/Common';
+import { Avatar, Brand, Connection, JoinLink, PointBar, QuizName, SessionError, buzzerLabel, nextRoundCountdownText, typedTimerMs } from '../components/Common';
 import { Media } from '../components/Media';
 import { QuizCover } from '../components/QuizCover';
+import { CountdownSound } from '../components/CountdownSound';
 import { branding } from '../branding';
 import { startCountdownText } from '../../shared/game';
 
 export function DisplayPage() {
-  const { connected } = useSession();
+  const { connected, receivedAt } = useSession();
   const state = useAnimatedState();
   if (!state) return <main className="loading-screen"><Brand /><h1>Connecting to the show...</h1><SessionError /></main>;
   const active = state.players.find((p) => p.id === state.activePlayerId);
@@ -14,19 +15,25 @@ export function DisplayPage() {
     .flatMap((id) => state.players.find((p) => p.id === id) ?? []);
   const lobby = state.phase === 'LOBBY';
   const starting = state.phase === 'STARTING';
+  const nextRound = state.phase === 'NEXT_ROUND';
   const preGame = lobby || starting;
-  const countdownText = startCountdownText(state.startCountdownMs ?? 0);
+  const countdownText = nextRound ? nextRoundCountdownText(state.nextRoundCountdownMs) : startCountdownText(state.startCountdownMs ?? 0);
   const finished = state.phase === 'GAME_FINISHED';
   const open = state.phase === 'QUESTION_OPEN' && !state.paused && connected;
   const winner = finished ? players[0] : null;
   const typed = state.question?.mode === 'typed';
   const reviewedPlayer = state.players.find((player) => player.id === state.review?.playerId);
-  const timerMs = (state.question?.timerSeconds ?? 0) * 1000;
+  const timerMs = typedTimerMs(state);
   const remainingMs = Math.max(0, timerMs - state.clueElapsedMs);
   const remainingSeconds = Math.ceil(remainingMs / 1000);
   const remainingPercent = timerMs > 0 ? Math.min(100, remainingMs / timerMs * 100) : 0;
 
   return <main className="tv-shell">
+    <CountdownSound sound={state.serverSettings.countdownSound}
+      id={state.countdownId}
+      phase={starting ? 'STARTING' : nextRound ? 'NEXT_ROUND' : null}
+      remaining={starting ? state.startCountdownMs : nextRound ? state.nextRoundCountdownMs : null}
+      connected={connected} receivedAt={receivedAt} />
     <header className="tv-header"><Brand /><QuizName title={state.settings.title} id={state.quizId} />
       <span className="question-counter">{lobby ? 'WELCOME TO THE SHOW' : starting ? 'GET READY' : finished ? 'THAT IS A WRAP' :
         `QUESTION ${String(state.questionIndex + 1).padStart(2, '0')} / ${state.questionCount}`}</span></header>
@@ -58,7 +65,7 @@ export function DisplayPage() {
                   <div style={{ width: `${remainingPercent}%` }} />
                 </div>
                 <div className="point-meta"><strong>{state.question?.fixedPoints} fixed points</strong>
-                  <span>{state.clockRunning ? 'Clock running' : 'Clock frozen'} / host closes submissions</span></div>
+                  <span>{state.clockRunning ? 'Clock running' : 'Clock frozen'}</span></div>
                 </div>
                 : <PointBar state={state} />}
             </>}
@@ -87,10 +94,10 @@ export function DisplayPage() {
       </div>
     </section>
     <div className="sr-only"><Connection connected={connected} /></div>
-    {starting && <div className="game-start-overlay">
+    {(starting || nextRound) && <div className="game-start-overlay">
       <div className="game-start-ring" aria-hidden="true" />
       <div className="game-start-content">
-        <span className="eyebrow">THE GAME IS ABOUT TO BEGIN</span>
+        <span className="eyebrow">{nextRound ? 'NEXT ROUND' : 'THE GAME IS ABOUT TO BEGIN'}</span>
         <div role="status" aria-live="polite" aria-atomic="true">
           <strong key={countdownText} className={`game-start-number ${countdownText === "LET'S GO!" ? 'game-start-go' : ''}`}>
             {countdownText}
