@@ -1,6 +1,6 @@
-import type { Snapshot } from '../../shared/protocol';
+import type { Player, ReviewGroup, Snapshot } from '../../shared/protocol';
 import { useRef, type CSSProperties } from 'react';
-import { REVIEW_RESULT_MS } from '../../shared/game';
+import { REVIEW_GROUP_MS, REVIEW_RESULT_MS } from '../../shared/game';
 import { Avatar, PointBar, typedTimerMs } from './Common';
 import { Media } from './Media';
 
@@ -22,6 +22,8 @@ export function QuestionClue({ state }: { state: Snapshot }) {
       {state.phase === 'REVIEW' && state.reviewResultId && state.review?.correct !== null && state.review?.correct !== undefined
         && <ReviewResultAnimation key={state.reviewResultId} correct={state.review.correct} remaining={state.reviewRemainingMs} />}
       {buzzResult && <ReviewResultAnimation key={buzzResult.id} correct={buzzResult.correct} remaining={buzzResult.remainingMs} />}
+      {state.phase === 'REVIEW_GROUP' && state.reviewGroup && <ReviewGroupOverlay key={state.reviewGroup.id}
+        group={state.reviewGroup} players={state.players} />}
       {state.phase === 'REVIEW' && state.review && <section className="review-overlay" aria-label="Current answer review" aria-live="polite" aria-atomic="true">
         <span className="eyebrow">ANSWER {state.reviewIndex + 1} / {state.reviewCount}</span>
         {reviewedPlayer && <div className="review-player"><Avatar id={reviewedPlayer.avatarId} /><h2>{reviewedPlayer.name}</h2></div>}
@@ -52,6 +54,24 @@ export function QuestionClue({ state }: { state: Snapshot }) {
         <span>{state.clockRunning ? 'Clock running' : 'Clock frozen'}</span></div>
     </div> : <PointBar state={state} />}
   </>;
+}
+
+function ReviewGroupOverlay({ group, players }: { group: ReviewGroup; players: Player[] }) {
+  // Keep the original offset across snapshots, including late reconnects.
+  const delay = useRef(-Math.max(0, Math.min(REVIEW_GROUP_MS, REVIEW_GROUP_MS - group.remainingMs)));
+  const correct = group.outcome === 'correct';
+  const members = group.playerIds.flatMap((id) => players.find((player) => player.id === id) ?? []);
+  return <section className={`review-group review-group-${group.outcome}`} aria-label="Grouped answer results"
+    aria-live="polite" aria-atomic="true" style={{ animationDelay: `${delay.current}ms` }}>
+    <header className="review-group-heading"><span className="eyebrow">FAST APPROVAL / GROUP RESULT</span>
+      <h2>{correct ? 'Correct answers' : 'Wrong or missing answers'}</h2></header>
+    <ul className="review-group-grid" tabIndex={0} aria-label="Players in this group">
+      {members.map((player) => <li key={player.id} className="review-group-player">
+        <Avatar id={player.avatarId} /><strong>{player.name}</strong>
+        <span className={correct ? 'positive' : 'negative'}>+{(correct ? group.points : 0).toLocaleString()}</span>
+      </li>)}
+    </ul>
+  </section>;
 }
 
 function ReviewResultAnimation({ correct, remaining }: { correct: boolean; remaining: number | null }) {

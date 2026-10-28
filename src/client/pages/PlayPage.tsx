@@ -87,7 +87,7 @@ export function PlayPage() {
 }
 
 function TypedAnswer({ state }: { state: Snapshot }) {
-  const { connected, pending, submitAnswer } = useSession();
+  const { connected, pending, submitAnswer, playerId } = useSession();
   const [answer, setAnswer] = useState('');
   const open = state.phase === 'QUESTION_OPEN' && !state.paused;
   const remaining = Math.max(0, Math.ceil((typedTimerMs(state) - state.clueElapsedMs) / 1000));
@@ -99,6 +99,21 @@ function TypedAnswer({ state }: { state: Snapshot }) {
     <span className="eyebrow">GET READY</span>
     <h2 role="status">{connected ? `Next round: ${nextRoundCountdownText(state.nextRoundCountdownMs)}` : 'Reconnecting'}</h2>
     <p>{connected ? 'Watch the TV. Answering opens when the next question appears.' : 'Waiting to reconnect. Your score is saved on the server.'}</p>
+  </section>;
+  if (state.phase === 'REVIEW_GROUP' && state.reviewGroup) {
+    const group = state.reviewGroup;
+    const included = !!playerId && group.playerIds.includes(playerId);
+    return <section className="panel typed-answer"><span className="eyebrow">FAST APPROVAL / GROUP RESULT</span>
+      <h2 role="status">{connected ? 'Group results on TV' : 'Reconnecting'}</h2>
+      <p>{!connected ? 'Waiting to reconnect. Your score is saved on the server.' : included
+        ? `${group.outcome === 'correct' ? 'Correct' : 'Wrong or missing'} / +${group.outcome === 'correct' ? group.points : 0} points. Watch the TV.`
+        : 'Watch the TV as previously judged answers are shown in groups.'}</p>
+    </section>;
+  }
+  if (state.phase === 'REVIEW') return <section className="panel typed-answer">
+    <span className="eyebrow">ANSWER REVIEW</span>
+    <h2 role="status">{connected ? 'Reviewing answers on TV' : 'Reconnecting'}</h2>
+    <p>{connected ? 'Submissions are closed. Watch the TV for the current answer.' : 'Waiting to reconnect. Your score is saved on the server.'}</p>
   </section>;
   return <section className="panel typed-answer"><span className="eyebrow">EVERYONE ANSWERS / {state.question?.fixedPoints} POINTS</span>
     <h2>{state.mySubmitted ? 'Answer submitted' : open ? 'Your answer' : state.paused ? 'Host paused' : 'Submissions closed'}</h2>

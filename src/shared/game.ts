@@ -3,6 +3,7 @@ import type { Player, Settings } from './protocol.js';
 export const START_COUNTDOWN_MS = 4000;
 export const NEXT_ROUND_MS = 3000;
 export const REVIEW_RESULT_MS = 2000;
+export const REVIEW_GROUP_MS = 4000;
 export const BUZZ_RESULT_MS = 2000;
 
 export function startCountdownText(remainingMs: number): string {

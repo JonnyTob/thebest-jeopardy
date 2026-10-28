@@ -117,6 +117,10 @@ export function AdminConsole({ logout, requirePasscode, development }: { logout:
                     : `Advancing automatically when the clue finishes (${Math.ceil((state.mediaFinishRemainingMs ?? 0) / 1000)}s remaining).`}</p></div>}
                 {typed ? <>
                   <h2>{buzzerLabel(state)}</h2>
+                  {state.phase === 'REVIEW_GROUP' && state.reviewGroup && <div className="notice" role="status">
+                    <strong>{state.reviewGroup.outcome === 'correct' ? 'Correct' : 'Wrong or missing'} group on TV</strong>
+                    <p>{connected ? 'Advancing automatically to the next review.' : 'Connection lost. Waiting to reconnect...'}</p>
+                  </div>}
                   {state.phase === 'REVIEW' && state.review && <div className="notice">
                     <strong>{state.players.find((player) => player.id === state.review?.playerId)?.name}</strong>
                     <p>{state.review.answer ?? 'No answer'}</p>
@@ -163,9 +167,9 @@ export function AdminConsole({ logout, requirePasscode, development }: { logout:
           <div className="typed-answers-heading"><h2>Typed answers ({state.submissionCount} submitted)</h2>
             <label className="fast-approval-toggle"><input type="checkbox" checked={fastApproval}
               onChange={(event) => setFastApproval(event.target.checked)} />Fast approval</label></div>
-          {fastApproval && isOpen && <p className="muted">Mark submitted answers here privately while others keep answering. TV review skips answers already judged.</p>}
+          {fastApproval && <p className="muted">Mark answers here privately while submissions are open or closed. Review starts automatically once submissions are closed and all answers are judged, or when you start it. The TV shows previously judged players in groups: correct first, then wrong or missing, each for four seconds without their answers. Unjudged answers follow individually.</p>}
           {state.phase === 'QUESTION_CLOSED' && <p>{state.hostSubmissions?.filter((entry) => entry.correct === null).length ?? 0} awaiting review.
-            {' '}Start answer review to show only those answers, or complete review if all are judged.</p>}
+            {' '}Start answer review to show judged groups first, then review remaining answers individually.</p>}
           {state.hostSubmissions?.length ? <ol className="host-submissions">{state.hostSubmissions.map((entry) => <li key={entry.playerId}>
             <div className="submission-row">
               <strong className="submission-player">Player: {state.players.find((player) => player.id === entry.playerId)?.name ?? 'Unknown player'}</strong>
@@ -200,7 +204,7 @@ function PlayerTable({ state }: { state: Snapshot }) {
     if (sort === 'connection') return Number(b.connected) - Number(a.connected) || a.joinedOrder - b.joinedOrder;
     return 0;
   });
-  const activeClue = state.phase === 'STARTING' || state.phase === 'NEXT_ROUND' || state.phase === 'QUESTION_OPEN' || state.phase === 'ANSWERING' || state.phase === 'BUZZ_RESULT' || state.phase === 'MEDIA_FINISH' || state.phase === 'REVIEW'
+  const activeClue = state.phase === 'STARTING' || state.phase === 'NEXT_ROUND' || state.phase === 'QUESTION_OPEN' || state.phase === 'ANSWERING' || state.phase === 'BUZZ_RESULT' || state.phase === 'MEDIA_FINISH' || state.phase === 'REVIEW' || state.phase === 'REVIEW_GROUP'
     || (state.phase === 'QUESTION_CLOSED' && state.question?.mode === 'typed');
   return <section className="panel players-panel"><div className="table-heading"><h2>Players <span className="count-badge">{state.players.length}</span></h2>
     <input aria-label="Search players" placeholder="Search players" value={search} onChange={(event) => setSearch(event.target.value)} />
@@ -227,7 +231,7 @@ function PlayerTable({ state }: { state: Snapshot }) {
 function ScoreAdjustment({ player }: { player: Player }) {
   const { command, pending, connected, state } = useSession();
   const [delta, setDelta] = useState('');
-  const disabled = pending || !connected || state?.phase === 'STARTING' || state?.phase === 'NEXT_ROUND' || state?.phase === 'BUZZ_RESULT' || state?.phase === 'MEDIA_FINISH' || state?.reviewResultId != null;
+  const disabled = pending || !connected || state?.phase === 'STARTING' || state?.phase === 'NEXT_ROUND' || state?.phase === 'BUZZ_RESULT' || state?.phase === 'MEDIA_FINISH' || state?.phase === 'REVIEW_GROUP' || state?.reviewResultId != null;
   return <form className="score-adjust" onSubmit={(event) => {
     event.preventDefault();
     if (disabled) return;

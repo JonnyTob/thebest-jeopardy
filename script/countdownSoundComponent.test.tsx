@@ -154,3 +154,33 @@ test('no audio enable button is shown when all three sounds are disabled', async
   assert.equal(view.root.findAllByType('button').length, 0);
   await act(async () => { view.unmount(); });
 });
+
+test('four-second group sounds play once per fresh group, not on late or reconnected snapshots', async () => {
+  const audio = makeAudio();
+  let view!: ReactTestRenderer;
+  await act(async () => { view = create(createElement(CountdownSound, base), { createNodeMock: () => audio }); });
+  await act(async () => { view.root.findByType('button').props.onClick(); });
+  const group = { ...base, reviewHoldMs: 4000, reviewResultId: 'group-one', reviewRemainingMs: 4000, reviewCorrect: true };
+  await act(async () => { view.update(createElement(CountdownSound, group)); });
+  assert.equal(audio.plays, 2);
+  await act(async () => { view.update(createElement(CountdownSound, { ...group, receivedAt: 2, reviewRemainingMs: 3800 })); });
+  assert.equal(audio.plays, 2);
+  const wrong = { ...group, receivedAt: 3, reviewResultId: 'group-two', reviewCorrect: false };
+  await act(async () => { view.update(createElement(CountdownSound, wrong)); });
+  assert.equal(audio.plays, 3);
+  assert.equal(audio.playbackRate, 0.7);
+  await act(async () => { view.update(createElement(CountdownSound, { ...group, receivedAt: 3 })); });
+  assert.equal(audio.plays, 3, 'an earlier group ID cannot play again after another group');
+  await act(async () => { view.update(createElement(CountdownSound, wrong)); });
+  await act(async () => { view.update(createElement(CountdownSound, { ...wrong, connected: false })); });
+  await act(async () => { view.update(createElement(CountdownSound, { ...wrong, connected: true })); });
+  await act(async () => { view.update(createElement(CountdownSound, { ...wrong, receivedAt: 4, reviewResultId: 'missed', reviewRemainingMs: 4000 })); });
+  assert.equal(audio.plays, 3, 'first new snapshot after reconnect is silent even near its start');
+  await act(async () => { view.update(createElement(CountdownSound, { ...wrong, receivedAt: 5, reviewResultId: 'missed', reviewRemainingMs: 3800 })); });
+  assert.equal(audio.plays, 3);
+  await act(async () => { view.update(createElement(CountdownSound, { ...wrong, receivedAt: 6, reviewResultId: 'late', reviewRemainingMs: 3500 })); });
+  assert.equal(audio.plays, 3, 'late group does not use the individual two-second freshness window');
+  await act(async () => { view.update(createElement(CountdownSound, { ...base, receivedAt: 7, reviewResultId: 'individual', reviewRemainingMs: 2000, reviewCorrect: true })); });
+  assert.equal(audio.plays, 4, 'individual result still plays');
+  await act(async () => { view.unmount(); });
+});

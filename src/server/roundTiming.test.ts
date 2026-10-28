@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
-import { NEXT_ROUND_MS, START_COUNTDOWN_MS, REVIEW_RESULT_MS } from '../shared/game.js';
+import { NEXT_ROUND_MS, START_COUNTDOWN_MS, REVIEW_RESULT_MS, REVIEW_GROUP_MS } from '../shared/game.js';
 import { quizSchema, serverSettingsSchema, type HostAction } from '../shared/protocol.js';
 import { GameEngine } from './engine.js';
 
@@ -154,6 +154,11 @@ test('a late auto-close starts a full transition at the tick, not at the expired
   command({ type: 'judgeSubmission', playerId: player!.id, correct: true });
   advance(20000);
   game.tick();
+  assert.equal(game.snapshot().phase, 'REVIEW_GROUP');
+  assert.equal(game.snapshot().reviewGroup?.remainingMs, REVIEW_GROUP_MS);
+  assert.equal(game.snapshot().clueElapsedMs, 3000);
+  advance(REVIEW_GROUP_MS);
+  game.tick();
   assert.equal(game.snapshot().phase, 'NEXT_ROUND');
   assert.equal(game.snapshot().questionIndex, 0);
   assert.equal(game.snapshot().clueElapsedMs, 3000);
@@ -213,6 +218,10 @@ test('typed completion automatically transitions or finishes the last question o
             advance(player ? 1 : 2000);
             game.tick();
           } else command({ type: path.endsWith('review') ? 'startReview' : 'close' });
+        }
+        if (game.snapshot().phase === 'REVIEW_GROUP') {
+          advance(REVIEW_GROUP_MS);
+          game.tick();
         }
         assert.equal(game.snapshot().phase, last ? 'GAME_FINISHED' : 'NEXT_ROUND');
         assert.equal(game.snapshot().nextRoundCountdownMs, last ? null : 3000);
@@ -368,6 +377,7 @@ test('undo cancels automatic transitions, restores final rulings and rearms a fr
           else if (path === 'open-review') command({ type: 'startReview' });
           else if (path === 'open-tick') { advance(2000); game.tick(); }
           if (path === 'review') { advance(REVIEW_RESULT_MS); game.tick(); }
+          else { advance(REVIEW_GROUP_MS); game.tick(); }
           assert.equal(game.snapshot().phase, last ? 'GAME_FINISHED' : 'NEXT_ROUND');
           const firstCountdownId = game.snapshot().countdownId;
           if (last) assert.equal(firstCountdownId, null);

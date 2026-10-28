@@ -1,14 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
+import { REVIEW_RESULT_MS } from '../../shared/game';
 import { advanceCountdownSound, initialCountdownSoundState, type CountdownPhase } from '../countdownSound';
 
 type SoundStatus = 'locked' | 'unlocking' | 'enabled' | 'error';
 
 export function CountdownSound({ sound, id, phase, remaining, connected, receivedAt,
-  reviewCorrectSound, reviewWrongSound, reviewResultId = null, reviewRemainingMs = null, reviewCorrect = null }: {
+  reviewCorrectSound, reviewWrongSound, reviewResultId = null, reviewRemainingMs = null, reviewCorrect = null,
+  reviewHoldMs = REVIEW_RESULT_MS }: {
   sound: string | null; id: string | null; phase: CountdownPhase | null;
   remaining: number | null; connected: boolean; receivedAt: number;
   reviewCorrectSound: string | null; reviewWrongSound: string | null;
   reviewResultId?: string | null; reviewRemainingMs?: number | null; reviewCorrect?: boolean | null;
+  reviewHoldMs?: number;
 }) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const dedupe = useRef(initialCountdownSoundState);
@@ -18,8 +21,9 @@ export function CountdownSound({ sound, id, phase, remaining, connected, receive
   const source = useRef<string | null>(null);
   const playingReview = useRef<string | null>(null);
   const previousCountdown = useRef<string | null>(null);
-  const seenReviewResult = useRef<string | null>(null);
+  const seenReviewResults = useRef(new Set<string>());
   const connection = useRef({ disconnectedAt: null as number | null });
+  const reconnectedSnapshot = useRef<number | null>(null);
   const [status, setStatus] = useState<SoundStatus>('locked');
   const [error, setError] = useState('');
 
@@ -68,7 +72,10 @@ export function CountdownSound({ sound, id, phase, remaining, connected, receive
     const audio = audioRef.current;
     if (!connected) connection.current.disconnectedAt = receivedAt;
     const fresh = connected && (connection.current.disconnectedAt === null || receivedAt !== connection.current.disconnectedAt);
-    if (fresh) connection.current.disconnectedAt = null;
+    if (fresh && connection.current.disconnectedAt !== null) {
+      reconnectedSnapshot.current = receivedAt;
+      connection.current.disconnectedAt = null;
+    }
     const result = advanceCountdownSound(dedupe.current, {
       id, phase, remaining, connected: fresh, enabled: !!sound && ready.current,
     });
@@ -101,14 +108,14 @@ export function CountdownSound({ sound, id, phase, remaining, connected, receive
       audioRef.current?.pause();
       playingReview.current = null;
     }
-    if (!reviewResultId || seenReviewResult.current === reviewResultId) return;
-    seenReviewResult.current = reviewResultId;
+    if (!reviewResultId || seenReviewResults.current.has(reviewResultId)) return;
+    seenReviewResults.current.add(reviewResultId);
     const audio = audioRef.current;
     const reviewSound = reviewCorrect === true ? reviewCorrectSound : reviewWrongSound;
     // Do not play stale effects on late join or reconnect.
     if (!audio || !reviewSound || !ready.current || !connected || reviewCorrect === null
-      || reviewRemainingMs === null || reviewRemainingMs <= 1500
-      || connection.current.disconnectedAt !== null) return;
+      || reviewRemainingMs === null || reviewRemainingMs <= reviewHoldMs - 500
+      || connection.current.disconnectedAt !== null || reconnectedSnapshot.current === receivedAt) return;
     const currentOperation = ++operation.current;
     try {
       playingReview.current = reviewResultId;
@@ -127,7 +134,7 @@ export function CountdownSound({ sound, id, phase, remaining, connected, receive
       setStatus('error');
       setError('Review sound could not play. Check the WAV file and retry.');
     }
-  }, [reviewResultId, reviewRemainingMs, reviewCorrect, connected, receivedAt, reviewCorrectSound, reviewWrongSound]);
+  }, [reviewResultId, reviewRemainingMs, reviewCorrect, reviewHoldMs, connected, receivedAt, reviewCorrectSound, reviewWrongSound]);
 
   function enable() {
     const audio = audioRef.current;

@@ -235,7 +235,7 @@ export async function createApp(options: AppOptions) {
     const revision = engine.revision;
     engine.tick();
     const state = engine.snapshot();
-    if (engine.revision !== revision || state.phase === 'STARTING' || state.phase === 'NEXT_ROUND' || state.phase === 'BUZZ_RESULT' || state.displayClockRunning || (state.settings.lockoutSeconds > 0
+    if (engine.revision !== revision || state.phase === 'STARTING' || state.phase === 'NEXT_ROUND' || state.phase === 'BUZZ_RESULT' || state.phase === 'REVIEW_GROUP' || state.displayClockRunning || (state.settings.lockoutSeconds > 0
       && (state.phase === 'QUESTION_OPEN' || state.phase === 'ANSWERING'))) broadcast();
     for (const [address, failures] of failedHosts) {
       if (Date.now() - failures.since > 60000) failedHosts.delete(address);

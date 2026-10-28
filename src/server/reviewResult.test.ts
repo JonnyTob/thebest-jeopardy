@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
-import { NEXT_ROUND_MS, REVIEW_RESULT_MS, START_COUNTDOWN_MS } from '../shared/game.js';
+import { NEXT_ROUND_MS, REVIEW_GROUP_MS, REVIEW_RESULT_MS, START_COUNTDOWN_MS } from '../shared/game.js';
 import { hostCommandSchema, quizSchema, type HostAction } from '../shared/protocol.js';
 import { GameEngine } from './engine.js';
 
@@ -41,6 +41,8 @@ test('public judgment holds exactly two seconds, rejects legacy advancement and 
   assert.equal(game.snapshot().reviewResultId, null);
   assert.equal(game.snapshot().reviewRemainingMs, null);
   send({ type: 'startReview' });
+  advance(REVIEW_GROUP_MS);
+  game.tick();
   const before = game.snapshot();
   assert.equal(before.review?.playerId, alice.id);
   const command = send({ type: 'judgeReview', correct: false });
@@ -95,6 +97,8 @@ test('late final ticks preserve a full next-round countdown or finish the quiz',
     send({ type: 'judgeSubmission', playerId: bob.id, correct: false });
     send({ type: 'judgeSubmission', playerId: carol.id, correct: false });
     send({ type: 'startReview' });
+    advance(REVIEW_GROUP_MS);
+    game.tick();
     send({ type: 'judgeReview', correct: true });
     const frozen = game.snapshot().clueElapsedMs;
     advance(20000);

@@ -247,22 +247,22 @@ test('server interval broadcasts typed auto-close, next-round countdowns and fre
     time = 7000;
     assert.equal((await closed).clueElapsedMs, 3000);
     await send({ type: 'judgeSubmission', playerId: joined.data.playerId, correct: true });
-    assert.equal(application.engine.snapshot().phase, 'NEXT_ROUND');
-    const nextId = application.engine.snapshot().countdownId;
-    assert.ok(nextId);
-    assert.notEqual(nextId, startId);
+    assert.equal(application.engine.snapshot().phase, 'REVIEW_GROUP');
+    const groupId = application.engine.snapshot().reviewGroup?.id;
+    assert.ok(groupId);
     const reconnect = await connect({ role: 'player', token: joined.data.token });
-    assert.equal(reconnect.state.phase, 'NEXT_ROUND');
-    assert.equal(reconnect.state.countdownId, nextId);
-    assert.equal(reconnect.state.nextRoundCountdownMs, 3000);
+    assert.equal(reconnect.state.phase, 'REVIEW_GROUP');
+    assert.equal(reconnect.state.reviewGroup?.id, groupId);
+    assert.deepEqual(reconnect.state.reviewGroup?.playerIds, [joined.data.playerId]);
+    assert.equal(reconnect.state.reviewGroup?.points, 250);
     assert.equal(reconnect.state.mySubmitted, true);
     assert.equal(reconnect.state.review, null);
     const revision = application.engine.revision;
-    const countdown = waitFor(display, (state) => state.nextRoundCountdownMs === 2000);
+    const countdown = waitFor(display, (state) => state.reviewGroup?.remainingMs === 3000);
     time = 8000;
     const countdownState = await countdown;
     assert.equal(countdownState.revision, revision, 'countdowns broadcast even without revision changes');
-    assert.equal(countdownState.countdownId, nextId);
+    assert.equal(countdownState.reviewGroup?.id, groupId);
     const undone = waitFor(display, (state) => state.phase === 'QUESTION_CLOSED');
     await send({ type: 'undo' });
     const undoneState = await undone;
@@ -273,12 +273,15 @@ test('server interval broadcasts typed auto-close, next-round countdowns and fre
     assert.equal(afterUndo.state.phase, 'QUESTION_CLOSED');
     assert.equal(afterUndo.state.players[0].score, 0);
     await send({ type: 'judgeSubmission', playerId: joined.data.playerId, correct: true });
+    assert.notEqual(application.engine.snapshot().reviewGroup?.id, groupId);
+    const nextRound = waitFor(display, (state) => state.phase === 'NEXT_ROUND');
+    time = 15000;
+    await nextRound;
     const rearmedId = application.engine.snapshot().countdownId;
     assert.ok(rearmedId);
-    assert.notEqual(rearmedId, nextId);
     assert.notEqual(rearmedId, startId);
     const lastMillisecond = waitFor(display, (state) => state.nextRoundCountdownMs === 1);
-    time = 13999;
+    time = 17999;
     const transition = await lastMillisecond;
     assert.equal(transition.countdownId, rearmedId);
     assert.equal(transition.questionInstanceId, first.questionInstanceId);
@@ -288,7 +291,7 @@ test('server interval broadcasts typed auto-close, next-round countdowns and fre
       assert.doesNotMatch(JSON.stringify(state), /PRIVATE GUESS|CURRENT SECRET|FUTURE/);
     }
     const next = waitFor(player, (state) => state.phase === 'QUESTION_OPEN' && state.questionIndex === 1);
-    time = 14000;
+    time = 18000;
     const second = await next;
     assert.equal(second.question?.question, 'FUTURE CLUE');
     assert.notEqual(second.questionInstanceId, first.questionInstanceId);
@@ -302,7 +305,7 @@ test('server interval broadcasts typed auto-close, next-round countdowns and fre
     assert.equal(stale.ok, false);
     if (!stale.ok) assert.match(stale.error, /changed/);
     const lastClosed = waitFor(display, (state) => state.phase === 'QUESTION_CLOSED' && state.questionIndex === 1);
-    time = 17000;
+    time = 21000;
     await lastClosed;
     await send({ type: 'startReview' });
     const finished = waitFor(display, (state) => state.phase === 'GAME_FINISHED');
@@ -316,17 +319,104 @@ test('server interval broadcasts typed auto-close, next-round countdowns and fre
     assert.equal(displayResult.reviewResultId, result.reviewResultId);
     assert.equal(displayResult.reviewRemainingMs, 2000);
     assert.equal(displayResult.review?.correct, false);
-    time = 17999;
+    time = 21999;
     const reviewReconnect = await connect({ role: 'player', token: joined.data.token });
     assert.equal(reviewReconnect.state.reviewResultId, result.reviewResultId);
     assert.equal(reviewReconnect.state.reviewRemainingMs, 1001);
     assert.equal(reviewReconnect.state.review?.correct, false);
-    time = 19000;
+    time = 23000;
     const final = await finished;
     assert.equal(final.nextRoundCountdownMs, null);
     assert.equal(final.players[0].score, 250);
     assert.equal(final.questionIndex, 1);
     for (const state of publicStates) assert.doesNotMatch(JSON.stringify(state), /PRIVATE GUESS|CURRENT SECRET|FUTURE SECRET/);
+  } finally {
+    for (const socket of sockets) socket.disconnect();
+    await application.close();
+  }
+});
+
+test('mixed review groups broadcast only the current group and retain private host submissions', async (t) => {
+  let time = 0;
+  t.mock.method(performance, 'now', () => time);
+  const application = await createApp({ storage: { load: async () => ({ id: 1, title: 'Groups', questions: [
+    { id: 'one', type: 'text', mode: 'typed', fixedPoints: 250, timerSeconds: 30, question: 'Clue', answer: 'SECRET' },
+    { id: 'two', type: 'text', question: 'FUTURE CLUE', answer: 'FUTURE SECRET' },
+  ] }) }, passcode: 'host-passcode', serveClient: false });
+  const sockets: Socket<ServerEvents, ClientEvents>[] = [];
+  function waitFor(socket: Socket<ServerEvents, ClientEvents>, predicate: (state: Snapshot) => boolean) {
+    return new Promise<Snapshot>((resolve, reject) => {
+      const timeout = setTimeout(() => { socket.off('session:snapshot', listener); reject(new Error('Timed out waiting for group')); }, 5000);
+      function listener(state: Snapshot) {
+        if (!predicate(state)) return;
+        clearTimeout(timeout); socket.off('session:snapshot', listener); resolve(state);
+      }
+      socket.on('session:snapshot', listener);
+    });
+  }
+  try {
+    await new Promise<void>((resolve) => application.httpServer.listen(0, '127.0.0.1', resolve));
+    const address = application.httpServer.address();
+    assert.ok(address && typeof address !== 'string');
+    const connect = async (auth: Record<string, string>) => {
+      const socket: Socket<ServerEvents, ClientEvents> = io(`http://127.0.0.1:${address.port}`, { auth, autoConnect: false, reconnection: false });
+      sockets.push(socket);
+      const initial = waitFor(socket, () => true); socket.connect();
+      return { socket, state: await initial };
+    };
+    const { socket: host } = await connect({ role: 'host', passcode: 'host-passcode' });
+    const { socket: display } = await connect({ role: 'display' });
+    const participants = [];
+    for (const name of ['Alice', 'Bob', 'Carol', 'Dave']) {
+      const { socket } = await connect({ role: 'player' });
+      const joined = await socket.timeout(5000).emitWithAck('player:join', { name, avatarId: 'fox' });
+      assert.ok(joined.ok);
+      participants.push({ socket, ...joined.data });
+    }
+    const [alice, bob, carol, dave] = participants;
+    const send = (socket: Socket<ServerEvents, ClientEvents>, action: HostAction) => socket.timeout(5000).emitWithAck('host:command', {
+      id: randomUUID(), revision: application.engine.revision, action,
+    });
+    assert.ok((await send(host, { type: 'start' })).ok);
+    const opened = waitFor(display, (state) => state.phase === 'QUESTION_OPEN');
+    time = 4000; const state = await opened;
+    for (const player of [alice, bob, carol]) {
+      assert.ok((await player.socket.timeout(5000).emitWithAck('player:submitAnswer', {
+        questionInstanceId: state.questionInstanceId!, answer: `PRIVATE ${player.playerId}`,
+      })).ok);
+    }
+    assert.ok((await send(host, { type: 'close' })).ok);
+    assert.ok((await send(host, { type: 'judgeSubmission', playerId: alice.playerId, correct: true })).ok);
+    assert.ok((await send(host, { type: 'judgeSubmission', playerId: bob.playerId, correct: false })).ok);
+    assert.ok((await send(host, { type: 'judgeSubmission', playerId: dave.playerId, correct: false })).ok);
+    const firstBroadcast = waitFor(display, (snapshot) => snapshot.reviewGroup?.outcome === 'correct');
+    assert.ok((await send(host, { type: 'startReview' })).ok);
+    const first = await firstBroadcast;
+    assert.deepEqual(first.reviewGroup?.playerIds, [alice.playerId]);
+    assert.equal(first.review, null);
+    assert.equal(first.hostSubmissions, undefined);
+    assert.doesNotMatch(JSON.stringify(first), /PRIVATE|SECRET|FUTURE/);
+    assert.equal((await send(alice.socket, { type: 'undo' })).ok, false);
+    assert.equal((await send(host, { type: 'adjust', playerId: alice.playerId, delta: 10 })).ok, false);
+    const hostReconnect = await connect({ role: 'host', passcode: 'host-passcode' });
+    assert.equal(hostReconnect.state.hostSubmissions?.length, 4);
+    assert.equal(hostReconnect.state.hostSubmissions?.[2].answer, `PRIVATE ${carol.playerId}`);
+    const reconnect = await connect({ role: 'player', token: bob.token });
+    assert.equal(reconnect.state.reviewGroup?.id, first.reviewGroup?.id);
+    assert.equal(reconnect.state.hostSubmissions, undefined);
+    const wrongBroadcast = waitFor(display, (snapshot) => snapshot.reviewGroup?.outcome === 'wrong');
+    time = 15000; const wrong = await wrongBroadcast;
+    assert.notEqual(wrong.reviewGroup?.id, first.reviewGroup?.id);
+    assert.deepEqual(wrong.reviewGroup?.playerIds, [bob.playerId, dave.playerId]);
+    assert.equal(wrong.reviewGroup?.remainingMs, 4000);
+    assert.equal(wrong.reviewGroup?.points, 0);
+    assert.doesNotMatch(JSON.stringify(wrong), /PRIVATE|SECRET|FUTURE/);
+    const reviewBroadcast = waitFor(display, (snapshot) => snapshot.phase === 'REVIEW');
+    time = 19000; const review = await reviewBroadcast;
+    assert.equal(review.reviewGroup, null);
+    assert.equal(review.review?.playerId, carol.playerId);
+    assert.equal(review.review?.answer, `PRIVATE ${carol.playerId}`);
+    assert.equal(application.engine.snapshot(true).scoreEvents.length, 3);
   } finally {
     for (const socket of sockets) socket.disconnect();
     await application.close();

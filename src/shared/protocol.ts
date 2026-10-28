@@ -84,7 +84,7 @@ export const serverSettingsSchema = z.object({
     .nullable().default('/media/sounds/countdown-beep.wav'),
 }).strict();
 export type ServerSettings = z.infer<typeof serverSettingsSchema>;
-export type Phase = 'LOBBY' | 'STARTING' | 'NEXT_ROUND' | 'QUESTION_OPEN' | 'ANSWERING' | 'BUZZ_RESULT' | 'MEDIA_FINISH' | 'QUESTION_CLOSED' | 'REVIEW' | 'REVIEW_COMPLETE' | 'ANSWER_REVEALED' | 'GAME_FINISHED';
+export type Phase = 'LOBBY' | 'STARTING' | 'NEXT_ROUND' | 'QUESTION_OPEN' | 'ANSWERING' | 'BUZZ_RESULT' | 'MEDIA_FINISH' | 'QUESTION_CLOSED' | 'REVIEW_GROUP' | 'REVIEW' | 'REVIEW_COMPLETE' | 'ANSWER_REVEALED' | 'GAME_FINISHED';
 export interface BuzzResult {
   id: string;
   playerId: string;
@@ -97,6 +97,15 @@ export interface TypedReview {
   playerId: string;
   answer: string | null;
   correct: boolean | null;
+}
+/** A previously judged group, without individual answers or future groups. */
+export interface ReviewGroup {
+  id: string;
+  outcome: 'correct' | 'wrong';
+  playerIds: string[];
+  points: number;
+  /** Server-calculated time until automatic advancement; zero until the next tick. */
+  remainingMs: number;
 }
 export interface Player {
   id: string;
@@ -153,6 +162,8 @@ export interface Snapshot {
   mySubmitted: boolean;
   /** Public buzzer ruling, present only during BUZZ_RESULT. */
   buzzResult: BuzzResult | null;
+  /** Current previously judged group, present only during REVIEW_GROUP. */
+  reviewGroup: ReviewGroup | null;
   review: TypedReview | null;
   /** Unique to each public judgment; null outside its result hold. */
   reviewResultId: string | null;

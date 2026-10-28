@@ -263,8 +263,8 @@ sharing the QR code.
   TV, host and phone countdowns include this offset; the TV bar shrinks over that
   full duration. It freezes when paused or closed; points remain fixed.
   The host can see all submissions privately; other players see only the count.
-  Use **Close submissions & start review** to close the clue and show the first
-  answer on the TV in one step. Alternatively, use **Close submissions**, then
+  Use **Close submissions & start review** to close the clue and start TV review
+  in one step. Alternatively, use **Close submissions**, then
   **Start answer review**. Mark each answer correct or wrong. Correct earns the question's fixed points;
   wrong or missing answers earn zero. The leaderboard updates immediately.
   Review order is submission order, followed by non-submitters in join order.
@@ -273,7 +273,8 @@ sharing the QR code.
   two seconds while gold bars fall for a correct answer or money flies away for a
   wrong or missing answer. The next review starts automatically; the final ruling
   advances to the next-round countdown or final standings. Undo cancels the hold.
-  Private fast approvals do not show this public animation or delay.
+  Fast approvals score immediately without an individual animation; their grouped
+  results are shown at the start of TV review as described below.
 - **Next-round transition:** moving to another question shows a synchronized
   three-second **NEXT ROUND / 3 -> 2 -> 1** countdown on TV, host and phones.
   The next clue and its full timer/media start only when this ends. Correct buzzer
@@ -307,17 +308,22 @@ answer matching. The checkbox defaults to off and affects only the host controls
   Correct earns the fixed points immediately; wrong earns zero.
 2. **Close submissions** freezes the roster and adds missing answers, which can
   be marked **No answer** for zero points. Private judging remains available.
-3. Use **Start answer review** (or **Close submissions & start review**) to display only the remaining unjudged entries,
-   in the original order. Already-judged answers never appear in that TV review.
+3. Use **Start answer review** (or **Close submissions & start review**). The TV
+  first shows fast-approved correct players together with their points, then wrong
+  or missing players together with +0. Each nonempty group appears for four
+  seconds with its configured result sound. Answers themselves stay private.
+  Remaining unjudged entries then appear individually in their original order.
   If every roster entry is already judged when submissions close (manually or
-  automatically), the next-round transition starts immediately. The final private
-  ruling after closure also advances automatically. Judging all received answers
-  while submissions are still open does not close them early.
+  automatically), grouped review starts automatically, followed by the next-round
+  transition. The final fast ruling after closure also starts grouped review
+  automatically. Judging all received answers while submissions are still open
+  does not close them early.
 
 Quick rulings are available before TV review starts, both while submissions are
 open and after they close. Normal review remains available whether the checkbox is on or off.
 Undo applies to private rulings too, including zero-point rulings; it restores
-the previous score and judgment state and can return the question to open or closed.
+the previous score and judgment state and can return the question to open or closed;
+undo during a group cancels the grouped sequence.
 Answers received after a ruling are retained when that ruling is undone.
 The host list retains all entries and their outcomes. TV review numbering still
 refers to positions in the full roster, so skipping judged entries can skip numbers.

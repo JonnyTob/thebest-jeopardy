@@ -4,7 +4,7 @@ import { QuestionClue } from '../components/QuestionClue';
 import { QuizCover } from '../components/QuizCover';
 import { CountdownSound } from '../components/CountdownSound';
 import { branding } from '../branding';
-import { startCountdownText } from '../../shared/game';
+import { REVIEW_GROUP_MS, REVIEW_RESULT_MS, startCountdownText } from '../../shared/game';
 
 export function DisplayPage() {
   const { connected, receivedAt } = useSession();
@@ -23,6 +23,7 @@ export function DisplayPage() {
   const open = state.phase === 'QUESTION_OPEN' && !state.paused && connected;
   const winner = finished ? players[0] : null;
   const typed = state.question?.mode === 'typed';
+  const group = state.phase === 'REVIEW_GROUP' ? state.reviewGroup : null;
 
   return <main className="tv-shell">
     <CountdownSound sound={state.serverSettings.countdownSound}
@@ -31,9 +32,10 @@ export function DisplayPage() {
       id={state.countdownId}
       phase={starting ? 'STARTING' : nextRound ? 'NEXT_ROUND' : null}
       remaining={starting ? state.startCountdownMs : nextRound ? state.nextRoundCountdownMs : null}
-      reviewResultId={state.buzzResult?.id ?? state.reviewResultId}
-      reviewRemainingMs={state.buzzResult?.remainingMs ?? state.reviewRemainingMs}
-      reviewCorrect={state.buzzResult?.correct ?? state.review?.correct ?? null}
+      reviewResultId={group?.id ?? state.buzzResult?.id ?? state.reviewResultId}
+      reviewRemainingMs={group?.remainingMs ?? state.buzzResult?.remainingMs ?? state.reviewRemainingMs}
+      reviewCorrect={group ? group.outcome === 'correct' : state.buzzResult?.correct ?? state.review?.correct ?? null}
+      reviewHoldMs={group ? REVIEW_GROUP_MS : REVIEW_RESULT_MS}
       connected={connected} receivedAt={receivedAt} />
     <header className="tv-header"><Brand /><QuizName title={state.settings.title} id={state.quizId} />
       <span className="question-counter">{lobby ? 'WELCOME TO THE SHOW' : starting ? 'GET READY' : finished ? 'THAT IS A WRAP' :
@@ -57,10 +59,11 @@ export function DisplayPage() {
             {state.buzzResult.delta > 0 ? '+' : ''}{state.buzzResult.delta} points</strong>
             <p>{state.buzzResult.correct ? 'Next question coming up.' : 'Buzzers reopen after the result.'}</p></>
             : <><strong>{state.pointsAtBuzz} points</strong><p>The floor is yours.</p></>}</div>
-          : <div className="buzzer-idle"><span className="giant-q">?</span><p>{typed
-            ? `${state.submissionCount} of ${state.players.length} submitted` : state.phase === 'MEDIA_FINISH' ? 'Watch the rest of the clue. Buzzing is closed.' : open ? 'Know the answer? Make your move.' : 'Eyes on the next clue.'}</p></div>}
+          : <div className="buzzer-idle"><span className="giant-q">?</span><p>{group
+            ? 'Fast approval results are being shown on the clue.' : typed
+              ? `${state.submissionCount} of ${state.players.length} submitted` : state.phase === 'MEDIA_FINISH' ? 'Watch the rest of the clue. Buzzing is closed.' : open ? 'Know the answer? Make your move.' : 'Eyes on the next clue.'}</p></div>}
         {!preGame && <div className="buzzer-footer"><span>{state.phase === 'MEDIA_FINISH' ? 'FINISHING CLUE / SCORE FROZEN' : state.clockRunning ? 'CLUE PLAYING' : 'CLUE PAUSED'}</span>
-          <small>{state.phase === 'MEDIA_FINISH' ? 'Buzzing is closed' : typed ? 'Type your answer on your phone' : active ? 'No rush. Answer out loud.' : open ? 'First buzz takes the floor' : 'The gamemaster has control'}</small></div>}
+          <small>{state.phase === 'MEDIA_FINISH' ? 'Buzzing is closed' : group ? 'Watch the group results' : typed && state.phase !== 'QUESTION_OPEN' ? 'Submissions closed / watch the TV' : typed ? 'Type your answer on your phone' : active ? 'No rush. Answer out loud.' : open ? 'First buzz takes the floor' : 'The gamemaster has control'}</small></div>}
       </aside>
     </section>
     <section className="tv-leaderboard" aria-label="Leaderboard">

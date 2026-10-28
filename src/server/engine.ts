@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
-import { pointsAt, rankPlayers, START_COUNTDOWN_MS, NEXT_ROUND_MS, REVIEW_RESULT_MS, BUZZ_RESULT_MS } from '../shared/game.js';
+import { pointsAt, rankPlayers, START_COUNTDOWN_MS, NEXT_ROUND_MS, REVIEW_RESULT_MS, REVIEW_GROUP_MS, BUZZ_RESULT_MS } from '../shared/game.js';
 import { serverSettingsSchema, type HostCommand, type JoinRequest, type Phase, type Player, type Quiz, type ScoreEvent, type Settings, type Snapshot, type ServerSettings, type TypedReview } from '../shared/protocol.js';
 
 export class GameError extends Error {}
@@ -51,6 +51,7 @@ export class GameEngine {
   private countdownId: string | null = null;
   private reviewResultAt: number | null = null;
   private reviewResultId: string | null = null;
+  private reviewGroup: { id: string; outcome: 'correct' | 'wrong'; playerIds: string[]; points: number; at: number } | null = null;
   private buzzResult: { id: string; playerId: string; correct: boolean; delta: number; at: number } | null = null;
   private mediaFinishAt: number | null = null;
   private mediaFinishDurationMs: number | null = null;
@@ -77,6 +78,12 @@ export class GameEngine {
     } else if (this.clue.phase === 'NEXT_ROUND' && this.nextRoundAt !== null
       && this.now() - this.nextRoundAt >= NEXT_ROUND_MS) {
       this.open(this.clue.questionIndex + 1);
+      this.revision++;
+    } else if (this.clue.phase === 'REVIEW_GROUP' && this.reviewGroup !== null
+      && this.now() - this.reviewGroup.at >= REVIEW_GROUP_MS) {
+      const outcome = this.reviewGroup.outcome;
+      this.reviewGroup = null;
+      if (outcome !== 'correct' || !this.startReviewGroup('wrong')) this.advanceReview(0);
       this.revision++;
     } else if (this.clue.phase === 'REVIEW' && this.reviewResultAt !== null
       && this.now() - this.reviewResultAt >= REVIEW_RESULT_MS) {
@@ -110,7 +117,7 @@ export class GameEngine {
     } else if (this.clue.phase === 'QUESTION_OPEN' && !this.clue.paused && this.elapsed() >= this.submissionDeadline()) {
       this.close();
       this.clue.elapsedMs = this.submissionDeadline();
-      if (this.clue.reviewQueue.every((entry) => entry.correct !== null)) this.beginNextRound();
+      if (this.clue.reviewQueue.every((entry) => entry.correct !== null)) this.beginReview();
       this.revision++;
     }
   }
@@ -122,6 +129,7 @@ export class GameEngine {
   }
 
   private beginNextRound() {
+    this.reviewGroup = null;
     this.freeze();
     this.clue.paused = false;
     this.rank();
@@ -249,6 +257,7 @@ export class GameEngine {
     this.nextRoundAt = null;
     this.countdownId = null;
     this.clearReviewResult();
+    this.reviewGroup = null;
     this.buzzResult = null;
     this.clearMediaFinish();
     this.rank();
@@ -311,6 +320,20 @@ export class GameEngine {
     if (next < 0) this.beginNextRound();
   }
 
+  private startReviewGroup(outcome: 'correct' | 'wrong'): boolean {
+    const playerIds = this.clue.reviewQueue.filter((entry) => entry.correct === (outcome === 'correct'))
+      .map((entry) => entry.playerId);
+    if (!playerIds.length) return false;
+    this.clue.phase = 'REVIEW_GROUP';
+    this.reviewGroup = { id: randomUUID(), outcome, playerIds,
+      points: outcome === 'correct' ? this.quiz.questions[this.clue.questionIndex].fixedPoints! : 0, at: this.now() };
+    return true;
+  }
+
+  private beginReview() {
+    if (!this.startReviewGroup('correct') && !this.startReviewGroup('wrong')) this.advanceReview(0);
+  }
+
   command(command: HostCommand, saveSettings?: (settings: Settings) => void) {
     if (this.processed.has(command.id)) return;
     this.require(command.revision === this.revision, 'Game state changed. Review the latest state and try again.');
@@ -320,6 +343,8 @@ export class GameEngine {
       'Wait for the buzzer result before taking that action.');
     this.require(this.clue.phase !== 'MEDIA_FINISH' || ['undo', 'reset', 'restartQuiz', 'restartMedia', 'skipMedia'].includes(command.action.type),
       'Wait for media playback to finish or skip it.');
+    this.require(this.clue.phase !== 'REVIEW_GROUP' || ['undo', 'reset', 'restartQuiz'].includes(command.action.type),
+      'Wait for the review group before taking that action.');
     const action = command.action;
     switch (action.type) {
       case 'setup':
@@ -353,7 +378,7 @@ export class GameEngine {
         this.require(this.isActive(), 'There is no active question to close.');
         this.close();
         if (this.quiz.questions[this.clue.questionIndex]?.mode === 'typed'
-          && this.clue.reviewQueue.every((entry) => entry.correct !== null)) this.beginNextRound();
+          && this.clue.reviewQueue.every((entry) => entry.correct !== null)) this.beginReview();
         break;
       case 'reveal':
         this.require(this.clue.phase === 'QUESTION_CLOSED' || this.clue.phase === 'REVIEW_COMPLETE', 'Close the question before revealing its answer.');
@@ -366,14 +391,14 @@ export class GameEngine {
           this.quiz.questions[this.clue.questionIndex]?.mode === 'typed',
           'Start review from an open or closed typed-answer question.');
         if (this.clue.phase === 'QUESTION_OPEN') this.close();
-        this.advanceReview(0);
+        this.beginReview();
         break;
       case 'judgeSubmission': {
         this.require(['QUESTION_OPEN', 'QUESTION_CLOSED'].includes(this.clue.phase) && this.quiz.questions[this.clue.questionIndex]?.mode === 'typed',
           'Fast approval is only available on open or closed typed questions before starting review.');
         const entries = this.clue.phase === 'QUESTION_OPEN' ? this.clue.submissions : this.clue.reviewQueue;
         this.judgeTypedAnswer(entries.find((entry) => entry.playerId === action.playerId), action.correct);
-        if (this.clue.phase === 'QUESTION_CLOSED' && entries.every((entry) => entry.correct !== null)) this.beginNextRound();
+        if (this.clue.phase === 'QUESTION_CLOSED' && entries.every((entry) => entry.correct !== null)) this.beginReview();
         break;
       }
       case 'judgeReview': {
@@ -402,6 +427,7 @@ export class GameEngine {
         this.nextRoundAt = null;
         this.countdownId = null;
         this.clearReviewResult();
+        this.reviewGroup = null;
         this.buzzResult = null;
         this.clearMediaFinish();
         this.clue = emptyClue();
@@ -452,6 +478,7 @@ export class GameEngine {
         this.nextRoundAt = null;
         this.countdownId = null;
         this.clearReviewResult();
+        this.reviewGroup = null;
         this.buzzResult = null;
         this.clearMediaFinish();
         const submissions = this.clue.submissions;
@@ -536,6 +563,10 @@ export class GameEngine {
       buzzResult: this.buzzResult === null ? null : {
         id: this.buzzResult.id, playerId: this.buzzResult.playerId, correct: this.buzzResult.correct,
         delta: this.buzzResult.delta, remainingMs: Math.max(0, BUZZ_RESULT_MS - (now - this.buzzResult.at)),
+      },
+      reviewGroup: this.reviewGroup === null ? null : {
+        id: this.reviewGroup.id, outcome: this.reviewGroup.outcome, playerIds: [...this.reviewGroup.playerIds],
+        points: this.reviewGroup.points, remainingMs: Math.max(0, REVIEW_GROUP_MS - (now - this.reviewGroup.at)),
       },
       review: this.clue.phase === 'REVIEW' ? structuredClone(this.clue.reviewQueue[this.clue.reviewIndex]) : null,
       reviewResultId: this.reviewResultId,

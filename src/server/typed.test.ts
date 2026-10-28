@@ -5,7 +5,7 @@ import { io, type Socket } from 'socket.io-client';
 import { GameEngine } from './engine.js';
 import { createApp } from './app.js';
 import { quizSchema, settingsSchema, type ClientEvents, type HostAction, type ServerEvents, type Snapshot } from '../shared/protocol.js';
-import { START_COUNTDOWN_MS, NEXT_ROUND_MS, REVIEW_RESULT_MS } from '../shared/game.js';
+import { START_COUNTDOWN_MS, NEXT_ROUND_MS, REVIEW_RESULT_MS, REVIEW_GROUP_MS } from '../shared/game.js';
 
 const quiz = quizSchema.parse({
   id: 100001, title: 'Mixed quiz', questions: [
@@ -179,6 +179,10 @@ test('fast approval scores privately and TV review skips judged first, middle an
   assert.throws(() => game.command({ id: randomUUID(), revision: game.revision - 1,
     action: { type: 'judgeSubmission', playerId: bob.id, correct: true } }), /state changed/);
   command({ type: 'startReview' });
+  assert.deepEqual(game.snapshot().reviewGroup?.playerIds, [alice.id, eve.id]);
+  advance(REVIEW_GROUP_MS); game.tick();
+  assert.deepEqual(game.snapshot().reviewGroup?.playerIds, [carol.id]);
+  advance(REVIEW_GROUP_MS); game.tick();
   assert.equal(game.snapshot().review?.playerId, bob.id);
   assert.equal(game.snapshot().reviewIndex, 1);
   assert.equal(game.snapshot().reviewCount, 5);
@@ -212,6 +216,10 @@ test('fast approval enforces phase, roster and missing-answer rules and complete
   assert.throws(() => judge(alice.id, true), /already/);
   judge(bob.id, false);
   judge(carol.id, false);
+  assert.equal(game.snapshot().phase, 'REVIEW_GROUP');
+  advance(REVIEW_GROUP_MS); game.tick();
+  assert.deepEqual(game.snapshot().reviewGroup?.playerIds, [bob.id, carol.id]);
+  advance(REVIEW_GROUP_MS); game.tick();
   assert.equal(game.snapshot().phase, 'NEXT_ROUND');
   assert.throws(() => command({ type: 'next' }), /next-round transition/);
   assert.throws(() => command({ type: 'startReview' }), /next-round transition/);
@@ -242,6 +250,8 @@ test('live fast approval keeps submissions open and skips judged answers when re
   assert.equal(JSON.stringify(game.snapshot(false, alice.id)).includes('Private'), false);
   assert.equal(game.snapshot().review, null);
   command({ type: 'startReview' });
+  advance(REVIEW_GROUP_MS); game.tick();
+  advance(REVIEW_GROUP_MS); game.tick();
   assert.equal(game.snapshot().review?.playerId, carol.id);
   assert.deepEqual(game.snapshot(true).hostSubmissions?.map((entry) => entry.correct), [true, false, null]);
 });
@@ -249,7 +259,7 @@ test('live fast approval keeps submissions open and skips judged answers when re
 test('undo of live approval restores judgments and preserves later submissions across close and review', () => {
   for (const correct of [true, false]) {
     for (const startReview of [true, false]) {
-      const { game, alice, bob, carol, command } = setup();
+      const { game, alice, bob, carol, command, advance } = setup();
       command({ type: 'start' });
       const instance = game.snapshot().questionInstanceId!;
       game.submitAnswer(alice.id, instance, 'First');
@@ -266,6 +276,7 @@ test('undo of live approval restores judgments and preserves later submissions a
       assert.deepEqual(game.snapshot(true).hostSubmissions?.map((entry) => entry.correct), [false, null, null]);
       assert.equal(game.snapshot(true).hostSubmissions?.[2].answer, 'Later submission');
       command({ type: 'startReview' });
+      advance(REVIEW_GROUP_MS); game.tick();
       assert.equal(game.snapshot().review?.playerId, bob.id);
     }
   }
@@ -273,7 +284,7 @@ test('undo of live approval restores judgments and preserves later submissions a
 
 test('undo restores private correct, wrong and missing rulings even after review completes', () => {
   for (const outcome of ['correct', 'wrong', 'missing'] as const) {
-    const { game, alice, bob, carol, command } = setup();
+    const { game, alice, bob, carol, command, advance } = setup();
     command({ type: 'removePlayer', playerId: bob.id });
     command({ type: 'removePlayer', playerId: carol.id });
     command({ type: 'start' });
@@ -283,6 +294,7 @@ test('undo restores private correct, wrong and missing rulings even after review
     assert.equal(alice.score, outcome === 'correct' ? 250 : 0);
     assert.equal(game.snapshot(true).hostSubmissions?.[0].correct, outcome === 'correct');
     assert.equal(game.snapshot(true).scoreEvents.length, 1);
+    advance(REVIEW_GROUP_MS); game.tick();
     assert.equal(game.snapshot().phase, 'NEXT_ROUND');
     command({ type: 'undo' });
     assert.equal(game.snapshot().phase, 'QUESTION_CLOSED');
