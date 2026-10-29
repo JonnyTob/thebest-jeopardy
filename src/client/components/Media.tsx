@@ -126,8 +126,13 @@ function Playback({ state, question }: { state: Snapshot; question: PublicQuesti
   const mediaProps = {
     src: question.media,
     preload: 'auto',
-    onLoadedMetadata: () => { setReady(true); },
-    onError: () => setError('Media could not be loaded. Check the local file and browser codec support.'),
+    onLoadedMetadata: () => { setReady(true); setError(''); },
+    onError: () => {
+      const media = mediaRef.current;
+      const code = media?.error?.code;
+      setReady(false);
+      setError(`Media could not be loaded (${media?.currentSrc || question.media}${code ? `; browser error ${code}` : ''}).`);
+    },
     onEnded: () => setEnded(true),
     onPlay: enableVisualizer,
     onTimeUpdate: () => {

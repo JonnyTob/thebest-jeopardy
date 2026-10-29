@@ -1,4 +1,4 @@
-import { randomUUID, timingSafeEqual } from 'node:crypto';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { readdirSync, lstatSync, unlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import express, { type Request, type Response } from 'express';
@@ -93,9 +93,17 @@ export function editorRoutes(storage: ArchiveQuizStorage, quiz: Quiz, passcode: 
         res.status(400).json({ error: 'Choose a non-empty PNG, JPEG, GIF, WebP, MP3, WAV, OGG, MP4 or WebM file.' }); return;
       }
       const basename = path.basename(name, path.extname(name)).replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'upload';
-      const filename = `${basename}-${randomUUID()}${extension}`;
-      writeFileSync(path.join(storage.mediaRoot, filename), req.body, { flag: 'wx' });
-      res.status(201).json({ file: `media/${filename}` });
+      for (let attempt = 0; attempt < 32; attempt++) {
+        const filename = `${basename}-${randomBytes(2).toString('hex')}${extension}`;
+        try {
+          writeFileSync(path.join(storage.mediaRoot, filename), req.body, { flag: 'wx' });
+          res.status(201).json({ file: `media/${filename}` });
+          return;
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+        }
+      }
+      res.status(409).json({ error: 'Could not find an unused media filename. Try again.' });
     } catch (error) { fail(res, error); }
   });
   router.delete('/media', express.json({ limit: '8kb' }), (req: Request, res: Response) => {

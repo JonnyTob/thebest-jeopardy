@@ -8,6 +8,30 @@ import { MediaBrowser, MediaPicker, mediaType, type MediaType } from './MediaLib
 
 type Issue = { path: string; message: string };
 
+function VideoDuration({ file }: { file: string }) {
+  const [duration, setDuration] = useState<number | null>(null);
+  const [unavailable, setUnavailable] = useState(false);
+  useEffect(() => {
+    setDuration(null);
+    setUnavailable(false);
+    const video = document.createElement('video');
+    video.preload = 'metadata';
+    video.onloadedmetadata = () => {
+      if (Number.isFinite(video.duration) && video.duration > 0) setDuration(video.duration);
+      else setUnavailable(true);
+    };
+    video.onerror = () => setUnavailable(true);
+    video.src = `/media/quiz/${file.slice('media/'.length)}`;
+    return () => {
+      video.onloadedmetadata = null;
+      video.onerror = null;
+      video.removeAttribute('src');
+      video.load();
+    };
+  }, [file]);
+  return <span className="editor-video-duration">Duration: {duration !== null ? `${duration.toFixed(1)} s` : unavailable ? 'unavailable' : 'loading…'}</span>;
+}
+
 export function QuizEditor({ passcode, onDirtyChange, gameState }: { passcode: string; onDirtyChange: (dirty: boolean) => void; gameState: Snapshot }) {
   const [archive, setArchive] = useState<QuizArchive | null>(null);
   const [savedArchive, setSavedArchive] = useState<QuizArchive | null>(null);
@@ -170,6 +194,7 @@ export function QuizEditor({ passcode, onDirtyChange, gameState }: { passcode: s
           pickerButton.current = event.currentTarget; setMediaError(''); setPicker({ type, target, initial: value });
         }}>Choose media</button>
         {value && <button type="button" aria-label={`Clear ${label.toLowerCase()}`} onClick={clear}>Clear</button>}
+        {type === 'video' && value && files.includes(value) && mediaType(value) === 'video' && <VideoDuration key={value} file={value} />}
       </div>
     </div>;
   }

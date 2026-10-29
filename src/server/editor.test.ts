@@ -41,7 +41,14 @@ test('editor authorizes archive and media, detects stale writes, and protects lo
       'content-type': 'application/octet-stream', 'x-file-name': 'new%20picture.png' }, body: 'image' });
     assert.equal(upload.status, 201);
     const uploaded = await upload.json() as { file: string };
-    assert.match(uploaded.file, /^media\/new-picture-.*\.png$/);
+    assert.match(uploaded.file, /^media\/new-picture-[0-9a-f]{4}\.png$/);
+    const secondUpload = await fetch(`${base}/media`, { method: 'POST', headers: { ...headers,
+      'content-type': 'application/octet-stream', 'x-file-name': 'new%20picture.png' }, body: 'second image' });
+    assert.equal(secondUpload.status, 201);
+    const secondUploaded = await secondUpload.json() as { file: string };
+    assert.match(secondUploaded.file, /^media\/new-picture-[0-9a-f]{4}\.png$/);
+    assert.notEqual(secondUploaded.file, uploaded.file);
+    assert.equal(await readFile(path.join(directory, uploaded.file), 'utf8'), 'image');
     const badUpload = await fetch(`${base}/media`, { method: 'POST', headers: { ...headers,
       'content-type': 'application/octet-stream', 'x-file-name': 'test.svg' }, body: '<svg />' });
     assert.equal(badUpload.status, 400);

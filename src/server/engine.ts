@@ -58,11 +58,19 @@ export class GameEngine {
   private mediaFinishElapsedMs = 0;
   private clue: ClueState = emptyClue();
 
-  constructor(readonly quiz: Quiz, private readonly now: () => number = () => performance.now(),
+  constructor(public quiz: Quiz, private readonly now: () => number = () => performance.now(),
     readonly serverSettings: ServerSettings = serverSettingsSchema.parse({}),
-    private readonly mediaDurations: Readonly<Record<string, number>> = {}) {
+    private mediaDurations: Readonly<Record<string, number>> = {}) {
     this.settings = { title: quiz.title, leaderboardCount: 8, startPoints: 500,
       minimumPoints: 100, dropPoints: 100, dropEverySeconds: 5, lockoutSeconds: 0, maxAnswerLength: 100 };
+  }
+
+  reloadQuiz(quiz: Quiz, settings: Settings, mediaDurations: Readonly<Record<string, number>>) {
+    this.require(this.clue.phase === 'LOBBY' && this.players.size === 0,
+      'Restart the quiz before loading saved changes.');
+    this.quiz = quiz;
+    this.settings = settings;
+    this.mediaDurations = mediaDurations;
   }
 
   private require(condition: unknown, message: string): asserts condition {

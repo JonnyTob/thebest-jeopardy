@@ -1,9 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { io, type Socket } from 'socket.io-client';
 import { GameEngine } from './engine.js';
 import { createApp } from './app.js';
+import { ArchiveQuizSettingsStorage, ArchiveQuizStorage } from './storage.js';
+import type { QuizArchive } from '../shared/quizArchive.js';
 import type { ClientEvents, HostAction, ServerEvents, Quiz } from '../shared/protocol.js';
 
 const quiz: Quiz = { id: 100001, title: 'Restart test', questions: [
@@ -79,6 +84,46 @@ test('restart discards typed submissions and invalidates their question instance
   assert.equal(state.questionInstanceId, null);
   assert.throws(() => game.submitAnswer(player.id, instance, 'Stale answer'), /join/i);
   assert.doesNotMatch(JSON.stringify(state), /Private answer/);
+});
+
+test('restart loads quiz and setup edits saved after server startup', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'quiz-restart-'));
+  const directory = path.join(root, '42');
+  await mkdir(path.join(directory, 'media'), { recursive: true });
+  const archive: QuizArchive = { schemaVersion: 1, quiz: { id: 42, title: 'Original' }, questions: [{
+    id: randomUUID(), type: 'text', mode: 'buzzer', question: 'Old clue', answer: 'Old answer',
+  }] };
+  await writeFile(path.join(directory, 'quiz.json'), JSON.stringify(archive));
+  const storage = new ArchiveQuizStorage(root, 42);
+  const application = await createApp({ storage, settingsStorage: new ArchiveQuizSettingsStorage(storage),
+    quizMediaRoot: storage.mediaRoot, passcode: 'test-host-passcode', serveClient: false });
+  const sockets: Socket<ServerEvents, ClientEvents>[] = [];
+  try {
+    await new Promise<void>((resolve) => application.httpServer.listen(0, '127.0.0.1', resolve));
+    const address = application.httpServer.address();
+    assert.ok(address && typeof address !== 'string');
+    const url = `http://127.0.0.1:${address.port}`;
+    const host = io(url, { auth: { role: 'host', passcode: 'test-host-passcode' }, autoConnect: false });
+    sockets.push(host);
+    const connected = new Promise<void>((resolve) => host.once('connect', resolve));
+    host.connect();
+    await connected;
+    const { revision } = storage.readArchive();
+    storage.saveArchive({ ...archive, quiz: { ...archive.quiz, title: 'Updated' },
+      questions: [{ ...archive.questions[0], question: 'New clue' }],
+      gameSetup: { startPoints: 700 } }, revision);
+    const result = await host.timeout(5000).emitWithAck('host:command', {
+      id: randomUUID(), revision: application.engine.revision, action: { type: 'restartQuiz' },
+    });
+    assert.equal(result.ok, true);
+    assert.equal(application.engine.quiz.questions[0].question, 'New clue');
+    assert.equal(application.engine.snapshot().settings.title, 'Updated');
+    assert.equal(application.engine.snapshot().settings.startPoints, 700);
+  } finally {
+    for (const socket of sockets) socket.disconnect();
+    await application.close();
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test('restart is host-only, invalidates players and tokens, and is forbidden in production', async (t) => {

@@ -39,7 +39,7 @@ network interfaces. Set `PORT` to change it. Optionally set `HOST_PASSCODE` to a
 private value of at least eight characters; otherwise one is generated at launch.
 In development mode, the admin console has a **Restart Quiz** danger button. After
 confirmation it returns to the lobby and clears players, scores, answers and quiz
-progress; players must join again. Quiz setup remains unchanged. This control and
+progress; players must join again. The saved quiz and its setup are loaded again from disk. This control and
 its server command are unavailable in production.
 For example, in PowerShell:
 

@@ -184,6 +184,7 @@ td:last-child, th:last-child { padding-right: 0; }
 .editor-fields input[type="checkbox"] { width: auto; }
 .editor-media-field { display: grid; gap: 8px; min-width: 0; }
 .editor-media-field span, .media-browser-details strong { overflow-wrap: anywhere; }
+.editor-video-duration { color: var(--muted); font-size: .9rem; white-space: nowrap; }
 .editor-media-library summary { cursor: pointer; font-size: 1.2rem; font-weight: 700; }
 .editor-media-library[open] { display: grid; gap: 12px; }
 .media-picker { width: min(950px, 94vw); max-width: none; max-height: calc(100dvh - 32px); padding: 16px; color: #f8f1ff; border: 1px solid var(--border); border-radius: 18px; background: #23143a; box-shadow: 0 16px 70px #000b; overflow: auto; }

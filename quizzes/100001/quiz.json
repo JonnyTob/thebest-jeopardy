@@ -27,30 +27,23 @@
     },
     {
       "id": "5552d069-9906-4e98-9804-92bf81f033e7",
-      "keyword": "mystery-image",
-      "type": "image",
-      "question": "What is hiding behind the tiles?",
+      "keyword": "Guitar cover",
+      "type": "video",
+      "question": "Navn på låt",
       "mode": "buzzer",
-      "media": "media/mystery.svg",
-      "answer": "A rocket",
-      "reveal": {
-        "effect": "tiles",
-        "durationSeconds": 20,
-        "columns": 8,
-        "rows": 6,
-        "seed": 814
-      }
+      "media": "media/sabotage-fe02.mp4",
+      "answer": "Sabotage"
     },
     {
       "id": "1c94d195-88f5-4df3-a16a-f54bba7979c6",
-      "keyword": "everyone-answers-text",
-      "type": "text",
-      "question": "Everyone answers: a little mental arithmetic.",
+      "keyword": "Populær artist",
+      "type": "image",
+      "question": "Hvilken POPulær artist",
       "mode": "typed",
-      "fixedPoints": 250,
-      "timerSeconds": 30,
-      "text": "What is 12 multiplied by 8? Type the number on your phone and submit once.",
-      "answer": "96"
+      "fixedPoints": 400,
+      "timerSeconds": 20,
+      "media": "media/Michael-Jackson-Pic_mod-9328.png",
+      "answer": "MJ"
     },
     {
       "id": "5a5a3769-b989-4a2b-ae55-78b9be14efc2",

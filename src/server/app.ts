@@ -192,7 +192,7 @@ export async function createApp(options: AppOptions) {
       }
     });
 
-    socket.on('host:command', (input, ack) => {
+    socket.on('host:command', async (input, ack) => {
       if (typeof ack !== 'function') {
         socket.emit('session:error', 'Host commands require an acknowledgement.');
         return;
@@ -204,6 +204,21 @@ export async function createApp(options: AppOptions) {
         return ack({ ok: false, error: 'Restart quiz is only available in development mode.' });
       }
       try {
+        let updatedQuiz;
+        let updatedSettings;
+        let updatedDurations;
+        if (parsed.data.action.type === 'restartQuiz') {
+          updatedQuiz = await options.storage.load();
+          updatedSettings = settingsSchema.parse({
+            ...new GameEngine(updatedQuiz).settings,
+            title: updatedQuiz.title,
+            ...options.gameSetup,
+            ...settingsStorage?.load(updatedQuiz.id),
+          });
+          updatedDurations = await probeMediaDurations(updatedQuiz,
+            options.quizMediaRoot ?? path.resolve(options.production ? 'dist/client/media' : 'src/public/media'),
+            options.quizMediaRoot ? '/media/quiz/' : '/media/');
+        }
         const previousRevision = engine.revision;
         engine.command(parsed.data, settingsStorage ? (settings) => {
           try {
@@ -226,6 +241,7 @@ export async function createApp(options: AppOptions) {
           }
         }
         if (parsed.data.action.type === 'restartQuiz' && engine.revision !== previousRevision) {
+          if (updatedQuiz && updatedSettings && updatedDurations) engine.reloadQuiz(updatedQuiz, updatedSettings, updatedDurations);
           tokens.clear();
           for (const client of io.sockets.sockets.values()) {
             if (client.data.playerId) {
