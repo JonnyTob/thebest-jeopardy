@@ -4,6 +4,7 @@ import path from 'node:path';
 import express, { type Request, type Response } from 'express';
 import { ZodError } from 'zod';
 import type { Quiz } from '../shared/protocol.js';
+import type { LoadedMediaReference } from '../shared/mediaLibrary.js';
 import { ArchiveConflictError, ArchiveQuizStorage } from './storage.js';
 
 const extensions = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.mp3', '.wav', '.ogg', '.mp4', '.webm']);
@@ -26,6 +27,13 @@ function referenced(quiz: { quiz: { coverImage?: string }; questions: { media?: 
 
 export function editorRoutes(storage: ArchiveQuizStorage, quiz: Quiz, passcode: string, requirePasscode: boolean) {
   const router = express.Router();
+  const runtime = { quiz: { coverImage: quiz.coverImage?.replace('/media/quiz/', 'media/') },
+    questions: quiz.questions.map((q) => ({ media: q.media?.replace('/media/quiz/', 'media/') })) };
+  const loadedReferences: LoadedMediaReference[] = [];
+  if (runtime.quiz.coverImage) loadedReferences.push({ file: runtime.quiz.coverImage, kind: 'cover' });
+  runtime.questions.forEach((question, questionIndex) => {
+    if (question.media) loadedReferences.push({ file: question.media, kind: 'question', questionIndex });
+  });
   const failures = new Map<string, { count: number; since: number }>();
   const expected = Buffer.from(passcode);
   router.use((req, res, next) => {
@@ -73,7 +81,7 @@ export function editorRoutes(storage: ArchiveQuizStorage, quiz: Quiz, passcode: 
     } catch (error) { fail(res, error); }
   });
   router.get('/media', (_req, res) => {
-    try { res.json({ files: mediaFiles(storage.mediaRoot) }); } catch (error) { fail(res, error); }
+    try { res.json({ files: mediaFiles(storage.mediaRoot), loadedReferences }); } catch (error) { fail(res, error); }
   });
   router.post('/media', express.raw({ type: 'application/octet-stream', limit: maxUpload }), (req, res) => {
     try {
@@ -96,8 +104,6 @@ export function editorRoutes(storage: ArchiveQuizStorage, quiz: Quiz, passcode: 
       if (typeof file !== 'string' || !mediaFiles(storage.mediaRoot).includes(file)) {
         res.status(404).json({ error: 'Media file not found.' }); return;
       }
-      const runtime = { quiz: { coverImage: quiz.coverImage?.replace('/media/quiz/', 'media/') },
-        questions: quiz.questions.map((q) => ({ media: q.media?.replace('/media/quiz/', 'media/') })) };
       if (referenced(storage.readArchive().archive, file) || referenced(runtime, file)) {
         res.status(409).json({ error: 'This file is referenced by the saved or currently loaded quiz and cannot be deleted.' }); return;
       }

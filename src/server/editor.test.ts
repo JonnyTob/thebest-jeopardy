@@ -11,7 +11,7 @@ test('editor authorizes archive and media, detects stale writes, and protects lo
   const root = await mkdtemp(path.join(os.tmpdir(), 'quiz-editor-'));
   const directory = path.join(root, '42');
   await mkdir(path.join(directory, 'media'), { recursive: true });
-  const archive: QuizArchive = { schemaVersion: 1, quiz: { id: 42, title: 'Original' }, questions: [{
+  const archive: QuizArchive = { schemaVersion: 1, quiz: { id: 42, title: 'Original', coverImage: 'media/old.png' }, questions: [{
     id: 'c1283d6f-bdd5-4d28-99c1-f2b344406394', type: 'image', mode: 'buzzer',
     question: 'What?', answer: 'SECRET', media: 'media/old.png',
   }] };
@@ -33,6 +33,10 @@ test('editor authorizes archive and media, detects stale writes, and protects lo
     const initial = await initialResponse.json() as { archive: QuizArchive; revision: string };
     assert.equal(initial.archive.questions[0].answer, 'SECRET');
     assert.equal((await fetch(`${base}/media`)).status, 403);
+    const initialMedia = await (await fetch(`${base}/media`, { headers })).json();
+    assert.deepEqual(initialMedia, { files: ['media/old.png'], loadedReferences: [
+      { file: 'media/old.png', kind: 'cover' }, { file: 'media/old.png', kind: 'question', questionIndex: 0 },
+    ] });
     const upload = await fetch(`${base}/media`, { method: 'POST', headers: { ...headers,
       'content-type': 'application/octet-stream', 'x-file-name': 'new%20picture.png' }, body: 'image' });
     assert.equal(upload.status, 201);
@@ -59,6 +63,10 @@ test('editor authorizes archive and media, detects stale writes, and protects lo
     assert.equal(saved.status, 200);
     assert.equal((await save(initial.archive, initial.revision)).status, 409);
     assert.equal(application.engine.quiz.title, 'Original');
+    const currentMedia = await (await fetch(`${base}/media`, { headers })).json() as { loadedReferences: unknown };
+    assert.deepEqual(currentMedia.loadedReferences, [
+      { file: 'media/old.png', kind: 'cover' }, { file: 'media/old.png', kind: 'question', questionIndex: 0 },
+    ]);
     assert.equal(JSON.parse(await readFile(storage.file, 'utf8')).quiz.title, 'Edited');
     assert.throws(() => setup.save(42, application.engine.settings), ArchiveConflictError);
     const deleteFile = (file: string) => fetch(`${base}/media`, { method: 'DELETE', headers: { ...headers,

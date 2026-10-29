@@ -351,22 +351,35 @@ awarded points, so use undo first if the scores should be reversed.
 Use **Quiz editor** in the host console to edit the currently configured quiz, or edit [quizzes/100001/quiz.json](./quizzes/100001/quiz.json) directly. Set `server.startupQuizId` in `settings.json` to select the quiz; `QUIZ_ID` overrides it. Set `QUIZ_DATA_DIR` to the archive directory (default `quizzes`). Each quiz lives in `<data directory>/<id>/quiz.json`, with its own files in `<id>/media/`. The ID in the JSON must match the folder name.
 
 The editor adds, duplicates, removes and reorders questions and manages quiz-local
-media. It saves only complete, valid quizzes; unfinished edits remain in the
+media. The question list labels each question as **Buzzer** or **Typed**. It saves
+only complete, valid quizzes; unfinished edits remain in the
 browser and are lost if discarded. Save writes to disk, but the running game
 continues using the quiz loaded at startup. **Restart the server to apply quiz
 edits**, losing players, scores and progress. Game setup changes still apply in
 the lobby; if the quiz file changes separately, restart before saving setup.
 The editor detects conflicting changes to the archive; reload only after
 preserving any unsaved edits you need. Avoid simultaneous external writes during
-an editor or setup save.
+an editor or setup save. Changing a clue's type immediately removes incompatible
+clue text or settings without prompting. Uploaded media files remain in the
+library; select a compatible file if the existing selection has a different type.
 
-The media library lists and previews existing quiz files. Uploads are limited to
-50 MB per file and accept PNG, JPEG, GIF, WebP, MP3, WAV, OGG, MP4 and WebM.
-Files are stored immediately with unique names, even if quiz edits are later
-discarded. Deletion is blocked for files referenced by the saved or currently
-loaded quiz; unsaved editor references are also checked in that browser. Browser
-codec and autoplay support vary; test playback on the actual TV. File extensions
-are checked, but uploads are not transcoded or verified for playability.
+Use **Choose media** for a cover or media clue to search and preview compatible
+files before selecting one. Open **Media library** to search and filter all
+files, inspect usage and delete files. Results are paged and only the selected
+file is previewed. **Refresh media** reloads the file list without discarding
+quiz edits. Usage shows this browser's current edits, the archive last
+loaded or saved in this editor, and the running quiz; another host's unsaved
+edits are not visible. The server checks the current saved archive and running
+quiz again before deleting, and this browser also blocks deletion of files in
+its own edits.
+
+Uploads from either view are limited to 50 MB per file and accept PNG, JPEG,
+GIF, WebP, MP3, WAV, OGG, MP4 and WebM. Files are stored immediately with unique
+names, even if quiz edits are later discarded. Files belong to the current quiz,
+not a shared library. Search and paging operate on a list retrieved for the
+whole quiz; the server still scans the media directory. Browser codec and
+autoplay support vary; test playback on the actual TV. File extensions are
+checked, but uploads are not transcoded or verified for playability.
 Editor APIs require the host passcode when enabled; as with the rest of the app,
 plain HTTP on the LAN does not encrypt credentials or media.
 
