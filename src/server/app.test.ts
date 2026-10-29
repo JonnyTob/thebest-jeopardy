@@ -181,7 +181,7 @@ test('server interval broadcasts typed auto-close, next-round countdowns and fre
       { id: 'two', type: 'text', mode: 'typed', fixedPoints: 400, timerSeconds: 2,
         question: 'FUTURE CLUE', answer: 'FUTURE SECRET' },
     ] }) },
-    passcode: 'test-host-passcode', serveClient: false, serverSettings: { TimerEndOffsetSeconds: 1 },
+    passcode: 'test-host-passcode', serveClient: false, serverSettings: { typedAnswerGraceSeconds: 1 },
   });
   const sockets: Socket<ServerEvents, ClientEvents>[] = [];
   const publicStates: Snapshot[] = [];
@@ -237,7 +237,7 @@ test('server interval broadcasts typed auto-close, next-round countdowns and fre
     const first = await opened;
     assert.equal(first.countdownId, null);
     assert.equal(first.clueElapsedMs, 0);
-    assert.equal(first.serverSettings.TimerEndOffsetSeconds, 1);
+    assert.equal(first.serverSettings.typedAnswerGraceSeconds, 1);
     const submitted = await player.timeout(5000).emitWithAck('player:submitAnswer', {
       questionInstanceId: first.questionInstanceId!, answer: 'PRIVATE GUESS',
     });
@@ -450,7 +450,7 @@ test('server nickname and player limits are advertised and enforced, including r
     };
     const info = await (await fetch(`${url}/api/info`)).json();
     assert.deepEqual(info.serverSettings, { maxPlayerNameLength: 32, maxPlayers: 1, requireAdminPasscode: true,
-      TimerEndOffsetSeconds: 0, countdownSound: '/media/sounds/countdown-beep.wav',
+      typedAnswerGraceSeconds: 0, countdownSound: '/media/sounds/countdown-beep.wav',
       reviewCorrectSound: '/media/sounds/countdown-beep.wav', reviewWrongSound: '/media/sounds/countdown-beep.wav' });
     assert.deepEqual(application.engine.snapshot().serverSettings, info.serverSettings);
     const host = await connect({ role: 'host', passcode: 'test-host-passcode' });
@@ -551,7 +551,7 @@ test('global defaults and per-quiz overrides reach the host, save through socket
       questions: [{ id: 'one', type: 'text', mode: 'buzzer', question: 'Clue', answer: 'Answer' }] }) },
     passcode: 'test-host-passcode', serveClient: false, settingsStorage,
     gameSetup: { title: 'Global title', startPoints: 700, lockoutSeconds: 20 },
-    serverSettings: { TimerEndOffsetSeconds: 7 },
+    serverSettings: { typedAnswerGraceSeconds: 7 },
   };
   try {
     writeFileSync(path.join(directory, '100001.json'), '{"gameSetup":{"title":"Quiz title","lockoutSeconds":10}}');
@@ -574,16 +574,16 @@ test('global defaults and per-quiz overrides reach the host, save through socket
         socket.connect();
       });
       assert.deepEqual(snapshot.settings, application.engine.settings);
-      assert.equal(snapshot.serverSettings.TimerEndOffsetSeconds, 7);
+      assert.equal(snapshot.serverSettings.typedAnswerGraceSeconds, 7);
       const info = await (await fetch(`http://127.0.0.1:${address.port}/api/info`)).json();
-      assert.equal(info.serverSettings.TimerEndOffsetSeconds, 7);
+      assert.equal(info.serverSettings.typedAnswerGraceSeconds, 7);
       const saved = { ...snapshot.settings, title: 'Persisted title', lockoutSeconds: 15 };
       const result = await socket.timeout(5000).emitWithAck('host:command', {
         id: randomUUID(), revision: snapshot.revision,
-        action: { type: 'setup', settings: { ...saved, ...{ TimerEndOffsetSeconds: 300 } } },
+        action: { type: 'setup', settings: { ...saved, ...{ typedAnswerGraceSeconds: 300 } } },
       });
       assert.ok(result.ok);
-      assert.equal(application.engine.snapshot().serverSettings.TimerEndOffsetSeconds, 7);
+      assert.equal(application.engine.snapshot().serverSettings.typedAnswerGraceSeconds, 7);
       assert.deepEqual(application.engine.settings, saved);
       assert.deepEqual(JSON.parse(readFileSync(path.join(directory, '100001.json'), 'utf8')), { gameSetup: saved });
       assert.deepEqual(settingsStorage.load(100002), {});
@@ -596,7 +596,7 @@ test('global defaults and per-quiz overrides reach the host, save through socket
       assert.equal(restarted.engine.settings.title, 'Persisted title');
       assert.equal(restarted.engine.settings.lockoutSeconds, 15);
       assert.equal(restarted.engine.settings.startPoints, 700);
-      assert.equal(restarted.engine.snapshot().serverSettings.TimerEndOffsetSeconds, 7);
+      assert.equal(restarted.engine.snapshot().serverSettings.typedAnswerGraceSeconds, 7);
     } finally {
       await restarted.close();
     }

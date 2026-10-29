@@ -25,7 +25,7 @@ function setup({ offset = 0, last = false, empty = false, mode = 'typed' as 'typ
       return { ...buzzer, mode };
     });
   const game = new GameEngine({ ...quiz, questions }, () => time,
-    serverSettingsSchema.parse({ TimerEndOffsetSeconds: offset }));
+    serverSettingsSchema.parse({ typedAnswerGraceSeconds: offset }));
   const player = empty ? undefined : game.join({ name: 'Alice', avatarId: 'fox' });
   const command = (action: HostAction) => {
     const request = { id: randomUUID(), revision: game.revision, action };
@@ -126,26 +126,42 @@ test('typed deadline uses active clue time across pauses and ignores media resta
   assert.equal(game.snapshot().clockRunning, false);
 });
 
-test('buzzer questions do not auto-close with a global typed-timer offset', () => {
-  const { game, player, command, advance } = setup({ mode: 'buzzer', offset: 300 });
-  advance(1000000);
+test('buzzer questions close at their countdown, without the typed-answer offset', () => {
+  const { game, player, advance } = setup({ mode: 'buzzer', offset: 300 });
+  advance(29999);
   const revision = game.revision;
   game.tick();
   assert.equal(game.revision, revision);
   assert.equal(game.snapshot().phase, 'QUESTION_OPEN');
-  assert.equal(game.snapshot().currentPoints, game.settings.minimumPoints);
-  assert.throws(() => game.submitAnswer(player!.id, game.snapshot().questionInstanceId!, 'No'), /does not accept typed/);
-  game.buzz(player!.id);
-  advance(1000000);
+  advance(1);
+  assert.throws(() => game.buzz(player!.id), /timer has ended/i);
   game.tick();
-  assert.equal(game.snapshot().phase, 'ANSWERING');
-  assert.equal(game.snapshot().clueElapsedMs, 1000000);
-  command({ type: 'judge', correct: true });
-  assert.equal(game.snapshot().phase, 'BUZZ_RESULT');
-  assert.equal(game.snapshot().nextRoundCountdownMs, null);
-  advance(2000);
-  game.tick();
-  assert.equal(game.snapshot().phase, 'NEXT_ROUND');
+  assert.equal(game.snapshot().phase, 'QUESTION_CLOSED');
+  assert.equal(game.snapshot().clueElapsedMs, 30000);
+});
+
+test('every clue type uses its question countdown override or the global default', () => {
+  for (const type of ['text', 'image', 'audio', 'video'] as const) {
+    for (const timerSeconds of [undefined, 5]) {
+      let time = 0;
+      const question = { id: 'one', type, mode: 'buzzer', question: 'Clue', answer: 'Answer',
+        ...(type === 'text' ? {} : { media: '/media/clue.mp4' }),
+        ...(timerSeconds === undefined ? {} : { timerSeconds }) };
+      const game = new GameEngine(quizSchema.parse({ id: 42, title: 'Quiz', questions: [question] }), () => time);
+      game.settings.questionTimerSeconds = 12;
+      game.command({ id: randomUUID(), revision: game.revision, action: { type: 'start' } });
+      time += START_COUNTDOWN_MS;
+      game.tick();
+      const deadline = (timerSeconds ?? 12) * 1000;
+      time += deadline - 1;
+      game.tick();
+      assert.equal(game.snapshot().phase, 'QUESTION_OPEN', `${type}/${timerSeconds}`);
+      time++;
+      game.tick();
+      assert.equal(game.snapshot().phase, 'QUESTION_CLOSED', `${type}/${timerSeconds}`);
+      assert.equal(game.snapshot().clueElapsedMs, deadline);
+    }
+  }
 });
 
 const completionPaths = ['review', 'closed', 'open-close', 'open-tick', 'open-review',

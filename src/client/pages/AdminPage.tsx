@@ -118,7 +118,7 @@ export function AdminConsole({ logout, requirePasscode, development, passcode = 
               <section className="panel admin-question"><span className="eyebrow">CURRENT QUESTION / {state.question?.type.toUpperCase()} / {typed ? 'EVERYONE ANSWERS' : 'BUZZER'}</span>
                 <h2>{state.question?.question}</h2><div className="admin-media"><Media state={state} preview /></div>
                 <div className="private-answer"><span className="eyebrow">PRIVATE ANSWER / HOST ONLY</span><strong>{state.privateAnswer}</strong></div>
-                {typed ? <p>{state.question?.fixedPoints} fixed points / time remaining: {Math.max(0, Math.ceil((typedTimerMs(state) - state.clueElapsedMs) / 1000))}s</p> : <PointBar state={state} />}</section>
+                {typed ? <p>{state.question?.fixedPoints} fixed points / time remaining: {Math.max(0, Math.ceil((typedTimerMs(state) - state.clueElapsedMs) / 1000))}s</p> : <><PointBar state={state} /><p>Time remaining: {Math.max(0, Math.ceil((typedTimerMs(state) - state.clueElapsedMs) / 1000))}s</p></>}</section>
               <section className="panel game-actions"><span className="eyebrow">GAME ACTIONS</span>
                 {finishing && <div className="notice" role="status"><strong>Finishing the clue / score frozen</strong>
                   <p>{!connected ? 'Connection lost. Waiting to reconnect...' : state.mediaFinishNeedsSkip
@@ -274,6 +274,7 @@ function Setup({ state }: { state: Snapshot }) {
         ['minimumPoints', 'Minimum points', 1, 10000],
         ['dropPoints', 'Points dropped per step', 1, 10000],
         ['dropEverySeconds', 'Seconds between drops', 1, 120],
+        ['questionTimerSeconds', 'Default question countdown seconds', 1, 3600],
         ['lockoutSeconds', 'Wrong-answer lockout seconds (0 = entire question)', 0, 300],
         ['maxAnswerLength', 'Maximum typed answer characters', 1, 500],
       ] as const).map(([key, label, min, max]) => <label key={key}>{label}<input type="number" required min={min} max={max} step="1"

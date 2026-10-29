@@ -9,8 +9,8 @@ type Preview = { question: ArchiveQuestion; settings: Settings; index: number; c
 
 export function previewSnapshot(base: Snapshot, preview: Preview, elapsedMs: number): Snapshot {
   const { answer: _answer, ...question } = toRuntimeQuestion(preview.question);
-  const deadline = question.mode === 'typed'
-    ? ((question.timerSeconds ?? 0) + base.serverSettings.TimerEndOffsetSeconds) * 1000 : Infinity;
+  const deadline = ((question.timerSeconds ?? preview.settings.questionTimerSeconds)
+    + (question.mode === 'typed' ? base.serverSettings.typedAnswerGraceSeconds : 0)) * 1000;
   const elapsed = Math.max(0, Math.min(elapsedMs, deadline));
   const running = elapsedMs < deadline;
   const { privateAnswer: _privateAnswer, hostSubmissions: _hostSubmissions, ...publicBase } = base;

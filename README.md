@@ -66,7 +66,7 @@ npm start
     "maxPlayerNameLength": 24,
     "requireAdminPasscode": true,
     "maxPlayers": 12,
-    "TimerEndOffsetSeconds": 0,
+    "typedAnswerGraceSeconds": 3,
     "countdownSound": "/media/sounds/countdown-beep.wav",
     "reviewCorrectSound": "/media/sounds/countdown-beep.wav",
     "reviewWrongSound": "/media/sounds/countdown-beep.wav"
@@ -77,6 +77,7 @@ npm start
     "minimumPoints": 100,
     "dropPoints": 100,
     "dropEverySeconds": 5,
+    "questionTimerSeconds": 30,
     "lockoutSeconds": 0,
     "maxAnswerLength": 100
   }
@@ -110,10 +111,10 @@ npm start
     players, including disconnected players, until the host removes them.
     Reconnecting an existing player does not use another slot. New players
     cannot join a full game; phones show the limit and the server also enforces it.
-  - `TimerEndOffsetSeconds`: extra answering time for typed questions, **0** by
+  - `typedAnswerGraceSeconds`: extra answering time for typed questions, **0** by
     default (whole seconds, 0-300). Submissions automatically close at the question's
     `timerSeconds` plus this offset. For example, 30 + 2 closes after 32 seconds
-    of unpaused clue time. All countdowns include the offset. This is global-only,
+    of unpaused clue time. Only typed-answer countdowns include the offset. This is global-only,
     not editable through Game setup or per-quiz overrides. Restart after changing it.
   - `countdownSound`: local WAV path for the TV countdown beep, default
     `/media/sounds/countdown-beep.wav`. Set to `null` to disable it, or use a
@@ -132,6 +133,8 @@ npm start
     even if `countdownSound` is `null`.
 - **gameSetup**: defaults for the host's editable game settings.
   `maxAnswerLength` (1-500; default 100) limits typed answers for this quiz.
+  `questionTimerSeconds` (1-3600; default 30) is the countdown for questions
+  without their own `timerSeconds` override. It can also be changed in Game setup.
 - **quizzes/\<quiz-id\>/quiz.json**: per-quiz overrides, identified by the
   numeric quiz ID in the question file. The quiz file can contain a partial `gameSetup` section; omitted values use global defaults. You can create a
   partial override, for example `{"gameSetup":{"lockoutSeconds":10}}`.
@@ -234,7 +237,8 @@ sharing the QR code.
   starting; resetting or advancing a question clears all lockouts.
 - Configurable starting/minimum points and decay steps. Defaults are
   **500 -> 400 -> 300 -> 200 -> 100**, every five seconds. Minimum value and media
-  ending never auto-close a question.
+  ending do not close a question; its countdown does. Buzzer questions close at
+  zero, while typed questions close submissions and begin review as appropriate.
 - Pause/resume, close/skip, reveal, next, question reset, media restart, manual
   positive/negative adjustments, and undo. Commands have idempotency IDs and stale
   revision checks.
@@ -261,8 +265,9 @@ sharing the QR code.
   later questions and question resets do not repeat it. The animation respects
   the browser's reduced-motion preference.
 - **Everyone answers** questions accept one final typed submission per player.
-  The server automatically closes submissions at `timerSeconds` plus the global
-  `server.TimerEndOffsetSeconds`. Pausing pauses the timer and submissions.
+  The server automatically closes submissions at the question's `timerSeconds`
+  (or `gameSetup.questionTimerSeconds` when omitted) plus the global
+  `server.typedAnswerGraceSeconds`. Pausing pauses the timer and submissions.
   TV, host and phone countdowns include this offset; the TV bar shrinks over that
   full duration. It freezes when paused or closed; points remain fixed.
   The host can see all submissions privately; other players see only the count.
@@ -486,7 +491,8 @@ Every question must explicitly set `"mode": "buzzer"` for the first-buzz flow, o
 `"mode": "typed"` for everyone to answer privately. There is no default mode:
 missing or invalid values stop quiz loading with a validation error. Existing
 quiz files with omitted modes must add `"mode": "buzzer"` to those questions. A typed
-question requires its own fixed point value and submission timer in seconds:
+question requires its own fixed point value. It may override the inherited
+countdown in seconds:
 
 ```json
 {
@@ -501,8 +507,9 @@ question requires its own fixed point value and submission timer in seconds:
 }
 ```
 
-`fixedPoints` is an integer from 1 to 10000; `timerSeconds` is an integer from
-1 to 3600. The mode applies to text, image, audio and video clues. A player
+`fixedPoints` is an integer from 1 to 10000; `timerSeconds` is an optional
+integer from 1 to 3600 on every question type and mode. If omitted, the question
+inherits `gameSetup.questionTimerSeconds`. The mode applies to text, image, audio and video clues. A player
 cannot edit an answer after submitting; the same player reconnecting or opening
 another tab cannot submit again. The host sets the per-quiz answer length in
 **Game setup** and saves it with the other quiz settings.
@@ -511,7 +518,8 @@ Question fields are validated according to mode and media type:
 
 | Field | Allowed on |
 | --- | --- |
-| `fixedPoints`, `timerSeconds` | Required on `typed`; forbidden on `buzzer` |
+| `fixedPoints` | Required on `typed`; forbidden on `buzzer` |
+| `timerSeconds` | Optional countdown override on every question |
 | `text` | Text clues only; optional body below the question headline |
 | `media` | Required on image, audio and video; forbidden on text |
 | `reveal` | Image clues only |

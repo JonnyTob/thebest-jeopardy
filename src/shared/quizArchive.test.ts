@@ -26,7 +26,7 @@ test('archive format requires version 1 and rejects missing, future and malforme
   assert.equal(quizArchiveSchema.parse(archive()).schemaVersion, 1);
 });
 
-test('archive accepts all eight type/mode combinations and reports missing typed settings by field', () => {
+test('archive accepts countdown overrides for every type and requires fixed points for typed questions', () => {
   for (const type of ['text', 'image', 'audio', 'video'] as const) {
     for (const mode of ['buzzer', 'typed'] as const) {
       const entry = question(type, mode);
@@ -34,14 +34,14 @@ test('archive accepts all eight type/mode combinations and reports missing typed
       const runtime = toRuntimeQuiz(quizArchiveSchema.parse(archive(entry)));
       assert.equal(runtime.questions[0].type, type);
       assert.equal(runtime.questions[0].mode, mode);
+      assert.equal(archiveQuestionSchema.safeParse({ ...entry, timerSeconds: undefined }).success, true);
+      assert.equal(archiveQuestionSchema.safeParse({ ...entry, timerSeconds: 45 }).success, true);
     }
-    for (const field of ['fixedPoints', 'timerSeconds'] as const) {
-      const result = quizArchiveSchema.safeParse(archive({ ...question(type, 'typed'), [field]: undefined }));
-      assert.equal(result.success, false);
-      if (!result.success) assert.ok(result.error.issues.some((issue) =>
-        JSON.stringify(issue.path) === JSON.stringify(['questions', 0, field])));
-      assert.equal(archiveQuestionSchema.safeParse({ ...question(type), [field]: 30 }).success, false);
-    }
+    const result = quizArchiveSchema.safeParse(archive({ ...question(type, 'typed'), fixedPoints: undefined }));
+    assert.equal(result.success, false);
+    if (!result.success) assert.ok(result.error.issues.some((issue) =>
+      JSON.stringify(issue.path) === JSON.stringify(['questions', 0, 'fixedPoints'])));
+    assert.equal(archiveQuestionSchema.safeParse({ ...question(type), fixedPoints: 30 }).success, false);
     if (type !== 'text') {
       const result = archiveQuestionSchema.safeParse({ ...question(type), media: undefined });
       assert.equal(result.success, false);
@@ -89,7 +89,7 @@ test('archive and runtime validation reject unknown fields, including nested con
     { ...archive(), typo: true },
     { ...archive(), quiz: { ...archive().quiz, typo: true } },
     { ...archive(), gameSetup: { title: 'Wrong place' } },
-    { ...archive(), gameSetup: { TimerEndOffsetSeconds: 2 } },
+    { ...archive(), gameSetup: { typedAnswerGraceSeconds: 2 } },
     { ...archive(), gameSetup: { minPoints: 10 } },
   ]) assert.equal(quizArchiveSchema.safeParse(value).success, false);
 });

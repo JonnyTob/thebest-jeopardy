@@ -47,7 +47,7 @@ export const questionDefinitionSchema = z.strictObject({
   if (question.type !== 'text' && !question.media) {
     context.addIssue({ code: 'custom', path: ['media'], message: 'Media clues require a local media path' });
   }
-  for (const field of ['fixedPoints', 'timerSeconds'] as const) {
+  for (const field of ['fixedPoints'] as const) {
     if (question.mode === 'typed' && question[field] === undefined) {
       context.addIssue({ code: 'custom', path: [field], message: `Typed questions require ${field}` });
     }
@@ -94,6 +94,7 @@ export const settingsSchema = z.object({
   minimumPoints: z.number().int().min(1).max(10000),
   dropPoints: z.number().int().min(1).max(10000),
   dropEverySeconds: z.number().min(1).max(120),
+  questionTimerSeconds: z.number().int().min(1).max(3600).default(30),
   lockoutSeconds: z.number().int().min(0).max(300).default(0),
   maxAnswerLength: z.number().int().min(1).max(500).default(100),
 }).refine((s) => s.minimumPoints <= s.startPoints,
@@ -109,7 +110,7 @@ export const serverSettingsSchema = z.object({
   maxPlayerNameLength: z.number().int().min(1).max(100).default(24),
   requireAdminPasscode: z.boolean().default(true),
   maxPlayers: z.number().int().min(1).max(1000).default(12),
-  TimerEndOffsetSeconds: z.number().int().min(0).max(300).default(0),
+  typedAnswerGraceSeconds: z.number().int().min(0).max(300).default(0),
   countdownSound: localMedia.refine((value) => /\.wav$/i.test(value), 'Countdown sound must be a WAV file')
     .nullable().default('/media/sounds/countdown-beep.wav'),
   reviewCorrectSound: localMedia.refine((value) => /\.wav$/i.test(value), 'Review correct sound must be a WAV file')

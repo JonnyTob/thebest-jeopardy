@@ -70,7 +70,8 @@ export function nextRoundCountdownText(remainingMs: number | null): string {
 }
 
 export function typedTimerMs(state: Snapshot): number {
-  return Math.max(0, (state.question?.timerSeconds ?? 0) + (state.serverSettings.TimerEndOffsetSeconds ?? 0)) * 1000;
+  return Math.max(0, (state.question?.timerSeconds ?? state.settings.questionTimerSeconds)
+    + (state.question?.mode === 'typed' ? state.serverSettings.typedAnswerGraceSeconds : 0)) * 1000;
 }
 
 export function PointBar({ state }: { state: Snapshot }) {

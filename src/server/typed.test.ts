@@ -27,14 +27,16 @@ function setup() {
   return { game, alice, bob, carol, command, advance: (ms: number) => { time += ms; } };
 }
 
-test('typed question validation requires fixed points and timer while explicit buzzer questions need neither', () => {
+test('typed question validation requires fixed points while all modes allow a countdown override', () => {
   const base = { id: 'one', type: 'text', mode: 'buzzer', question: 'Clue', answer: 'Answer' };
   assert.equal(quizSchema.safeParse({ id: 1, title: 'Quiz', questions: [base] }).success, true);
   for (const data of [
-    { mode: 'typed' }, { mode: 'typed', fixedPoints: 10 },
+    { mode: 'typed' },
     { mode: 'typed', timerSeconds: 10 }, { mode: 'typed', fixedPoints: 0, timerSeconds: 10 },
     { mode: 'typed', fixedPoints: 10, timerSeconds: 0 }, { mode: 'other' },
   ]) assert.equal(quizSchema.safeParse({ id: 1, title: 'Quiz', questions: [{ ...base, ...data }] }).success, false);
+  assert.equal(quizSchema.safeParse({ id: 1, title: 'Quiz', questions: [{ ...base, mode: 'typed', fixedPoints: 10 }] }).success, true);
+  assert.equal(quizSchema.safeParse({ id: 1, title: 'Quiz', questions: [{ ...base, timerSeconds: 10 }] }).success, true);
   assert.equal(settingsSchema.safeParse({ title: 'Q', leaderboardCount: 8, startPoints: 500,
     minimumPoints: 100, dropPoints: 100, dropEverySeconds: 5, maxAnswerLength: 501 }).success, false);
 });

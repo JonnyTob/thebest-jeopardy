@@ -104,7 +104,7 @@ test('editor handles drafts, validation, question IDs, reordering and conflict f
     assert.notEqual(saved.questions[0].id, archive.questions[0].id);
     assert.equal(saved.questions[1].id, archive.questions[0].id);
     assert.equal(saved.questions[0].mode, 'typed');
-    assert.equal(saved.questions[0].timerSeconds, 30);
+    assert.equal(saved.questions[0].timerSeconds, undefined);
     assert.equal(dirty, false);
     conflict = true;
     await act(async () => { field('Answer', 'textarea').props.onChange({ target: { value: 'New answer' } }); });
@@ -326,7 +326,7 @@ test('media picker and library search, page, preview, upload and protect referen
 test('preview timeline matches typed deadlines, image reveal, media offsets and buzzer points', () => {
   const game = new GameEngine({ id: 42, title: 'Quiz', questions: [{
     id: 'one', type: 'text', mode: 'buzzer', question: 'Live', answer: 'LIVE SECRET',
-  }] }, undefined, serverSettingsSchema.parse({ TimerEndOffsetSeconds: 2 }));
+  }] }, undefined, serverSettingsSchema.parse({ typedAnswerGraceSeconds: 2 }));
   const base = game.snapshot(true);
   const image = { id: 'c1283d6f-bdd5-4d28-99c1-f2b344406394', type: 'image' as const,
     mode: 'typed' as const, question: 'Draft', answer: 'Preview only', media: 'media/image.png',

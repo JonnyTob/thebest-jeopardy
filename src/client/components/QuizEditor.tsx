@@ -14,6 +14,7 @@ function VideoDuration({ file }: { file: string }) {
   useEffect(() => {
     setDuration(null);
     setUnavailable(false);
+    if (typeof document === 'undefined' || typeof document.createElement !== 'function') return;
     const video = document.createElement('video');
     video.preload = 'metadata';
     video.onloadedmetadata = () => {
@@ -99,7 +100,7 @@ export function QuizEditor({ passcode, onDirtyChange, gameState }: { passcode: s
       const result = await request('/archive', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ archive: parsed.data, revision }) }) as { revision: string };
       setArchive(parsed.data); setSavedArchive(parsed.data); setOriginal(JSON.stringify(parsed.data)); setRevision(result.revision);
-      setMessage('Saved. Restart the server to load quiz changes; restarting clears players and scores.');
+      setMessage('Saved. Use Restart Quiz in development (or restart the server in production) to load changes; restarting clears players and scores.');
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Save failed.'); }
     finally { setBusy(false); }
   }
@@ -199,7 +200,7 @@ export function QuizEditor({ passcode, onDirtyChange, gameState }: { passcode: s
     </div>;
   }
   return <section className="panel quiz-editor"><h1>Quiz editor</h1>
-    <p>Editing Quiz #{archive.quiz.id}. Saved changes apply after a server restart, not to the current game.</p>
+    <p>Editing Quiz #{archive.quiz.id}. Saved changes apply after Restart Quiz in development or a server restart in production.</p>
     {error && <p role="alert">{error}</p>}
     {message && <p role="status">{message}</p>}
     {issues.length > 0 && <ul role="alert">{issues.map((issue, index) => <li key={index}>{issue.path || 'Quiz'}: {issue.message}</li>)}</ul>}
@@ -233,10 +234,11 @@ export function QuizEditor({ passcode, onDirtyChange, gameState }: { passcode: s
         <label>Mode<select value={question.mode} onChange={(event) => {
           const mode = event.target.value === 'typed' ? 'typed' : 'buzzer';
           if (mode === 'buzzer' && question.mode === 'typed' && !window.confirm('Changing to buzzer removes typed points and timer. Continue?')) return;
-          updateQuestion({ mode, fixedPoints: mode === 'typed' ? 250 : undefined, timerSeconds: mode === 'typed' ? 30 : undefined });
+          updateQuestion({ mode, fixedPoints: mode === 'typed' ? 250 : undefined });
         }}><option value="buzzer">Buzzer</option><option value="typed">Typed</option></select></label>
-        {question.mode === 'typed' && <><label>Fixed points<input type="number" value={question.fixedPoints ?? ''} onChange={(event) => updateQuestion({ fixedPoints: Number(event.target.value) })} /></label>
-          <label>Timer seconds<input type="number" value={question.timerSeconds ?? ''} onChange={(event) => updateQuestion({ timerSeconds: Number(event.target.value) })} /></label></>}
+        {question.mode === 'typed' && <label>Fixed points<input type="number" value={question.fixedPoints ?? ''} onChange={(event) => updateQuestion({ fixedPoints: Number(event.target.value) })} /></label>}
+        <label>Timer countdown (seconds)<input type="number" min={1} max={3600} placeholder={`Inherit global (${archive.gameSetup?.questionTimerSeconds ?? gameState.settings.questionTimerSeconds}s)`}
+          value={question.timerSeconds ?? ''} onChange={(event) => updateQuestion({ timerSeconds: event.target.value === '' ? undefined : Number(event.target.value) })} /></label>
         <label>Clue type<select value={question.type} onChange={(event) => changeType(event.target.value as ArchiveQuestion['type'])}>
           <option value="text">Text</option><option value="image">Image</option><option value="audio">Audio</option><option value="video">Video</option></select></label>
         {question.type === 'text' ? <label>Clue text (optional)<textarea rows={1} value={question.text ?? ''} onChange={(event) => updateQuestion({ text: event.target.value || undefined })} /></label>

@@ -10,7 +10,7 @@ import { hostCommandSchema, serverSettingsSchema } from '../shared/protocol.js';
 
 const defaults = {
   leaderboardCount: 8, startPoints: 500, minimumPoints: 100, dropPoints: 100,
-  dropEverySeconds: 5, lockoutSeconds: 0, maxAnswerLength: 100,
+  dropEverySeconds: 5, questionTimerSeconds: 30, lockoutSeconds: 0, maxAnswerLength: 100,
 };
 const branding = { name: 'Kaboot', logoText: 'K', tagline: 'Buzz in. Get booted.' };
 
@@ -131,26 +131,26 @@ test('countdownSound defaults to a local WAV, accepts null and safe custom WAV p
   }
 });
 
-test('TimerEndOffsetSeconds defaults to zero, validates integer seconds and is global-server-only', () => {
-  assert.equal(serverSettingsSchema.parse({}).TimerEndOffsetSeconds, 0);
+test('typedAnswerGraceSeconds defaults to zero, validates integer seconds and is global-server-only', () => {
+  assert.equal(serverSettingsSchema.parse({}).typedAnswerGraceSeconds, 0);
   const directory = mkdtempSync(path.join(tmpdir(), 'quiz-timer-settings-'));
   const file = path.join(directory, 'settings.json');
   const storage = new JsonQuizSettingsStorage(path.join(directory, 'quizzes'));
   const config = { branding, server: { port: 3000 }, gameSetup: defaults };
   try {
-    for (const TimerEndOffsetSeconds of [0, 1, 150, 300]) {
-      assert.equal(serverSettingsSchema.parse({ TimerEndOffsetSeconds }).TimerEndOffsetSeconds, TimerEndOffsetSeconds);
-      writeFileSync(file, JSON.stringify({ ...config, server: { ...config.server, TimerEndOffsetSeconds } }));
-      assert.equal(loadGlobalSettings(file, {}).server.TimerEndOffsetSeconds, TimerEndOffsetSeconds);
+    for (const typedAnswerGraceSeconds of [0, 1, 150, 300]) {
+      assert.equal(serverSettingsSchema.parse({ typedAnswerGraceSeconds }).typedAnswerGraceSeconds, typedAnswerGraceSeconds);
+      writeFileSync(file, JSON.stringify({ ...config, server: { ...config.server, typedAnswerGraceSeconds } }));
+      assert.equal(loadGlobalSettings(file, {}).server.typedAnswerGraceSeconds, typedAnswerGraceSeconds);
     }
-    for (const TimerEndOffsetSeconds of [-1, 301, 0.5, '1', null, true, NaN, Infinity]) {
-      assert.equal(serverSettingsSchema.safeParse({ TimerEndOffsetSeconds }).success, false);
-      writeFileSync(file, JSON.stringify({ ...config, server: { ...config.server, TimerEndOffsetSeconds } }));
+    for (const typedAnswerGraceSeconds of [-1, 301, 0.5, '1', null, true, NaN, Infinity]) {
+      assert.equal(serverSettingsSchema.safeParse({ typedAnswerGraceSeconds }).success, false);
+      writeFileSync(file, JSON.stringify({ ...config, server: { ...config.server, typedAnswerGraceSeconds } }));
       assert.throws(() => loadGlobalSettings(file, {}), /Unable to load global settings/);
     }
     for (const invalid of [
-      { ...config, TimerEndOffsetSeconds: 10 },
-      { ...config, gameSetup: { ...defaults, TimerEndOffsetSeconds: 10 } },
+      { ...config, typedAnswerGraceSeconds: 10 },
+      { ...config, gameSetup: { ...defaults, typedAnswerGraceSeconds: 10 } },
       { ...config, server: { ...config.server, timerEndOffsetSeconds: 10 } },
     ]) {
       writeFileSync(file, JSON.stringify(invalid));
@@ -159,19 +159,19 @@ test('TimerEndOffsetSeconds defaults to zero, validates integer seconds and is g
     const settings = { ...defaults, title: 'Quiz' };
     storage.save(100001, settings);
     for (const invalid of [
-      { gameSetup: { TimerEndOffsetSeconds: 10 } },
-      { gameSetup: {}, server: { TimerEndOffsetSeconds: 10 } },
-      { gameSetup: {}, TimerEndOffsetSeconds: 10 },
+      { gameSetup: { typedAnswerGraceSeconds: 10 } },
+      { gameSetup: {}, server: { typedAnswerGraceSeconds: 10 } },
+      { gameSetup: {}, typedAnswerGraceSeconds: 10 },
     ]) {
       writeFileSync(path.join(directory, 'quizzes', '100001.json'), JSON.stringify(invalid));
       assert.throws(() => storage.load(100001), /Invalid quiz settings/);
     }
     const command = hostCommandSchema.parse({ id: randomUUID(), revision: 0,
-      action: { type: 'setup', settings: { ...settings, TimerEndOffsetSeconds: 10 } } });
+      action: { type: 'setup', settings: { ...settings, typedAnswerGraceSeconds: 10 } } });
     assert.equal(command.action.type, 'setup');
     if (command.action.type !== 'setup') assert.fail('Expected setup command');
     assert.deepEqual(command.action.settings, settings, 'host setup cannot introduce a server-only setting');
-    storage.save(100001, { ...settings, ...{ TimerEndOffsetSeconds: 10 } });
+    storage.save(100001, { ...settings, ...{ typedAnswerGraceSeconds: 10 } });
     assert.deepEqual(storage.load(100001), settings);
     assert.deepEqual(JSON.parse(readFileSync(path.join(directory, 'quizzes', '100001.json'), 'utf8')), { gameSetup: settings });
   } finally {
@@ -184,7 +184,7 @@ test('global sections load defaults, respect environment overrides and reject in
   const file = path.join(directory, 'settings.json');
   try {
     const serverDefaults = { startupQuizId: 100001, maxPlayerNameLength: 24, requireAdminPasscode: true, maxPlayers: 12,
-      TimerEndOffsetSeconds: 0, countdownSound: '/media/sounds/countdown-beep.wav',
+      typedAnswerGraceSeconds: 0, countdownSound: '/media/sounds/countdown-beep.wav',
       reviewCorrectSound: '/media/sounds/countdown-beep.wav', reviewWrongSound: '/media/sounds/countdown-beep.wav' };
     const config = { branding, server: { port: 3000, joinOrigin: 'http://example.com:3000' }, gameSetup: defaults };
     writeFileSync(file, JSON.stringify(config));
@@ -194,7 +194,7 @@ test('global sections load defaults, respect environment overrides and reject in
     assert.equal(loadGlobalSettings(file, { QUIZ_ID: '100002' }).server.startupQuizId, 100002);
     assert.throws(() => loadGlobalSettings(file, { QUIZ_ID: '0' }), /Unable to load global settings/);
     const customServer = { ...config.server, startupQuizId: 100001, maxPlayerNameLength: 32, requireAdminPasscode: false, maxPlayers: 20,
-      TimerEndOffsetSeconds: 15, countdownSound: '/media/custom/countdown.wav',
+      typedAnswerGraceSeconds: 15, countdownSound: '/media/custom/countdown.wav',
       reviewCorrectSound: '/media/custom/correct.wav', reviewWrongSound: '/media/custom/wrong.wav' };
     writeFileSync(file, JSON.stringify({ ...config, server: customServer }));
     assert.deepEqual(loadGlobalSettings(file, {}).server, customServer);

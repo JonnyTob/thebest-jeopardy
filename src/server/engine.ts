@@ -62,7 +62,8 @@ export class GameEngine {
     readonly serverSettings: ServerSettings = serverSettingsSchema.parse({}),
     private mediaDurations: Readonly<Record<string, number>> = {}) {
     this.settings = { title: quiz.title, leaderboardCount: 8, startPoints: 500,
-      minimumPoints: 100, dropPoints: 100, dropEverySeconds: 5, lockoutSeconds: 0, maxAnswerLength: 100 };
+      minimumPoints: 100, dropPoints: 100, dropEverySeconds: 5, questionTimerSeconds: 30,
+      lockoutSeconds: 0, maxAnswerLength: 100 };
   }
 
   reloadQuiz(quiz: Quiz, settings: Settings, mediaDurations: Readonly<Record<string, number>>) {
@@ -129,15 +130,17 @@ export class GameEngine {
     } else if (this.clue.phase === 'QUESTION_OPEN' && !this.clue.paused && this.elapsed() >= this.submissionDeadline()) {
       this.close();
       this.clue.elapsedMs = this.submissionDeadline();
-      if (this.clue.reviewQueue.every((entry) => entry.correct !== null)) this.beginReview();
+      if (this.quiz.questions[this.clue.questionIndex]?.mode === 'typed'
+        && this.clue.reviewQueue.every((entry) => entry.correct !== null)) this.beginReview();
       this.revision++;
     }
   }
 
   private submissionDeadline(): number {
     const question = this.quiz.questions[this.clue.questionIndex];
-    return question?.mode === 'typed'
-      ? ((question.timerSeconds ?? 0) + this.serverSettings.TimerEndOffsetSeconds) * 1000 : Infinity;
+    return question
+      ? ((question.timerSeconds ?? this.settings.questionTimerSeconds)
+        + (question.mode === 'typed' ? this.serverSettings.typedAnswerGraceSeconds : 0)) * 1000 : Infinity;
   }
 
   private beginNextRound() {
@@ -241,6 +244,7 @@ export class GameEngine {
   buzz(playerId: string) {
     this.require(this.players.get(playerId)?.connected, 'Join the game before buzzing.');
     this.require(this.clue.phase === 'QUESTION_OPEN' && !this.clue.paused, 'Buzzers are not open.');
+    this.require(this.elapsed() < this.submissionDeadline(), 'Buzzers are closed. The timer has ended.');
     this.require(this.quiz.questions[this.clue.questionIndex]?.mode !== 'typed', 'This question requires a typed answer.');
     this.require(!this.isLockedOut(playerId), this.settings.lockoutSeconds > 0
       ? 'You are locked out until your countdown ends.' : 'You are locked out for this question.');

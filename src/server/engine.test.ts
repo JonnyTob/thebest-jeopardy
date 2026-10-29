@@ -175,10 +175,10 @@ test('wrong uses frozen penalty, locks player out and resumes; correct closes at
 test('minimum value and media end are not deadlines; host pause and restart preserve point time', () => {
   const { game, alice, command, advance } = setup();
   command({ type: 'start' });
-  advance(30000);
+  advance(25000);
   command({ type: 'pause' });
   advance(60000);
-  assert.equal(game.snapshot().clueElapsedMs, 30000);
+  assert.equal(game.snapshot().clueElapsedMs, 25000);
   assert.throws(() => game.buzz(alice.id), /not open/);
   command({ type: 'restartMedia' });
   assert.equal(game.snapshot().mediaPositionSeconds, 0);

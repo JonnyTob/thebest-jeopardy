@@ -17,7 +17,8 @@ const { title: _title, ...gameSetupShape } = settingsSchema.shape;
 const globalSettingsSchema = z.object({
   branding: brandingSchema,
   server: serverSchema,
-  gameSetup: z.object(gameSetupShape).strict(),
+  gameSetup: z.object({ ...gameSetupShape,
+    questionTimerSeconds: settingsSchema.shape.questionTimerSeconds.removeDefault().optional() }).strict(),
 }).strict();
 
 export function loadGlobalSettings(file: string, env: NodeJS.ProcessEnv = process.env) {

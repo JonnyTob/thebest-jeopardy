@@ -52,7 +52,8 @@ export function QuestionClue({ state }: { state: Snapshot }) {
       </div>
       <div className="point-meta"><strong>{state.question?.fixedPoints} fixed points</strong>
         <span>{state.clockRunning ? 'Clock running' : 'Clock frozen'}</span></div>
-    </div> : <PointBar state={state} />}
+    </div> : <><PointBar state={state} /><div className="clue-countdown" aria-label="Question time remaining">
+      Time remaining: {remainingSeconds}s</div></>}
   </>;
 }
 
