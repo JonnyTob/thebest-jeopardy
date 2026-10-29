@@ -10,12 +10,13 @@ test('archive loads relative media and saves settings alongside questions', asyn
   try {
     await mkdir(path.join(root, '42'));
     const file = path.join(root, '42', 'quiz.json');
-    const original = { quiz: { id: 42, title: 'Quiz', coverImage: 'media/cover.svg' }, questions: [{ id: 'c1283d6f-bdd5-4d28-99c1-f2b344406394', keyword: 'q', type: 'image', question: 'What?', answer: 'Secret', media: 'media/image.png' }], gameSetup: { lockoutSeconds: 5 } };
+    const original = { quiz: { id: 42, title: 'Quiz', coverImage: 'media/cover.svg' }, questions: [{ id: 'c1283d6f-bdd5-4d28-99c1-f2b344406394', keyword: 'q', type: 'image', mode: 'buzzer', question: 'What?', answer: 'Secret', media: 'media/image.png' }], gameSetup: { lockoutSeconds: 5 } };
     await writeFile(file, JSON.stringify(original));
     const storage = new ArchiveQuizStorage(root, 42);
     const quiz = await storage.load();
     assert.equal(quiz.coverImage, '/media/quiz/cover.svg');
     assert.equal(quiz.questions[0].media, '/media/quiz/image.png');
+    assert.equal(quiz.questions[0].mode, 'buzzer');
     const settings = new ArchiveQuizSettingsStorage(storage);
     assert.equal(settings.load(42).lockoutSeconds, 5);
     settings.save(42, { title: 'New', leaderboardCount: 8, startPoints: 500, minimumPoints: 100, dropPoints: 100, dropEverySeconds: 5, lockoutSeconds: 0, maxAnswerLength: 100 });
@@ -36,5 +37,10 @@ test('archive loads relative media and saves settings alongside questions', asyn
     await assert.rejects(storage.load(), /Question IDs must be unique/);
     await writeFile(file, JSON.stringify({ ...original, quiz: { ...original.quiz, id: 43 } }));
     await assert.rejects(storage.load(), /ID does not match/);
+    const { mode: _mode, ...withoutMode } = original.questions[0];
+    for (const question of [withoutMode, { ...withoutMode, mode: null }, { ...withoutMode, mode: 'unknown' }]) {
+      await writeFile(file, JSON.stringify({ ...original, questions: [question] }));
+      await assert.rejects(storage.load(), /Question mode is required and must be/);
+    }
   } finally { await rm(root, { recursive: true, force: true }); }
 });

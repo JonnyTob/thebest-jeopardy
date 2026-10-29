@@ -19,7 +19,7 @@ export const questionSchema = z.object({
   keyword: z.string().trim().min(1).max(80).optional(),
   type: z.enum(['text', 'image', 'video', 'audio']),
   question: z.string().trim().min(1).max(500),
-  mode: z.enum(['buzzer', 'typed']).optional(),
+  mode: z.enum(['buzzer', 'typed'], { error: 'Question mode is required and must be "buzzer" or "typed".' }),
   fixedPoints: z.number().int().min(1).max(10000).optional(),
   timerSeconds: z.number().int().min(1).max(3600).optional(),
   text: z.string().max(2000).optional(),

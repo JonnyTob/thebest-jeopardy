@@ -7,8 +7,8 @@ import { createApp } from './app.js';
 import type { ClientEvents, HostAction, ServerEvents, Quiz } from '../shared/protocol.js';
 
 const quiz: Quiz = { id: 100001, title: 'Restart test', questions: [
-  { id: 'one', type: 'text', question: 'First?', answer: 'First answer' },
-  { id: 'two', type: 'text', question: 'Second?', answer: 'Second answer' },
+  { id: 'one', type: 'text', mode: 'buzzer', question: 'First?', answer: 'First answer' },
+  { id: 'two', type: 'text', mode: 'buzzer', question: 'Second?', answer: 'Second answer' },
 ] };
 
 test('restart clears game state in every phase and preserves setup and revision', () => {

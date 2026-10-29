@@ -22,7 +22,7 @@ test('probes local WAV, MP3 and MP4, ignores missing/unsupported/corrupt paths a
     await symlink(path.join(temp, 'outside.wav'), path.join(root, 'escape.wav'));
     const names = ['sound.wav', 'sound.mp3', 'video.mp4', 'missing.wav', 'broken.mp4', 'escape.wav', 'sound.ogg', '../outside.wav'];
     const quiz: Quiz = { id: 1, title: 'Probe', questions: names.map((name, index) => ({
-      id: String(index), type: 'audio', question: 'Question', answer: 'SECRET', media: `/media/${name}`,
+      id: String(index), type: 'audio', mode: 'buzzer', question: 'Question', answer: 'SECRET', media: `/media/${name}`,
     })) };
     const durations = await probeMediaDurations(quiz, root);
     assert.equal(durations['/media/sound.wav'], 8);

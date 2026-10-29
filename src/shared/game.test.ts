@@ -1,7 +1,24 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { pointsAt, startCountdownText, tileOrder, valueWindowMs } from './game.js';
-import { quizSchema, settingsSchema } from './protocol.js';
+import { questionSchema, quizSchema, settingsSchema } from './protocol.js';
+
+test('every question requires an explicit valid mode for all clue types', () => {
+  for (const type of ['text', 'image', 'audio', 'video'] as const) {
+    const question = { id: 'one', type, question: 'Clue', answer: 'Answer',
+      ...(type === 'text' ? {} : { media: '/media/clue.svg' }) };
+    for (const mode of [undefined, null, '', 'other', 0]) {
+      const result = questionSchema.safeParse({ ...question, ...(mode === undefined ? {} : { mode }) });
+      assert.equal(result.success, false, `${type}/${String(mode)}`);
+      if (!result.success) {
+        assert.ok(result.error.issues.some((issue) => issue.path[0] === 'mode'
+          && issue.message.includes('Question mode is required')));
+      }
+    }
+    assert.equal(questionSchema.parse({ ...question, mode: 'buzzer' }).mode, 'buzzer');
+    assert.equal(questionSchema.parse({ ...question, mode: 'typed', fixedPoints: 250, timerSeconds: 30 }).mode, 'typed');
+  }
+});
 
 test('game-start countdown gives each number and the launch message one second', () => {
   for (const [remaining, text] of [[4000, '3'], [3001, '3'], [3000, '2'], [2001, '2'],
@@ -40,14 +57,14 @@ test('lockout settings preserve the default and validate whole seconds from 0 to
 });
 
 test('quiz validation rejects missing media, duplicate IDs and invalid playback ranges', () => {
-  const question = { id: 'one', type: 'text', question: 'Question', answer: 'Answer' };
+  const question = { id: 'one', type: 'text', mode: 'buzzer', question: 'Question', answer: 'Answer' };
   assert.equal(quizSchema.safeParse({ id: 100001, title: 'Quiz', questions: [question, question] }).success, false);
   assert.equal(quizSchema.safeParse({ id: 100001, title: 'Quiz', questions: [{ ...question, type: 'image' }] }).success, false);
   assert.equal(quizSchema.safeParse({ id: 100001, title: 'Quiz', questions: [{ ...question, type: 'audio', media: '/media/sound.mp3', playback: { startSeconds: 30, endSeconds: 10 } }] }).success, false);
 });
 
 test('quiz IDs are required positive safe integers, distinct from question IDs', () => {
-  const quiz = { title: 'Quiz', questions: [{ id: 'one', type: 'text', question: 'Question', answer: 'Answer' }] };
+  const quiz = { title: 'Quiz', questions: [{ id: 'one', type: 'text', mode: 'buzzer', question: 'Question', answer: 'Answer' }] };
   assert.equal(quizSchema.safeParse(quiz).success, false);
   for (const id of [1, 100001, Number.MAX_SAFE_INTEGER]) {
     assert.equal(quizSchema.parse({ ...quiz, id }).id, id);
@@ -58,7 +75,7 @@ test('quiz IDs are required positive safe integers, distinct from question IDs',
 });
 
 test('quiz covers are optional and restricted to local media paths', () => {
-  const quiz = { id: 100001, title: 'Quiz', questions: [{ id: 'one', type: 'text', question: 'Question', answer: 'Answer' }] };
+  const quiz = { id: 100001, title: 'Quiz', questions: [{ id: 'one', type: 'text', mode: 'buzzer', question: 'Question', answer: 'Answer' }] };
   assert.equal(quizSchema.parse(quiz).coverImage, undefined);
   assert.equal(quizSchema.parse({ ...quiz, coverImage: '/media/covers/100001.svg' }).coverImage, '/media/covers/100001.svg');
   for (const coverImage of ['', 'https://example.com/cover.jpg', '/media/../questions.json', '/private/cover.jpg']) {

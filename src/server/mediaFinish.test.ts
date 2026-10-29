@@ -5,8 +5,8 @@ import { BUZZ_RESULT_MS, NEXT_ROUND_MS, START_COUNTDOWN_MS } from '../shared/gam
 import type { HostAction, Question, Quiz } from '../shared/protocol.js';
 import { GameEngine } from './engine.js';
 
-const audio: Question = { id: 'one', type: 'audio', question: 'Listen', answer: 'SECRET', media: '/media/a.mp3' };
-const image: Question = { id: 'one', type: 'image', question: 'Look', answer: 'SECRET', media: '/media/a.png',
+const audio: Question = { id: 'one', type: 'audio', mode: 'buzzer', question: 'Listen', answer: 'SECRET', media: '/media/a.mp3' };
+const image: Question = { id: 'one', type: 'image', mode: 'buzzer', question: 'Look', answer: 'SECRET', media: '/media/a.png',
   reveal: { effect: 'tiles', durationSeconds: 10, columns: 8, rows: 6, seed: 1 } };
 
 function setup(question: Question, durations: Record<string, number> = {}, last = false) {

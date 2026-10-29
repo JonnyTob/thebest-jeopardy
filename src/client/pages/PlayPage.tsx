@@ -18,7 +18,7 @@ export function PlayPage() {
   const lockoutRemaining = playerId ? state?.lockoutRemainingMs[playerId] : undefined;
   const answering = !!playerId && state?.phase === 'ANSWERING' && state.activePlayerId === playerId;
   const open = state?.phase === 'QUESTION_OPEN' && !state.paused;
-  const buzzerQuestion = !!state?.question && state.question.mode !== 'typed'
+  const buzzerQuestion = state?.question?.mode === 'buzzer'
     && !['LOBBY', 'STARTING', 'NEXT_ROUND', 'GAME_FINISHED'].includes(state.phase);
   const canBuzz = buzzerQuestion && connected && open && !lockedOut && !!player && !pending;
   let status = 'Waiting for the host';

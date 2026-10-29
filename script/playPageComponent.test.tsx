@@ -15,11 +15,11 @@ const { PlayPage } = await import('../src/client/pages/PlayPage.js');
 Object.assign(globalThis, { document: previousDocument });
 
 const game = new GameEngine({ id: 1, title: 'Phone test', questions: [
-  { id: 'one', type: 'text', question: 'Clue', answer: 'Answer' },
+  { id: 'one', type: 'text', mode: 'buzzer', question: 'Clue', answer: 'Answer' },
 ] });
 const player = game.join({ name: 'Alice', avatarId: 'fox' });
 const base: Snapshot = { ...game.snapshot(), phase: 'QUESTION_OPEN',
-  question: { id: 'one', type: 'text', question: 'Clue' }, questionIndex: 0 };
+  question: { id: 'one', type: 'text', mode: 'buzzer', question: 'Clue' }, questionIndex: 0 };
 
 function makeSession(state: Snapshot): Session {
   return { state, playerId: player.id, receivedAt: performance.now(), connected: true,
@@ -32,16 +32,11 @@ function wrapped(session: Session) {
     createElement(SessionContext.Provider, { value: session }, createElement(PlayPage)));
 }
 
-test('phone shows the buzzer only for a current buzzer question, including implicit mode', async () => {
+test('phone shows the buzzer only for a current explicit buzzer question', async () => {
   let view!: ReactTestRenderer;
   await act(async () => { view = create(wrapped(makeSession(base))); });
   try {
-    for (const mode of [undefined, 'buzzer'] as const) {
-      await act(async () => {
-        view.update(wrapped(makeSession({ ...base, question: { ...base.question!, mode } })));
-      });
-      assert.equal(view.root.findAllByProps({ className: 'buzz-button' }).length, 1);
-    }
+    assert.equal(view.root.findAllByProps({ className: 'buzz-button' }).length, 1);
     const typed = { ...base, question: { ...base.question!, mode: 'typed' as const, fixedPoints: 250, timerSeconds: 30 } };
     const hiddenStates: Snapshot[] = [
       { ...base, question: null },

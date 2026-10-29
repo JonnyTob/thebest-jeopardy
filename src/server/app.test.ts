@@ -14,8 +14,8 @@ test('media finish broadcasts the visual clock and accepts skip only from an aut
   let time = 0;
   t.mock.method(performance, 'now', () => time);
   const application = await createApp({ storage: { load: async () => ({ id: 1, title: 'Media socket quiz', questions: [
-    { id: 'one', type: 'audio', question: 'Current', answer: 'SECRET', media: '/media/examples/chimes.wav' },
-    { id: 'two', type: 'text', question: 'FUTURE', answer: 'SECRET TWO' },
+    { id: 'one', type: 'audio', mode: 'buzzer', question: 'Current', answer: 'SECRET', media: '/media/examples/chimes.wav' },
+    { id: 'two', type: 'text', mode: 'buzzer', question: 'FUTURE', answer: 'SECRET TWO' },
   ] }) }, passcode: 'test-host-passcode', serveClient: false });
   const sockets: Socket<ServerEvents, ClientEvents>[] = [];
   function waitFor(socket: Socket<ServerEvents, ClientEvents>, predicate: (state: Snapshot) => boolean) {
@@ -83,8 +83,8 @@ test('buzzer result and automatic transitions broadcast to players and displays 
   t.mock.method(performance, 'now', () => time);
   const application = await createApp({
     storage: { load: async () => ({ id: 100001, title: 'Buzzer socket quiz', questions: [
-      { id: 'one', type: 'text', question: 'First', answer: 'SECRET ONE' },
-      { id: 'two', type: 'text', question: 'Second', answer: 'SECRET TWO' },
+      { id: 'one', type: 'text', mode: 'buzzer', question: 'First', answer: 'SECRET ONE' },
+      { id: 'two', type: 'text', mode: 'buzzer', question: 'Second', answer: 'SECRET TWO' },
     ] }) },
     passcode: 'test-host-passcode', serveClient: false, gameSetup: { lockoutSeconds: 1 },
   });
@@ -343,7 +343,7 @@ test('mixed review groups broadcast only the current group and retain private ho
   t.mock.method(performance, 'now', () => time);
   const application = await createApp({ storage: { load: async () => ({ id: 1, title: 'Groups', questions: [
     { id: 'one', type: 'text', mode: 'typed', fixedPoints: 250, timerSeconds: 30, question: 'Clue', answer: 'SECRET' },
-    { id: 'two', type: 'text', question: 'FUTURE CLUE', answer: 'FUTURE SECRET' },
+    { id: 'two', type: 'text', mode: 'buzzer', question: 'FUTURE CLUE', answer: 'FUTURE SECRET' },
   ] }) }, passcode: 'host-passcode', serveClient: false });
   const sockets: Socket<ServerEvents, ClientEvents>[] = [];
   function waitFor(socket: Socket<ServerEvents, ClientEvents>, predicate: (state: Snapshot) => boolean) {
@@ -428,7 +428,7 @@ test('mixed review groups broadcast only the current group and retain private ho
 test('server nickname and player limits are advertised and enforced, including reconnects and removal', async () => {
   const application = await createApp({
     storage: { load: async () => ({ id: 100001, title: 'Limits quiz',
-      questions: [{ id: 'one', type: 'text', question: 'Clue', answer: 'Answer' }] }) },
+      questions: [{ id: 'one', type: 'text', mode: 'buzzer', question: 'Clue', answer: 'Answer' }] }) },
     passcode: 'test-host-passcode', serveClient: false,
     serverSettings: { maxPlayerNameLength: 32, maxPlayers: 1 },
   });
@@ -497,7 +497,7 @@ test('admin passcode switch controls host authentication without granting player
     await t.test(`requireAdminPasscode=${requireAdminPasscode}`, async () => {
       const application = await createApp({
         storage: { load: async () => ({ id: 100001, title: 'Auth quiz',
-          questions: [{ id: 'one', type: 'text', question: 'Clue', answer: 'Private answer' }] }) },
+          questions: [{ id: 'one', type: 'text', mode: 'buzzer', question: 'Clue', answer: 'Private answer' }] }) },
         passcode: 'test-host-passcode', serveClient: false,
         serverSettings: { requireAdminPasscode },
       });
@@ -548,7 +548,7 @@ test('global defaults and per-quiz overrides reach the host, save through socket
   const settingsStorage = new JsonQuizSettingsStorage(directory);
   const options = {
     storage: { load: async () => ({ id: 100001, title: 'Question title',
-      questions: [{ id: 'one', type: 'text', question: 'Clue', answer: 'Answer' }] }) },
+      questions: [{ id: 'one', type: 'text', mode: 'buzzer', question: 'Clue', answer: 'Answer' }] }) },
     passcode: 'test-host-passcode', serveClient: false, settingsStorage,
     gameSetup: { title: 'Global title', startPoints: 700, lockoutSeconds: 20 },
     serverSettings: { TimerEndOffsetSeconds: 7 },
@@ -609,7 +609,7 @@ test('global defaults and per-quiz overrides reach the host, save through socket
 
 test('configured LAN origin overrides internal interface addresses for QR links', async () => {
   const options = {
-    storage: { load: async () => ({ id: 100001, title: 'LAN Quiz', questions: [{ id: 'one', type: 'text', question: 'Clue', answer: 'Answer' }] }) },
+    storage: { load: async () => ({ id: 100001, title: 'LAN Quiz', questions: [{ id: 'one', type: 'text', mode: 'buzzer', question: 'Clue', answer: 'Answer' }] }) },
     passcode: 'test-host-passcode', serveClient: false,
   };
   for (const joinOrigin of ['not-a-url', 'ftp://example.com', 'http://user:secret@example.com',
@@ -633,7 +633,7 @@ test('configured LAN origin overrides internal interface addresses for QR links'
 test('setup persistence failures are reported to the host without changing state', async () => {
   const application = await createApp({
     storage: { load: async () => ({ id: 100001, title: 'Quiz title',
-      questions: [{ id: 'one', type: 'text', question: 'Clue', answer: 'Answer' }] }) },
+      questions: [{ id: 'one', type: 'text', mode: 'buzzer', question: 'Clue', answer: 'Answer' }] }) },
     passcode: 'test-host-passcode', serveClient: false,
     settingsStorage: { load: () => ({}), save: () => { throw new Error('Disk is read-only'); } },
   });
@@ -670,7 +670,7 @@ test('setup persistence failures are reported to the host without changing state
 
 test('socket flow enforces host authorization, answer privacy, one winner and token reconnection', async () => {
   const application = await createApp({
-    storage: { load: async () => ({ id: 100001, title: 'Socket Quiz', questions: [{ id: 'one', type: 'text', question: 'Public clue', answer: 'PRIVATE ANSWER' }] }) },
+    storage: { load: async () => ({ id: 100001, title: 'Socket Quiz', questions: [{ id: 'one', type: 'text', mode: 'buzzer', question: 'Public clue', answer: 'PRIVATE ANSWER' }] }) },
     passcode: 'test-host-passcode',
     serveClient: false,
   });
@@ -756,7 +756,7 @@ test('socket flow enforces host authorization, answer privacy, one winner and to
 test('development serves all pages, modules and public media without exposing server files', async () => {
   const branding = { name: 'Custom Quiz', logoText: 'CQ', tagline: 'Custom tagline.' };
   const application = await createApp({
-    storage: { load: async () => ({ id: 100002, title: 'Development Quiz', questions: [{ id: 'one', type: 'text', question: 'Public clue', answer: 'Private answer' }] }) },
+    storage: { load: async () => ({ id: 100002, title: 'Development Quiz', questions: [{ id: 'one', type: 'text', mode: 'buzzer', question: 'Public clue', answer: 'Private answer' }] }) },
     passcode: 'test-host-passcode',
     branding,
   });

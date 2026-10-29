@@ -9,8 +9,8 @@ const quiz: Quiz = {
   id: 100001,
   title: 'Test Quiz',
   questions: [
-    { id: 'one', type: 'text', question: 'First question?', answer: 'SECRET FIRST' },
-    { id: 'two', type: 'text', question: 'Second question?', answer: 'SECRET SECOND' },
+    { id: 'one', type: 'text', mode: 'buzzer', question: 'First question?', answer: 'SECRET FIRST' },
+    { id: 'two', type: 'text', mode: 'buzzer', question: 'Second question?', answer: 'SECRET SECOND' },
   ],
 };
 function setup() {

@@ -67,8 +67,8 @@ test('TV review overlays the current player without replacing text or media clue
   for (const correct of [false, true]) {
     let time = 0;
     const game = new GameEngine({ id: 100001, title: 'Buzzer', questions: [
-      { id: 'one', type: 'text', question: 'Buzzer clue', answer: 'SECRET BUZZER ANSWER' },
-      { id: 'two', type: 'text', question: 'Future clue', answer: 'SECRET FUTURE ANSWER' },
+      { id: 'one', type: 'text', mode: 'buzzer', question: 'Buzzer clue', answer: 'SECRET BUZZER ANSWER' },
+      { id: 'two', type: 'text', mode: 'buzzer', question: 'Future clue', answer: 'SECRET FUTURE ANSWER' },
     ] }, () => time);
     const alice = game.join({ name: 'Alice', avatarId: 'fox' });
     const send = (action: HostAction) => game.command({ id: randomUUID(), revision: game.revision, action });

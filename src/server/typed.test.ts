@@ -10,7 +10,7 @@ import { START_COUNTDOWN_MS, NEXT_ROUND_MS, REVIEW_RESULT_MS, REVIEW_GROUP_MS } 
 const quiz = quizSchema.parse({
   id: 100001, title: 'Mixed quiz', questions: [
     { id: 'typed', mode: 'typed', fixedPoints: 250, timerSeconds: 2, type: 'text', question: 'Which movie?', answer: 'SECRET' },
-    { id: 'buzzer', type: 'text', question: 'Next?', answer: 'NEXT SECRET' },
+    { id: 'buzzer', type: 'text', mode: 'buzzer', question: 'Next?', answer: 'NEXT SECRET' },
   ],
 });
 
@@ -27,8 +27,8 @@ function setup() {
   return { game, alice, bob, carol, command, advance: (ms: number) => { time += ms; } };
 }
 
-test('typed question validation requires fixed points and timer while old questions remain valid', () => {
-  const base = { id: 'one', type: 'text', question: 'Clue', answer: 'Answer' };
+test('typed question validation requires fixed points and timer while explicit buzzer questions need neither', () => {
+  const base = { id: 'one', type: 'text', mode: 'buzzer', question: 'Clue', answer: 'Answer' };
   assert.equal(quizSchema.safeParse({ id: 1, title: 'Quiz', questions: [base] }).success, true);
   for (const data of [
     { mode: 'typed' }, { mode: 'typed', fixedPoints: 10 },

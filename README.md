@@ -242,8 +242,8 @@ sharing the QR code.
   identity, and lockout. Reopening multiple tabs with the same token still counts
   as one player. An offline answering player remains active until the host rules
   or closes the clue.
-- The phone's **BUZZ** button appears only for buzzer-mode questions (including
-  questions with omitted `mode`). It is hidden in the lobby, countdowns, typed
+- The phone's **BUZZ** button appears only for questions with `"mode": "buzzer"`.
+  It is hidden in the lobby, countdowns, typed
   questions and final standings. An enabled buzzer is green; paused, locked-out,
   disconnected and pending states remain disabled, with gold for the first buzzer.
 - Leaderboard sorted immediately after every score change, including wrong-answer
@@ -393,7 +393,7 @@ The bundled quiz is also a playable examples catalog:
 
 | # | Keyword | Type / mode | Features to try |
 | --- | --- | --- | --- |
-| 1 | `warm-up` | Text / buzzer | Omitted `mode` defaults to buzzer; separate headline and clue text |
+| 1 | `warm-up` | Text / typed | Separate headline and clue text; 250 fixed points and a 30-second timer plus global offset |
 | 2 | `mystery-image` | Image / buzzer | Deterministic 8 x 6 tile reveal over 20 seconds; buzz freezes it |
 | 3 | `everyone-answers-text` | Text / typed | Everyone submits privately; 250 fixed points and a 30-second timer plus global offset |
 | 4 | `static-image` | Image / buzzer | Explicit `mode` and `static` reveal; count the five gold stars |
@@ -425,9 +425,10 @@ made available under [CC0](https://creativecommons.org/publicdomain/zero/1.0/).
 No commercial music, movie clips, remote URLs, or missing placeholder files are
 needed for the bundled quiz.
 
-Each question may use `"mode": "buzzer"` for the original first-buzz flow, or
-`"mode": "typed"` for everyone to answer privately. Omitted `mode` defaults to
-the original buzzer behaviour, so existing quiz files continue to work. A typed
+Every question must explicitly set `"mode": "buzzer"` for the first-buzz flow, or
+`"mode": "typed"` for everyone to answer privately. There is no default mode:
+missing or invalid values stop quiz loading with a validation error. Existing
+quiz files with omitted modes must add `"mode": "buzzer"` to those questions. A typed
 question requires its own fixed point value and submission timer in seconds:
 
 ```json
@@ -480,6 +481,7 @@ An audio clue can use:
   "id": "1a3000f3-d438-4de1-9a89-756d4bf1423f",
   "keyword": "audio-1",
   "type": "audio",
+  "mode": "buzzer",
   "question": "Name this sound",
   "media": "media/your-audio.mp3",
   "answer": "Your private answer",

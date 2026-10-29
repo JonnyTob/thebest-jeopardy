@@ -9,7 +9,7 @@ const quiz = quizSchema.parse({ id: 1, title: 'Grouped review', questions: [
   { id: 'one', type: 'image', mode: 'typed', fixedPoints: 250, timerSeconds: 30,
     question: 'Current', answer: 'OFFICIAL SECRET', media: '/media/image.png',
     reveal: { effect: 'tiles', durationSeconds: 20 }, playback: { startSeconds: 3 } },
-  { id: 'two', type: 'text', question: 'FUTURE CLUE', answer: 'FUTURE SECRET' },
+  { id: 'two', type: 'text', mode: 'buzzer', question: 'FUTURE CLUE', answer: 'FUTURE SECRET' },
 ] });
 
 function setup() {

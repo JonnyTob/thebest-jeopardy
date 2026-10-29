@@ -97,10 +97,14 @@ Every effect consumes the same normalized server-authoritative `revealProgress` 
 
 Example question fields:
 
+Every question requires an explicit `mode`: `buzzer` for first-buzz play or
+`typed` for private submissions. Missing modes are rejected rather than defaulted.
+
 ```json
 {
   "id": "q8",
   "type": "image",
+  "mode": "buzzer",
   "question": "Which famous landmark is this?",
   "media": "/media/eiffel.jpg",
   "answer": "Eiffel Tower",
@@ -124,6 +128,7 @@ Play audio **only in the TV browser**. Use the browser **Web Audio API** (`Analy
 {
   "id": "q12",
   "type": "audio",
+  "mode": "buzzer",
   "question": "Name the artist and song",
   "media": "/media/music12.mp3",
   "answer": "A-ha — Take On Me",

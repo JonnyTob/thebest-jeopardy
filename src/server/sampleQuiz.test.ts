@@ -15,11 +15,12 @@ test('sample quiz demonstrates both modes for every media type with real local a
   const quiz = await storage.load();
   for (const type of ['text', 'image', 'audio', 'video']) {
     for (const mode of ['buzzer', 'typed']) {
-      assert.ok(quiz.questions.some((question) => question.type === type && (question.mode ?? 'buzzer') === mode),
+      assert.ok(quiz.questions.some((question) => question.type === type && question.mode === mode),
         `Missing ${type}/${mode} example`);
     }
   }
-  assert.ok(quiz.questions.some((question) => question.mode === undefined), 'Keep an implicit buzzer example');
+  assert.ok(quiz.questions.every((question) => question.mode === 'buzzer' || question.mode === 'typed'),
+    'Every sample question must have an explicit mode');
   assert.ok(quiz.questions.some((question) => question.reveal?.effect === 'static'));
   assert.ok(quiz.questions.some((question) => question.reveal?.effect === 'tiles'));
   assert.ok(quiz.questions.some((question) => question.visualizer?.enabled === true));

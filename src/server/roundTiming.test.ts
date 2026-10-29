@@ -15,10 +15,10 @@ const quiz = quizSchema.parse({
   ],
 });
 
-function setup({ offset = 0, last = false, empty = false, mode = 'typed' as 'typed' | 'buzzer' | 'implicit' } = {}) {
+function setup({ offset = 0, last = false, empty = false, mode = 'typed' as 'typed' | 'buzzer' } = {}) {
   let time = 0;
   const questions = (last ? quiz.questions.slice(0, 1) : quiz.questions)
-    .map((question, index) => index === 0 ? { ...question, mode: mode === 'implicit' ? undefined : mode } : question);
+    .map((question, index) => index === 0 ? { ...question, mode } : question);
   const game = new GameEngine({ ...quiz, questions }, () => time,
     serverSettingsSchema.parse({ TimerEndOffsetSeconds: offset }));
   const player = empty ? undefined : game.join({ name: 'Alice', avatarId: 'fox' });
@@ -121,28 +121,26 @@ test('typed deadline uses active clue time across pauses and ignores media resta
   assert.equal(game.snapshot().clockRunning, false);
 });
 
-test('neither implicit nor explicit buzzer questions auto-close with timer metadata and an offset', () => {
-  for (const mode of ['implicit', 'buzzer'] as const) {
-    const { game, player, command, advance } = setup({ mode, offset: 300 });
-    advance(1000000);
-    const revision = game.revision;
-    game.tick();
-    assert.equal(game.revision, revision);
-    assert.equal(game.snapshot().phase, 'QUESTION_OPEN');
-    assert.equal(game.snapshot().currentPoints, game.settings.minimumPoints);
-    assert.throws(() => game.submitAnswer(player!.id, game.snapshot().questionInstanceId!, 'No'), /does not accept typed/);
-    game.buzz(player!.id);
-    advance(1000000);
-    game.tick();
-    assert.equal(game.snapshot().phase, 'ANSWERING');
-    assert.equal(game.snapshot().clueElapsedMs, 1000000);
-    command({ type: 'judge', correct: true });
-    assert.equal(game.snapshot().phase, 'BUZZ_RESULT');
-    assert.equal(game.snapshot().nextRoundCountdownMs, null);
-    advance(2000);
-    game.tick();
-    assert.equal(game.snapshot().phase, 'NEXT_ROUND');
-  }
+test('buzzer questions do not auto-close with timer metadata and an offset', () => {
+  const { game, player, command, advance } = setup({ mode: 'buzzer', offset: 300 });
+  advance(1000000);
+  const revision = game.revision;
+  game.tick();
+  assert.equal(game.revision, revision);
+  assert.equal(game.snapshot().phase, 'QUESTION_OPEN');
+  assert.equal(game.snapshot().currentPoints, game.settings.minimumPoints);
+  assert.throws(() => game.submitAnswer(player!.id, game.snapshot().questionInstanceId!, 'No'), /does not accept typed/);
+  game.buzz(player!.id);
+  advance(1000000);
+  game.tick();
+  assert.equal(game.snapshot().phase, 'ANSWERING');
+  assert.equal(game.snapshot().clueElapsedMs, 1000000);
+  command({ type: 'judge', correct: true });
+  assert.equal(game.snapshot().phase, 'BUZZ_RESULT');
+  assert.equal(game.snapshot().nextRoundCountdownMs, null);
+  advance(2000);
+  game.tick();
+  assert.equal(game.snapshot().phase, 'NEXT_ROUND');
 });
 
 const completionPaths = ['review', 'closed', 'open-close', 'open-tick', 'open-review',

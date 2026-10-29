@@ -20,12 +20,12 @@ const { DisplayPage } = await import('../src/client/pages/DisplayPage.js');
 Object.assign(globalThis, { document: previousDocument });
 
 const game = new GameEngine({ id: 1, title: 'Test', questions: [
-  { id: 'one', type: 'video', question: 'Watch', answer: 'Answer', media: '/media/a.mp4' },
+  { id: 'one', type: 'video', mode: 'buzzer', question: 'Watch', answer: 'Answer', media: '/media/a.mp4' },
 ] });
 const base: Snapshot = { ...game.snapshot(), phase: 'MEDIA_FINISH', clockRunning: false,
   displayClockRunning: true, clueElapsedMs: 2000, displayElapsedMs: 2000, currentPoints: 500,
   pointsAtBuzz: 500, mediaPositionSeconds: 4, mediaFinishRemainingMs: 3000, mediaFinishNeedsSkip: false,
-  revealProgress: 0.2, question: { id: 'one', type: 'video', question: 'Watch', media: '/media/a.mp4',
+  revealProgress: 0.2, question: { id: 'one', type: 'video', mode: 'buzzer', question: 'Watch', media: '/media/a.mp4',
     playback: { startSeconds: 2, endSeconds: 7 }, reveal: { effect: 'tiles', durationSeconds: 10, columns: 2, rows: 2, seed: 1 } } };
 
 function makeMedia() {

@@ -8,7 +8,7 @@ import { GameEngine } from './engine.js';
 const quiz = quizSchema.parse({ id: 1, title: 'Review timing', questions: [
   { id: 'one', type: 'text', mode: 'typed', fixedPoints: 250, timerSeconds: 30,
     question: 'Clue', answer: 'SECRET' },
-  { id: 'two', type: 'text', question: 'FUTURE CLUE', answer: 'FUTURE SECRET' },
+  { id: 'two', type: 'text', mode: 'buzzer', question: 'FUTURE CLUE', answer: 'FUTURE SECRET' },
 ] });
 
 function setup(last = false) {

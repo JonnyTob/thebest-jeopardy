@@ -27,6 +27,7 @@
     {
       "id": "5552d069-9906-4e98-9804-92bf81f033e7",
       "type": "image",
+      "mode": "buzzer",
       "question": "What is hiding behind the tiles?",
       "media": "media/mystery.svg",
       "answer": "A rocket",
@@ -139,6 +140,7 @@
     {
       "id": "726bddca-b7b7-4ca3-8af1-a6f92be9a841",
       "type": "text",
+      "mode": "buzzer",
       "question": "One last question. Make it count!",
       "text": "How many sides does a hexagon have?",
       "answer": "Six",

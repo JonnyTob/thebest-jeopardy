@@ -23,7 +23,7 @@ test('player helper defaults, overrides and validation', () => {
 
 test('CLI joins 12 distinct online players and Ctrl+C disconnects without deleting scores', { timeout: 15000 }, async () => {
   const application = await createApp({
-    storage: { load: async () => ({ id: 100003, title: 'Layout test', questions: [{ id: 'one', type: 'text', question: 'Clue', answer: 'Answer' }] }) },
+    storage: { load: async () => ({ id: 100003, title: 'Layout test', questions: [{ id: 'one', type: 'text', mode: 'buzzer', question: 'Clue', answer: 'Answer' }] }) },
     passcode: 'test-host-passcode',
     serveClient: false,
   });

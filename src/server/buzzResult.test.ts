@@ -6,7 +6,7 @@ import type { HostAction, Quiz } from '../shared/protocol.js';
 import { GameEngine } from './engine.js';
 
 const quiz: Quiz = { id: 1, title: 'Buzzer results', questions: [
-  { id: 'one', type: 'text', question: 'First', answer: 'SECRET' },
+  { id: 'one', type: 'text', mode: 'buzzer', question: 'First', answer: 'SECRET' },
   { id: 'two', type: 'text', mode: 'buzzer', question: 'Second', answer: 'SECRET TWO' },
 ] };
 

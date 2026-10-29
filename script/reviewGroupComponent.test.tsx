@@ -25,7 +25,7 @@ function setup() {
   const game = new GameEngine({ id: 1, title: 'Review', questions: [
     { id: 'one', type: 'video', mode: 'typed', fixedPoints: 250, timerSeconds: 30,
       question: 'Current clue', answer: 'OFFICIAL SECRET', media: '/media/a.mp4' },
-    { id: 'two', type: 'text', question: 'FUTURE CLUE', answer: 'FUTURE SECRET' },
+    { id: 'two', type: 'text', mode: 'buzzer', question: 'FUTURE CLUE', answer: 'FUTURE SECRET' },
   ] }, () => time);
   const players = Array.from({ length: 12 }, (_, index) => game.join({ name: `Player ${index}`, avatarId: 'fox' }));
   const send = (action: HostAction) => game.command({ id: randomUUID(), revision: game.revision, action });
