@@ -353,11 +353,12 @@ The starter quiz has ten questions covering both modes and all four media types.
 are validated on startup; invalid data fails explicitly. The raw JSON is
 **server-only** and is not exposed as a public HTTP resource.
 
-Each file has `quiz` metadata, optional `gameSetup` overrides, and an ordered
+Each file has a required `schemaVersion`, `quiz` metadata, optional `gameSetup` overrides, and an ordered
 `questions` array. The starter quiz uses:
 
 ```json
 {
+  "schemaVersion": 1,
   "quiz": {
     "id": 100001,
     "title": "Friday Night Quiz",
@@ -370,6 +371,19 @@ Each file has `quiz` metadata, optional `gameSetup` overrides, and an ordered
 
 The empty array above illustrates the structure only; a playable quiz requires
 at least one question.
+`schemaVersion` must be the number **1**. Missing or unsupported versions are
+rejected, never guessed or silently upgraded. To migrate an existing unversioned
+quiz, add `"schemaVersion": 1` at the root, ensure every question has an explicit
+`mode`, and remove any fields that do not apply to its mode or media type.
+
+The shared saved-document schema is
+[quizArchiveSchema](./src/shared/quizArchive.ts). The archive loader and quiz
+settings reader/writer use it, including validation before a settings save.
+It preserves relative media paths and omitted defaults. Runtime conversion is
+separate: it builds served media URLs, normalizes UUID casing and supplies
+playback/reveal defaults without changing the saved document. Do not save
+runtime snapshots as quiz files.
+
 Use a unique positive safe integer for each quiz (1 to 9007199254740991).
 Keep the ID when renaming or editing that quiz; assign a different ID when
 creating a separate quiz. Future library entries should use this ID as their
@@ -450,6 +464,23 @@ question requires its own fixed point value and submission timer in seconds:
 cannot edit an answer after submitting; the same player reconnecting or opening
 another tab cannot submit again. The host sets the per-quiz answer length in
 **Game setup** and saves it with the other quiz settings.
+
+Question fields are validated according to mode and media type:
+
+| Field | Allowed on |
+| --- | --- |
+| `fixedPoints`, `timerSeconds` | Required on `typed`; forbidden on `buzzer` |
+| `text` | Text clues only; optional body below the question headline |
+| `media` | Required on image, audio and video; forbidden on text |
+| `reveal` | Image clues only |
+| `playback` | Audio and video only |
+| `visualizer` | Audio only, including when disabled |
+
+Unknown fields are rejected, including typos inside `reveal`, `playback` and
+`visualizer`. Validation errors identify the affected question/field. When
+changing a question's type or mode, remove incompatible fields rather than
+retaining ignored settings. `answer` remains the only answer field; all typed
+answers are judged manually by the host.
 
 ### Lobby cover
 

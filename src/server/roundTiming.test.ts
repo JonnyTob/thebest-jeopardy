@@ -18,7 +18,12 @@ const quiz = quizSchema.parse({
 function setup({ offset = 0, last = false, empty = false, mode = 'typed' as 'typed' | 'buzzer' } = {}) {
   let time = 0;
   const questions = (last ? quiz.questions.slice(0, 1) : quiz.questions)
-    .map((question, index) => index === 0 ? { ...question, mode } : question);
+    .map((question, index) => {
+      if (index !== 0) return question;
+      if (mode === 'typed') return { ...question, mode };
+      const { fixedPoints: _points, timerSeconds: _timer, ...buzzer } = question;
+      return { ...buzzer, mode };
+    });
   const game = new GameEngine({ ...quiz, questions }, () => time,
     serverSettingsSchema.parse({ TimerEndOffsetSeconds: offset }));
   const player = empty ? undefined : game.join({ name: 'Alice', avatarId: 'fox' });
@@ -121,7 +126,7 @@ test('typed deadline uses active clue time across pauses and ignores media resta
   assert.equal(game.snapshot().clockRunning, false);
 });
 
-test('buzzer questions do not auto-close with timer metadata and an offset', () => {
+test('buzzer questions do not auto-close with a global typed-timer offset', () => {
   const { game, player, command, advance } = setup({ mode: 'buzzer', offset: 300 });
   advance(1000000);
   const revision = game.revision;

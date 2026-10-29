@@ -99,6 +99,11 @@ Example question fields:
 
 Every question requires an explicit `mode`: `buzzer` for first-buzz play or
 `typed` for private submissions. Missing modes are rejected rather than defaulted.
+Saved quiz archives require root-level `"schemaVersion": 1` and use the shared
+archive schema. Unknown fields and settings unrelated to a clue's type/mode are
+rejected: typed-only scoring/timers, image-only reveal, audio-only visualization,
+audio/video-only playback, and text-only body text. Media paths stay relative in
+the saved archive; runtime URLs and defaults are derived separately.
 
 ```json
 {

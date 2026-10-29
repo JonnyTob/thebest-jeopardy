@@ -6,15 +6,27 @@ export type AvatarId = typeof avatars[number];
 const localMedia = z.string().regex(/^\/media\/[a-zA-Z0-9_./-]+$/).refine(
   (path) => !path.includes('..'), 'Media must stay inside /media/',
 );
-const revealSchema = z.object({
-  effect: z.enum(['static', 'tiles']).default('static'),
-  durationSeconds: z.number().positive().max(600).default(20),
-  columns: z.number().int().min(1).max(20).default(8),
-  rows: z.number().int().min(1).max(20).default(6),
-  seed: z.number().int().min(0).max(2147483647).default(814),
+const revealDefinitionSchema = z.strictObject({
+  effect: z.enum(['static', 'tiles']),
+  durationSeconds: z.number().positive().max(600),
+  columns: z.number().int().min(1).max(20),
+  rows: z.number().int().min(1).max(20),
+  seed: z.number().int().min(0).max(2147483647),
+}).partial();
+const revealSchema = z.strictObject({
+  effect: revealDefinitionSchema.shape.effect.unwrap().default('static'),
+  durationSeconds: revealDefinitionSchema.shape.durationSeconds.unwrap().default(20),
+  columns: revealDefinitionSchema.shape.columns.unwrap().default(8),
+  rows: revealDefinitionSchema.shape.rows.unwrap().default(6),
+  seed: revealDefinitionSchema.shape.seed.unwrap().default(814),
 });
+const playbackDefinitionSchema = z.strictObject({
+  startSeconds: z.number().min(0).optional(),
+  endSeconds: z.number().positive().optional(),
+}).refine((p) => p.endSeconds === undefined || p.endSeconds > (p.startSeconds ?? 0),
+  { message: 'Playback end must be after start', path: ['endSeconds'] });
 
-export const questionSchema = z.object({
+export const questionDefinitionSchema = z.strictObject({
   id: z.string().min(1).max(80),
   keyword: z.string().trim().min(1).max(80).optional(),
   type: z.enum(['text', 'image', 'video', 'audio']),
@@ -25,24 +37,45 @@ export const questionSchema = z.object({
   text: z.string().max(2000).optional(),
   media: localMedia.optional(),
   answer: z.string().trim().min(1).max(2000),
-  reveal: revealSchema.optional(),
-  visualizer: z.object({
+  reveal: revealDefinitionSchema.optional(),
+  visualizer: z.strictObject({
     enabled: z.boolean(),
     style: z.literal('spectrum'),
   }).optional(),
-  playback: z.object({
-    startSeconds: z.number().min(0).default(0),
-    endSeconds: z.number().positive().optional(),
-  }).refine((p) => p.endSeconds === undefined || p.endSeconds > p.startSeconds,
-    'Playback end must be after start').optional(),
+  playback: playbackDefinitionSchema.optional(),
 }).superRefine((question, context) => {
   if (question.type !== 'text' && !question.media) {
-    context.addIssue({ code: z.ZodIssueCode.custom, message: 'Media clues require a local media path' });
+    context.addIssue({ code: 'custom', path: ['media'], message: 'Media clues require a local media path' });
   }
-  if (question.mode === 'typed' && (question.fixedPoints === undefined || question.timerSeconds === undefined)) {
-    context.addIssue({ code: z.ZodIssueCode.custom, message: 'Typed questions require fixedPoints and timerSeconds' });
+  for (const field of ['fixedPoints', 'timerSeconds'] as const) {
+    if (question.mode === 'typed' && question[field] === undefined) {
+      context.addIssue({ code: 'custom', path: [field], message: `Typed questions require ${field}` });
+    }
+    if (question.mode === 'buzzer' && question[field] !== undefined) {
+      context.addIssue({ code: 'custom', path: [field], message: `${field} is only allowed for typed questions` });
+    }
+  }
+  if (question.type !== 'text' && question.text !== undefined) {
+    context.addIssue({ code: 'custom', path: ['text'], message: 'text is only allowed for text questions' });
+  }
+  if (question.type === 'text' && question.media !== undefined) {
+    context.addIssue({ code: 'custom', path: ['media'], message: 'media is only allowed for image, audio and video questions' });
+  }
+  if (question.type !== 'image' && question.reveal !== undefined) {
+    context.addIssue({ code: 'custom', path: ['reveal'], message: 'reveal is only allowed for image questions' });
+  }
+  if (question.type !== 'audio' && question.visualizer !== undefined) {
+    context.addIssue({ code: 'custom', path: ['visualizer'], message: 'visualizer is only allowed for audio questions' });
+  }
+  if (question.type !== 'audio' && question.type !== 'video' && question.playback !== undefined) {
+    context.addIssue({ code: 'custom', path: ['playback'], message: 'playback is only allowed for audio and video questions' });
   }
 });
+export const questionSchema = questionDefinitionSchema.transform(({ reveal, playback, ...question }) => ({
+  ...question,
+  ...(reveal !== undefined ? { reveal: revealSchema.parse(reveal) } : {}),
+  ...(playback !== undefined ? { playback: { ...playback, startSeconds: playback.startSeconds ?? 0 } } : {}),
+}));
 export type Question = z.infer<typeof questionSchema>;
 export type PublicQuestion = Omit<Question, 'answer'>;
 export const quizSchema = z.object({

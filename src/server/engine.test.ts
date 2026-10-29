@@ -29,7 +29,7 @@ test('game-start countdown hides the first clue, rejects early play and opens on
   for (const mode of ['buzzer', 'typed'] as const) {
     let time = 0;
     const game = new GameEngine({ ...quiz, questions: [
-      { ...quiz.questions[0], mode, fixedPoints: 250, timerSeconds: 30 },
+      { ...quiz.questions[0], mode, ...(mode === 'typed' ? { fixedPoints: 250, timerSeconds: 30 } : {}) },
     ] }, () => time);
     const player = game.join({ name: 'Alice', avatarId: 'fox' });
     const start = { id: randomUUID(), revision: game.revision, action: { type: 'start' } } as const;

@@ -3,14 +3,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { brandingSchema, serverSettingsSchema, settingsSchema, type Settings } from '../shared/protocol.js';
-
-export const gameSetupOverridesSchema = z.object({
-  ...settingsSchema.shape,
-  lockoutSeconds: settingsSchema.shape.lockoutSeconds.removeDefault(),
-  maxAnswerLength: settingsSchema.shape.maxAnswerLength.removeDefault(),
-}).partial().strict();
-
-export const archiveGameSetupSchema = gameSetupOverridesSchema.omit({ title: true });
+import { gameSetupOverridesSchema } from '../shared/quizArchive.js';
 
 const serverSchema = z.object({
   ...serverSettingsSchema.shape,
