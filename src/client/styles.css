@@ -199,8 +199,9 @@ td:last-child, th:last-child { padding-right: 0; }
 .buzz-button span { font-size: 3.1rem; font-weight: 900; letter-spacing: .02em; }
 .buzz-button small { font-size: .75rem; margin-top: 10px; font-weight: 450; }
 .buzz-button:disabled { opacity: .48; }
-.buzz-button:hover:not(:disabled) { background: radial-gradient(circle at 40% 30%, #f889d0, #a337aa 75%); border-color: #ef97e8; }
-.buzz-button:active:not(:disabled) { transform: translateY(7px); box-shadow: 0 0 0 10px #6b2e5f33, 0 7px 0 #461950; }
+.buzz-button:not(:disabled) { border-color: #65d7a1; background: radial-gradient(circle at 40% 30%, #24764b, #124b32 75%); box-shadow: 0 0 0 10px #65d7a122, 0 14px 0 #103c29, 0 22px 45px #0006; }
+.buzz-button:hover:not(:disabled) { background: radial-gradient(circle at 40% 30%, #298653, #195f3d 75%); border-color: #91edbc; }
+.buzz-button:active:not(:disabled) { transform: translateY(7px); box-shadow: 0 0 0 10px #65d7a122, 0 7px 0 #103c29; }
 .is-answering .buzz-button { opacity: 1; border-color: #e5c558; background: radial-gradient(circle at 40% 30%, #bc9240, #775222); }
 .frozen-points { color: var(--gold); }
 .loading-screen { min-height: 100dvh; display: grid; place-content: center; gap: 30px; text-align: center; }

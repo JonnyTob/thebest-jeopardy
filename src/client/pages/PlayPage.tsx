@@ -18,7 +18,9 @@ export function PlayPage() {
   const lockoutRemaining = playerId ? state?.lockoutRemainingMs[playerId] : undefined;
   const answering = !!playerId && state?.phase === 'ANSWERING' && state.activePlayerId === playerId;
   const open = state?.phase === 'QUESTION_OPEN' && !state.paused;
-  const canBuzz = connected && open && !lockedOut && !!player && !pending;
+  const buzzerQuestion = !!state?.question && state.question.mode !== 'typed'
+    && !['LOBBY', 'STARTING', 'NEXT_ROUND', 'GAME_FINISHED'].includes(state.phase);
+  const canBuzz = buzzerQuestion && connected && open && !lockedOut && !!player && !pending;
   let status = 'Waiting for the host';
   let detail = 'The next question is on its way.';
   if (!connected) { status = 'Reconnecting'; detail = 'Your score and place are saved on the server.'; }
@@ -73,15 +75,15 @@ export function PlayPage() {
         : <><section className={`buzzer-card ${answering ? 'is-answering' : ''}`}>
         <span className="eyebrow">{state?.phase === 'LOBBY' ? 'LOBBY' : state?.phase === 'STARTING' || state?.phase === 'NEXT_ROUND' ? 'GET READY' : `QUESTION ${(state?.questionIndex ?? 0) + 1} / ${state?.questionCount}`}</span>
         <h2 role="status">{status}</h2><p>{detail}</p>
-        <button className="buzz-button" disabled={!canBuzz} onClick={() => { void buzz(); }}>
+        {buzzerQuestion && <button className="buzz-button" disabled={!canBuzz} onClick={() => { void buzz(); }}>
           <span>{answering ? 'FIRST!' : lockedOut && lockoutRemaining !== undefined && (open || state?.phase === 'ANSWERING')
             ? `${Math.ceil(lockoutRemaining / 1000)}s` : 'BUZZ'}</span><small>{canBuzz ? `${state?.currentPoints} points at stake` : 'Eyes on the big screen'}</small>
-        </button>
+        </button>}
         {answering && <p className="frozen-points">{state?.pointsAtBuzz} points at stake / no answer countdown</p>}
       </section>
-      <p className="footnote">Correct +points / Wrong -points<br />{state?.settings.lockoutSeconds
+      {buzzerQuestion && <p className="footnote">Correct +points / Wrong -points<br />{state?.settings.lockoutSeconds
         ? `Wrong answer: ${state.settings.lockoutSeconds}s lockout, then try again.`
-        : 'One attempt per question. Make it count.'}</p></>}
+        : 'One attempt per question. Make it count.'}</p>}</>}
     </>}
   </main>;
 }

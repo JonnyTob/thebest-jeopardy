@@ -242,6 +242,10 @@ sharing the QR code.
   identity, and lockout. Reopening multiple tabs with the same token still counts
   as one player. An offline answering player remains active until the host rules
   or closes the clue.
+- The phone's **BUZZ** button appears only for buzzer-mode questions (including
+  questions with omitted `mode`). It is hidden in the lobby, countdowns, typed
+  questions and final standings. An enabled buzzer is green; paused, locked-out,
+  disconnected and pending states remain disabled, with gold for the first buzzer.
 - Leaderboard sorted immediately after every score change, including wrong-answer
   penalties, manual adjustments and undo during active clues. Highest scores come
   first; tied scores use join order. New players are inserted at their score rank;
