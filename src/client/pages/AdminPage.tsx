@@ -4,6 +4,7 @@ import { serverSettingsSchema, settingsSchema, type Player, type Settings, type 
 import { SessionProvider, useAnimatedState, useSession } from '../session';
 import { Avatar, Brand, Connection, JoinLink, PointBar, QuizName, SessionError, buzzerLabel, nextRoundCountdownText, typedTimerMs } from '../components/Common';
 import { Media } from '../components/Media';
+import { QuizEditor } from '../components/QuizEditor';
 
 const passcodeKey = 'quiz-night-host-passcode';
 
@@ -41,17 +42,24 @@ export function AdminPage() {
       <p>Enter the host passcode printed in the server terminal. Keep this screen off the TV.</p>
       <label>Host passcode<input type="password" autoComplete="current-password" required value={input} onChange={(event) => setInput(event.target.value)} /></label>
       <button className="primary wide">Unlock host console</button></form></main>;
-  return <SessionProvider key={passcode} role="host" passcode={passcode}><AdminConsole development={development} requirePasscode={requirePasscode} logout={() => {
+  return <SessionProvider key={passcode} role="host" passcode={passcode}><AdminConsole passcode={passcode} development={development} requirePasscode={requirePasscode} logout={() => {
     sessionStorage.removeItem(passcodeKey);
     setPasscode('');
     setInput('');
   }} /></SessionProvider>;
 }
 
-export function AdminConsole({ logout, requirePasscode, development }: { logout: () => void; requirePasscode: boolean; development: boolean }) {
+export function AdminConsole({ logout, requirePasscode, development, passcode = '' }: { logout: () => void; requirePasscode: boolean; development: boolean; passcode?: string }) {
   const { connected, command, pending } = useSession();
   const state = useAnimatedState();
-  const [tab, setTab] = useState<'live' | 'setup'>('live');
+  const [tab, setTab] = useState<'live' | 'setup' | 'editor'>('live');
+  const [editorDirty, setEditorDirty] = useState(false);
+  function navigate(next: 'live' | 'setup' | 'editor') {
+    if (next === tab) return;
+    if (tab === 'editor' && next !== 'editor' && editorDirty && !window.confirm('Discard unsaved quiz changes?')) return;
+    setEditorDirty(false);
+    setTab(next);
+  }
   const [confirm, setConfirm] = useState(false);
   const [confirmRestart, setConfirmRestart] = useState(false);
   const active = state?.players.find((p) => p.id === state.activePlayerId);
@@ -66,10 +74,11 @@ export function AdminConsole({ logout, requirePasscode, development }: { logout:
   const disabled = undoDisabled || state?.phase === 'NEXT_ROUND';
   return <main className="admin-shell">
     <header className="admin-header"><Brand subtitle="Private host console" />
-      <nav aria-label="Host sections"><button className={tab === 'live' ? 'active' : ''} onClick={() => setTab('live')}>Live game</button>
-        <button className={tab === 'setup' ? 'active' : ''} onClick={() => setTab('setup')}>Game setup</button></nav>
+      <nav aria-label="Host sections"><button className={tab === 'live' ? 'active' : ''} onClick={() => navigate('live')}>Live game</button>
+        <button className={tab === 'setup' ? 'active' : ''} onClick={() => navigate('setup')}>Game setup</button>
+        <button className={tab === 'editor' ? 'active' : ''} onClick={() => navigate('editor')}>Quiz editor</button></nav>
       <div className="header-actions"><Connection connected={connected} /><a href="/display" target="_blank" rel="noreferrer">Open TV &nearr;</a>
-        {requirePasscode && <button className="quiet" onClick={logout}>Lock console</button>}</div></header>
+        {requirePasscode && <button className="quiet" onClick={() => { if (!editorDirty || window.confirm('Discard unsaved quiz changes?')) logout(); }}>Lock console</button>}</div></header>
     <SessionError />
     {development && state && <section className="panel" aria-label="Development controls">
       <span className="eyebrow">DEVELOPMENT ONLY</span>
@@ -83,6 +92,7 @@ export function AdminConsole({ logout, requirePasscode, development }: { logout:
     {state?.serverSettings.requireAdminPasscode === false && <div className="notice" role="status">Admin passcode protection is disabled. Anyone who can reach this server can control the quiz.</div>}
     {!connected && <div className="notice" role="status">Host controls are disabled until connected. If the passcode was rejected, lock the console and try again.</div>}
     {!state ? <section className="panel"><h1>Connecting to the game...</h1></section>
+      : tab === 'editor' ? <QuizEditor passcode={passcode} onDirtyChange={setEditorDirty} gameState={state} />
       : tab === 'setup' ? <Setup state={state} /> : <>
         <section className="panel game-heading"><div><span className="eyebrow">{state.phase === 'LOBBY' ? "LET'S GET EVERYONE IN" : 'YOU CALL THE SHOTS'}</span>
           <h1><QuizName title={state.settings.title} id={state.quizId} /></h1><p>{state.phase === 'LOBBY' ? 'Lobby open / waiting for players' :
@@ -241,18 +251,22 @@ function ScoreAdjustment({ player }: { player: Player }) {
 function Setup({ state }: { state: Snapshot }) {
   const { command, connected, pending } = useSession();
   const [settings, setSettings] = useState<Settings>(state.settings);
+  const [baseline, setBaseline] = useState<Settings>(state.settings);
   const [message, setMessage] = useState('');
   const editable = state.phase === 'LOBBY';
+  const stale = JSON.stringify(baseline) !== JSON.stringify(state.settings);
   function save(event: FormEvent) {
     event.preventDefault();
     const parsed = settingsSchema.safeParse(settings);
     if (!parsed.success) { setMessage(parsed.error.issues[0].message); return; }
-    void command({ type: 'setup', settings: parsed.data }).then((ok) => { if (ok) setMessage('Game setup saved.'); });
+    void command({ type: 'setup', settings: parsed.data }).then((ok) => { if (ok) { setBaseline(parsed.data); setMessage('Game setup saved.'); } });
   }
   return <div className="setup-grid"><form className="panel setup-form" onSubmit={save}><span className="eyebrow">MAKE IT YOUR NIGHT</span><h1>Game setup</h1>
     <QuizName title={settings.title} id={state.quizId} />
     {!editable && <p className="notice">Setup is locked once the quiz starts.</p>}
-    <fieldset disabled={!editable || !connected || pending}>
+    {stale && <div className="notice"><p>Game setup changed elsewhere. Reload the current setup before saving; your local edits will be discarded.</p>
+      <button type="button" onClick={() => { setSettings(state.settings); setBaseline(state.settings); setMessage(''); }}>Reload current setup</button></div>}
+    <fieldset disabled={!editable || !connected || pending || stale}>
       <label>Quiz title<input required maxLength={100} value={settings.title} onChange={(event) => setSettings({ ...settings, title: event.target.value })} /></label>
       <div className="settings-fields">{([
         ['leaderboardCount', 'TV leaderboard cards', 1, 12],
@@ -272,6 +286,6 @@ function Setup({ state }: { state: Snapshot }) {
   </form><section className="panel setup-guide"><h2>Before you start</h2><ol><li>Connect the TV and choose <strong>Extend</strong>, not Duplicate.</li>
     <li>Open <a href="/display" target="_blank" rel="noreferrer">the TV display</a> there and press F11.</li><li>Keep this private console on the laptop.</li>
     <li>Join phones on the same Wi-Fi. Allow the server port through the firewall.</li><li>For audio/video clues, enable playback in the TV browser.</li></ol>
-    <h3>Question source</h3><code>Quiz archive</code><p>{state.questionCount} questions loaded. Edit the quiz file and restart the server to reload it. Restarting clears players and scores.</p>
+    <h3>Question source</h3><code>Quiz archive</code><p>{state.questionCount} questions loaded. Save changes in Quiz editor, then restart the server to load them. Restarting clears players and scores.</p>
     <h3>Avatars & theme</h3><p>Six original, bundled SVG characters. Purple, gold, and magenta game-show theme.</p><JoinLink compact /></section></div>;
 }

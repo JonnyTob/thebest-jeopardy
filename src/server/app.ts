@@ -7,10 +7,11 @@ import express from 'express';
 import { Server } from 'socket.io';
 import { brandingSchema, createJoinSchema, hostCommandSchema, serverSettingsSchema, settingsSchema, type Branding, type ClientEvents, type ServerEvents, type Settings, type ServerSettings } from '../shared/protocol.js';
 import { GameEngine, GameError } from './engine.js';
-import type { QuizStorage } from './storage.js';
+import { ArchiveConflictError, ArchiveQuizStorage, type QuizStorage } from './storage.js';
 import type { QuizSettingsStorage } from './settings.js';
 import { renderBrandingHtml } from './branding.js';
 import { probeMediaDurations } from './mediaDurations.js';
+import { editorRoutes } from './editor.js';
 
 interface SocketData {
   host: boolean;
@@ -57,6 +58,10 @@ export async function createApp(options: AppOptions) {
   });
   const app = express();
   app.disable('x-powered-by');
+  app.use((_req, res, next) => { res.set('X-Content-Type-Options', 'nosniff'); next(); });
+  if (options.storage instanceof ArchiveQuizStorage) {
+    app.use('/api/editor', editorRoutes(options.storage, quiz, options.passcode, serverSettings.requireAdminPasscode));
+  }
   if (options.quizMediaRoot) {
     const mediaRoot = await realpath(options.quizMediaRoot);
     app.use('/media/quiz', async (req, res, next) => {
@@ -204,6 +209,7 @@ export async function createApp(options: AppOptions) {
           try {
             settingsStorage.save(quiz.id, settings);
           } catch (cause) {
+            if (cause instanceof ArchiveConflictError) throw new GameError('The quiz file changed. Restart the server before saving game setup.');
             console.error('Unable to save quiz settings:', cause);
             throw new GameError('Unable to save quiz settings to disk. Setup was not changed. Check the server console.');
           }

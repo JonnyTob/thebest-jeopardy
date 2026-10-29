@@ -66,9 +66,11 @@ function Playback({ state, question }: { state: Snapshot; question: PublicQuesti
       setNeedsUnlock(false);
       setError('');
     }).catch((cause: unknown) => {
-      if (cause instanceof DOMException && cause.name === 'NotAllowedError') setNeedsUnlock(true);
-      else if (!(cause instanceof DOMException && cause.name === 'AbortError')) {
-        setError(`Playback failed: ${cause instanceof Error ? cause.message : String(cause)}`);
+      const name = typeof cause === 'object' && cause !== null && 'name' in cause ? cause.name : undefined;
+      if (name === 'NotAllowedError') setNeedsUnlock(true);
+      else if (name !== 'AbortError') {
+        const message = typeof cause === 'object' && cause !== null && 'message' in cause ? String(cause.message) : String(cause);
+        setError(`Playback failed: ${message}`);
       }
     });
   }

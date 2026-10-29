@@ -26,9 +26,10 @@ export function Avatar({ id, className = '' }: { id: AvatarId; className?: strin
   </svg>;
 }
 
-export function Brand({ subtitle }: { subtitle?: string }) {
-  return <Link className="brand" to="/"><span className="brand-mark" aria-hidden="true">{branding.logoText}</span>
-    <span>{branding.name}{subtitle && <small>{subtitle}</small>}</span></Link>;
+export function Brand({ subtitle, staticView = false }: { subtitle?: string; staticView?: boolean }) {
+  const content = <><span className="brand-mark" aria-hidden="true">{branding.logoText}</span>
+    <span>{branding.name}{subtitle && <small>{subtitle}</small>}</span></>;
+  return staticView ? <span className="brand">{content}</span> : <Link className="brand" to="/">{content}</Link>;
 }
 
 export function QuizName({ title, id }: { title: string; id: number }) {

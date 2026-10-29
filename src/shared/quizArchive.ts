@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { questionDefinitionSchema, quizSchema, settingsSchema, type Quiz } from './protocol.js';
+import { questionDefinitionSchema, questionSchema, quizSchema, settingsSchema, type Question, type Quiz } from './protocol.js';
 
 export const QUIZ_SCHEMA_VERSION = 1;
 
@@ -45,15 +45,19 @@ export const quizArchiveSchema = z.strictObject({
 export type QuizArchive = z.infer<typeof quizArchiveSchema>;
 export type ArchiveQuestion = z.infer<typeof archiveQuestionSchema>;
 
+export function toRuntimeQuestion(question: ArchiveQuestion): Question {
+  return questionSchema.parse({
+    ...question,
+    id: question.id.toLowerCase(),
+    ...(question.media !== undefined ? { media: '/media/quiz/' + question.media.slice('media/'.length) } : {}),
+  });
+}
+
 export function toRuntimeQuiz(archive: QuizArchive): Quiz {
   const mediaUrl = (value: string) => '/media/quiz/' + value.slice('media/'.length);
   return quizSchema.parse({
     ...archive.quiz,
     ...(archive.quiz.coverImage !== undefined ? { coverImage: mediaUrl(archive.quiz.coverImage) } : {}),
-    questions: archive.questions.map((question) => ({
-      ...question,
-      id: question.id.toLowerCase(),
-      ...(question.media !== undefined ? { media: mediaUrl(question.media) } : {}),
-    })),
+    questions: archive.questions.map(toRuntimeQuestion),
   });
 }

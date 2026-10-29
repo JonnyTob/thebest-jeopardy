@@ -16,20 +16,21 @@
   "questions": [
     {
       "id": "30aff56d-2800-4295-b9e4-98e85afcd34b",
+      "keyword": "warm-up",
       "type": "text",
-      "mode": "typed",
       "question": "Let's start with a little space travel.",
-      "text": "Which planet in our solar system is known as the Red Planet?",
-      "answer": "Mars",
+      "mode": "typed",
       "fixedPoints": 250,
       "timerSeconds": 30,
-      "keyword": "warm-up"
+      "text": "Which planet in our solar system is known as the Red Planet?",
+      "answer": "Mars"
     },
     {
       "id": "5552d069-9906-4e98-9804-92bf81f033e7",
+      "keyword": "mystery-image",
       "type": "image",
-      "mode": "buzzer",
       "question": "What is hiding behind the tiles?",
+      "mode": "buzzer",
       "media": "media/mystery.svg",
       "answer": "A rocket",
       "reveal": {
@@ -38,72 +39,72 @@
         "columns": 8,
         "rows": 6,
         "seed": 814
-      },
-      "keyword": "mystery-image"
+      }
     },
     {
       "id": "1c94d195-88f5-4df3-a16a-f54bba7979c6",
+      "keyword": "everyone-answers-text",
       "type": "text",
-      "mode": "typed",
       "question": "Everyone answers: a little mental arithmetic.",
-      "text": "What is 12 multiplied by 8? Type the number on your phone and submit once.",
-      "answer": "96",
+      "mode": "typed",
       "fixedPoints": 250,
       "timerSeconds": 30,
-      "keyword": "everyone-answers-text"
+      "text": "What is 12 multiplied by 8? Type the number on your phone and submit once.",
+      "answer": "96"
     },
     {
       "id": "5a5a3769-b989-4a2b-ae55-78b9be14efc2",
+      "keyword": "static-imagehjguyj",
       "type": "image",
-      "mode": "buzzer",
       "question": "Look closely. How many gold stars surround the planet?",
+      "mode": "buzzer",
       "media": "media/examples/planet.svg",
       "answer": "Five gold stars. The small white dots are not stars for this question.",
       "reveal": {
         "effect": "static"
-      },
-      "keyword": "static-image"
+      }
     },
     {
       "id": "cf316242-6e7b-4715-be08-7c1700b8268b",
+      "keyword": "everyone-answers-image",
       "type": "image",
-      "mode": "typed",
       "question": "Everyone answers: what shape surrounds the planet?",
-      "media": "media/examples/planet.svg",
-      "answer": "An oval / ellipse (the planet's ring). Accept ring.",
+      "mode": "typed",
       "fixedPoints": 200,
       "timerSeconds": 25,
+      "media": "media/examples/planet.svg",
+      "answer": "An oval / ellipse (the planet's ring). Accept ring.",
       "reveal": {
         "effect": "tiles",
         "durationSeconds": 15,
         "columns": 6,
         "rows": 4,
         "seed": 2026
-      },
-      "keyword": "everyone-answers-image"
+      }
     },
     {
       "id": "cf87c00a-5f94-43b0-8d4f-dedd172717b2",
+      "keyword": "audio-buzzer",
       "type": "audio",
-      "mode": "buzzer",
       "question": "Listen to the first three notes. Does their pitch go up or down?",
+      "mode": "buzzer",
       "media": "media/examples/chimes.wav",
       "answer": "Up / ascending. The first three notes get higher; the last three get lower.",
       "visualizer": {
         "enabled": true,
         "style": "spectrum"
-      },
-      "keyword": "audio-buzzer"
+      }
     },
     {
       "id": "1b5d039d-29e5-4286-aa85-69e06182d138",
+      "keyword": "everyone-answers-audio",
       "type": "audio",
-      "mode": "typed",
       "question": "Everyone answers: how many notes are played in this short clip?",
-      "media": "media/examples/chimes.wav",
-      "answer": "Three notes. This segment plays only the descending second half.",
+      "mode": "typed",
       "fixedPoints": 300,
       "timerSeconds": 20,
+      "media": "media/examples/chimes.wav",
+      "answer": "Three notes. This segment plays only the descending second half.",
       "visualizer": {
         "enabled": false,
         "style": "spectrum"
@@ -111,41 +112,40 @@
       "playback": {
         "startSeconds": 4.5,
         "endSeconds": 8
-      },
-      "keyword": "everyone-answers-audio"
+      }
     },
     {
       "id": "6ee2f4f5-7947-4053-b6c2-e0c07e002a0a",
+      "keyword": "video-buzzer",
       "type": "video",
-      "mode": "buzzer",
       "question": "Watch the moving shapes. What colour is the circle?",
+      "mode": "buzzer",
       "media": "media/examples/shapes.mp4",
-      "answer": "Magenta / pink / purple-pink. The square is gold and the triangle is mint green.",
-      "keyword": "video-buzzer"
+      "answer": "Magenta / pink / purple-pink. The square is gold and the triangle is mint green."
     },
     {
       "id": "4b463ea7-6cec-4734-b5f6-32c29e3bd0db",
+      "keyword": "everyone-answers-video",
       "type": "video",
-      "mode": "typed",
       "question": "Everyone answers: which shape has exactly three sides?",
-      "media": "media/examples/shapes.mp4",
-      "answer": "The triangle / mint-green triangle.",
+      "mode": "typed",
       "fixedPoints": 150,
       "timerSeconds": 20,
+      "media": "media/examples/shapes.mp4",
+      "answer": "The triangle / mint-green triangle.",
       "playback": {
         "startSeconds": 2,
         "endSeconds": 6
-      },
-      "keyword": "everyone-answers-video"
+      }
     },
     {
       "id": "726bddca-b7b7-4ca3-8af1-a6f92be9a841",
+      "keyword": "last-call",
       "type": "text",
-      "mode": "buzzer",
       "question": "One last question. Make it count!",
+      "mode": "buzzer",
       "text": "How many sides does a hexagon have?",
-      "answer": "Six",
-      "keyword": "last-call"
+      "answer": "Six"
     }
   ]
 }

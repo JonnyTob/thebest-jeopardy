@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { readFileSync, writeFileSync, renameSync, rmSync } from 'node:fs';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { QuizSettingsStorage } from './settings.js';
 import { settingsSchema, type Settings } from '../shared/protocol.js';
 import { readFile } from 'node:fs/promises';
@@ -38,26 +38,46 @@ export class ArchiveQuizStorage implements QuizStorage {
   async load(): Promise<Quiz> {
     return toRuntimeQuiz(this.parseArchive(JSON.parse(await readFile(this.file, 'utf8'))));
   }
+
+  readArchive(): { archive: QuizArchive; revision: string } {
+    const bytes = readFileSync(this.file);
+    return { archive: this.parseArchive(JSON.parse(bytes.toString('utf8'))),
+      revision: createHash('sha256').update(bytes).digest('hex') };
+  }
+
+  saveArchive(data: unknown, revision: string): string {
+    const archive = this.parseArchive(data);
+    if (this.readArchive().revision !== revision) throw new ArchiveConflictError();
+    const temporary = `${this.file}.${randomUUID()}.tmp`;
+    const contents = JSON.stringify(archive, null, 2) + '\n';
+    try {
+      writeFileSync(temporary, contents, { flag: 'wx' });
+      renameSync(temporary, this.file);
+    } finally { rmSync(temporary, { force: true }); }
+    return createHash('sha256').update(contents).digest('hex');
+  }
+}
+
+export class ArchiveConflictError extends Error {
+  constructor() { super('The quiz file changed. Reload before saving; your unsaved edits have not been saved.'); }
 }
 
 export class ArchiveQuizSettingsStorage implements QuizSettingsStorage {
+  private revision: string | undefined;
   constructor(private readonly storage: ArchiveQuizStorage) {}
   load(quizId: number): Partial<Settings> {
     if (quizId !== this.storage.quizId) throw new Error('Quiz ID mismatch');
-    const data = this.storage.parseArchive(JSON.parse(readFileSync(this.storage.file, 'utf8')));
-    return data.gameSetup ?? {};
+    const { archive, revision } = this.storage.readArchive();
+    this.revision = revision;
+    return archive.gameSetup ?? {};
   }
   save(quizId: number, settings: Settings): void {
     if (quizId !== this.storage.quizId) throw new Error('Quiz ID mismatch');
-    const data = this.storage.parseArchive(JSON.parse(readFileSync(this.storage.file, 'utf8')));
+    const { archive: data } = this.storage.readArchive();
     const { title, ...gameSetup } = settingsSchema.parse(settings);
     data.quiz.title = title;
     data.gameSetup = gameSetup;
-    const archive = this.storage.parseArchive(data);
-    const temporary = `${this.storage.file}.${randomUUID()}.tmp`;
-    try {
-      writeFileSync(temporary, JSON.stringify(archive, null, 2) + '\n', { flag: 'wx' });
-      renameSync(temporary, this.storage.file);
-    } finally { rmSync(temporary, { force: true }); }
+    if (!this.revision) throw new Error('Quiz settings were not loaded.');
+    this.revision = this.storage.saveArchive(data, this.revision);
   }
 }

@@ -5,11 +5,18 @@ import { QuizCover } from '../components/QuizCover';
 import { CountdownSound } from '../components/CountdownSound';
 import { branding } from '../branding';
 import { REVIEW_GROUP_MS, REVIEW_RESULT_MS, startCountdownText } from '../../shared/game';
+import type { Snapshot } from '../../shared/protocol';
 
 export function DisplayPage() {
   const { connected, receivedAt } = useSession();
   const state = useAnimatedState();
   if (!state) return <main className="loading-screen"><Brand /><h1>Connecting to the show...</h1><SessionError /></main>;
+  return <DisplayScreen state={state} connected={connected} receivedAt={receivedAt} />;
+}
+
+export function DisplayScreen({ state, connected, receivedAt, preview = false }: {
+  state: Snapshot; connected: boolean; receivedAt: number; preview?: boolean;
+}) {
   const active = state.phase === 'ANSWERING' || state.phase === 'BUZZ_RESULT'
     ? state.players.find((p) => p.id === state.activePlayerId) : undefined;
   const players = state.leaderboardIds.slice(0, state.settings.leaderboardCount)
@@ -26,7 +33,7 @@ export function DisplayPage() {
   const group = state.phase === 'REVIEW_GROUP' ? state.reviewGroup : null;
 
   return <main className="tv-shell">
-    <CountdownSound sound={state.serverSettings.countdownSound}
+    {!preview && <CountdownSound sound={state.serverSettings.countdownSound}
       reviewCorrectSound={state.serverSettings.reviewCorrectSound}
       reviewWrongSound={state.serverSettings.reviewWrongSound}
       id={state.countdownId}
@@ -36,12 +43,12 @@ export function DisplayPage() {
       reviewRemainingMs={group?.remainingMs ?? state.buzzResult?.remainingMs ?? state.reviewRemainingMs}
       reviewCorrect={group ? group.outcome === 'correct' : state.buzzResult?.correct ?? state.review?.correct ?? null}
       reviewHoldMs={group ? REVIEW_GROUP_MS : REVIEW_RESULT_MS}
-      connected={connected} receivedAt={receivedAt} />
-    <header className="tv-header"><Brand /><QuizName title={state.settings.title} id={state.quizId} />
+      connected={connected} receivedAt={receivedAt} />}
+    <header className="tv-header"><Brand staticView={preview} /><QuizName title={state.settings.title} id={state.quizId} />
       <span className="question-counter">{lobby ? 'WELCOME TO THE SHOW' : starting ? 'GET READY' : finished ? 'THAT IS A WRAP' :
         `QUESTION ${String(state.questionIndex + 1).padStart(2, '0')} / ${state.questionCount}`}</span></header>
     {!connected && <div className="tv-offline" role="alert">Connection lost. Buzzing is unavailable while reconnecting.</div>}
-    <div className="tv-errors"><SessionError /></div>
+    {!preview && <div className="tv-errors"><SessionError /></div>}
     <section className="tv-stage">
       <div className={`panel clue-panel ${preGame ? 'lobby-cover-panel' : ''}`}>
         {preGame ? <QuizCover key={`${state.quizId}:${state.coverImage}`} title={state.settings.title} id={state.quizId} image={state.coverImage} />

@@ -104,6 +104,28 @@ test('video stays mounted through result and resumes, stops at finish, restarts 
   await act(async () => { view.unmount(); });
 });
 
+test('playback permission errors from another frame offer a retry', async () => {
+  const media = makeMedia();
+  let blocked = true;
+  media.play = function () {
+    this.plays++;
+    if (blocked) return Promise.reject({ name: 'NotAllowedError', message: 'Autoplay blocked' });
+    this.paused = false;
+    return Promise.resolve();
+  };
+  let view!: ReactTestRenderer;
+  try {
+    await act(async () => { view = create(createElement(Media, { state: base }), { createNodeMock: () => media }); });
+    await act(async () => { view.root.findByType('video').props.onLoadedMetadata(); });
+    const retry = view.root.findByType('button');
+    assert.match(retry.children.join(''), /Enable TV playback/);
+    blocked = false;
+    await act(async () => { retry.props.onClick(); });
+    assert.equal(media.paused, false);
+    assert.equal(view.root.findAllByType('button').length, 0);
+  } finally { if (view) await act(async () => { view.unmount(); }); }
+});
+
 test('audio resumes after the result and a pending play is paused if disconnected', async () => {
   const previousFrame = globalThis.requestAnimationFrame;
   const previousCancel = globalThis.cancelAnimationFrame;

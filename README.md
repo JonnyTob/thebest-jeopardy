@@ -348,10 +348,39 @@ awarded points, so use undo first if the scores should be reversed.
 
 ## Questions and media
 
-Edit [quizzes/100001/quiz.json](./quizzes/100001/quiz.json), then restart the server. Set `server.startupQuizId` in `settings.json` to select the quiz; `QUIZ_ID` overrides it. Set `QUIZ_DATA_DIR` to the archive directory (default `quizzes`). Each quiz lives in `<data directory>/<id>/quiz.json`, with its own files in `<id>/media/`. The ID in the JSON must match the folder name.
+Use **Quiz editor** in the host console to edit the currently configured quiz, or edit [quizzes/100001/quiz.json](./quizzes/100001/quiz.json) directly. Set `server.startupQuizId` in `settings.json` to select the quiz; `QUIZ_ID` overrides it. Set `QUIZ_DATA_DIR` to the archive directory (default `quizzes`). Each quiz lives in `<data directory>/<id>/quiz.json`, with its own files in `<id>/media/`. The ID in the JSON must match the folder name.
+
+The editor adds, duplicates, removes and reorders questions and manages quiz-local
+media. It saves only complete, valid quizzes; unfinished edits remain in the
+browser and are lost if discarded. Save writes to disk, but the running game
+continues using the quiz loaded at startup. **Restart the server to apply quiz
+edits**, losing players, scores and progress. Game setup changes still apply in
+the lobby; if the quiz file changes separately, restart before saving setup.
+The editor detects conflicting changes to the archive; reload only after
+preserving any unsaved edits you need. Avoid simultaneous external writes during
+an editor or setup save.
+
+The media library lists and previews existing quiz files. Uploads are limited to
+50 MB per file and accept PNG, JPEG, GIF, WebP, MP3, WAV, OGG, MP4 and WebM.
+Files are stored immediately with unique names, even if quiz edits are later
+discarded. Deletion is blocked for files referenced by the saved or currently
+loaded quiz; unsaved editor references are also checked in that browser. Browser
+codec and autoplay support vary; test playback on the actual TV. File extensions
+are checked, but uploads are not transcoded or verified for playability.
+Editor APIs require the host passcode when enabled; as with the rest of the app,
+plain HTTP on the LAN does not encrypt credentials or media.
+
+**Preview question** opens a TV-style overlay over the question editor,
+including unsaved edits, the timer or points bar, image reveal and media
+playback. It does not send anything to the TV or affect the game. It uses the
+running game's settings with saved quiz overrides and contains no simulated
+players. It is a snapshot: select **Refresh preview** to restart it, or
+**Close preview** (or Escape) to return to the editor. Audio or video may require
+the browser's playback permission; test the actual TV separately.
 The starter quiz has ten questions covering both modes and all four media types. Questions
-are validated on startup; invalid data fails explicitly. The raw JSON is
-**server-only** and is not exposed as a public HTTP resource.
+are validated on startup; invalid data fails explicitly. The raw archive and
+official answers are exposed to authorized hosts through the editor API, not as
+a public HTTP resource or in player/display snapshots.
 
 Each file has a required `schemaVersion`, `quiz` metadata, optional `gameSetup` overrides, and an ordered
 `questions` array. The starter quiz uses:
@@ -594,8 +623,8 @@ distinct online players, and clean disconnection on Ctrl+C.
 
 - Session state is in memory. **Stopping/restarting the server loses all players,
   scores, and active progress.** Restart to begin a fresh session.
-- No editor, uploads, database, archive, additional reveal modes, or alternate
-  themes yet.
+- No multi-quiz library, persistent drafts, database, additional reveal modes, or
+  alternate themes yet.
 - Audio/video positions are synchronized to the server clue clock with periodic
   browser seeking. Actual TV playback-position reporting, buffering feedback, and
   frame-accurate recovery are follow-up work; validate supplied media codecs and
