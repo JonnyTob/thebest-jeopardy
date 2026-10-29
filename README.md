@@ -302,11 +302,12 @@ sharing the QR code.
 
 ### Optional fast approval for typed answers
 
-Enable **Fast approval** in the host's **Typed answers** pane to judge answers privately
-without showing each one on the TV. This is manual judging, not automatic
-answer matching. The checkbox defaults to off and affects only the host controls.
+The host's **Typed answers** pane always offers **Correct** and **Wrong** buttons
+to judge answers privately without showing each one on the TV. There is no switch
+to enable: use these optional quick rulings or leave answers for normal TV review.
+This is manual judging, not automatic answer matching.
 
-1. Enable **Fast approval** and mark submitted answers **Correct** or **Wrong**
+1. Optionally mark submitted answers **Correct** or **Wrong**
   immediately, even while others are still answering or the question is paused.
   Correct earns the fixed points immediately; wrong earns zero.
 2. **Close submissions** freezes the roster and adds missing answers, which can
@@ -323,7 +324,7 @@ answer matching. The checkbox defaults to off and affects only the host controls
   does not close them early.
 
 Quick rulings are available before TV review starts, both while submissions are
-open and after they close. Normal review remains available whether the checkbox is on or off.
+open and after they close. Normal review remains available for any unjudged answers.
 Undo applies to private rulings too, including zero-point rulings; it restores
 the previous score and judgment state and can return the question to open or closed;
 undo during a group cancels the grouped sequence.

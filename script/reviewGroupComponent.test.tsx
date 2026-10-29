@@ -110,8 +110,7 @@ test('host controls, instructions, TV sound and phone status follow the current 
   assert.equal(button('Confirm reset').props.disabled, false);
   await act(async () => { button('Confirm reset').props.onClick(); });
   assert.deepEqual(actions, [{ type: 'undo' }, { type: 'reset' }]);
-  const toggle = view.root.findByProps({ type: 'checkbox' });
-  await act(async () => { toggle.props.onChange({ target: { checked: true } }); });
+  assert.equal(view.root.findAllByProps({ type: 'checkbox' }).length, 0);
   assert.match(JSON.stringify(view.toJSON()), /correct first, then wrong or missing/);
   assert.ok(view.root.findAllByType('strong').some((node) => node.children.join('') === 'Correct group on TV'));
   session = makeSession(game.snapshot(), players[0].id);
@@ -138,4 +137,67 @@ test('host controls, instructions, TV sound and phone status follow the current 
   assert.match(JSON.stringify(view.toJSON()), /Reviewing answers on TV/);
   assert.doesNotMatch(JSON.stringify(view.toJSON()), /PRIVATE ANSWER/);
   await act(async () => { view.unmount(); });
+});
+
+test('host quick rulings are available by default and retain phase, connection and judgment guards', async () => {
+  let time = 0;
+  const game = new GameEngine({ id: 1, title: 'Quick rulings', questions: [
+    { id: 'one', type: 'text', mode: 'typed', fixedPoints: 250, timerSeconds: 30,
+      question: 'Clue', answer: 'Answer' },
+  ] }, () => time);
+  const alice = game.join({ name: 'Alice', avatarId: 'fox' });
+  const bob = game.join({ name: 'Bob', avatarId: 'cat' });
+  const send = (action: HostAction) => game.command({ id: randomUUID(), revision: game.revision, action });
+  send({ type: 'start' });
+  time += START_COUNTDOWN_MS;
+  game.tick();
+  game.submitAnswer(alice.id, game.snapshot().questionInstanceId!, 'My answer');
+  const actions: HostAction[] = [];
+  const admin = createElement(AdminConsole, { logout: () => {}, requirePasscode: false, development: false });
+  let view!: ReactTestRenderer;
+  const render = async (overrides: Partial<Session> = {}) => {
+    const session = { ...makeSession(game.snapshot(true), alice.id, actions), ...overrides };
+    await act(async () => {
+      if (view) view.update(wrapped(session, admin));
+      else view = create(wrapped(session, admin));
+    });
+  };
+  const correct = (name: string) => view.root.findByProps({ 'aria-label': `Mark ${name} correct` });
+  const wrong = (name: string) => view.root.findByProps({ 'aria-label': `Mark ${name} wrong or missing` });
+  try {
+    await render();
+    assert.equal(view.root.findAllByProps({ type: 'checkbox' }).length, 0);
+    assert.equal(correct('Alice').props.disabled, false);
+    assert.equal(wrong('Alice').props.disabled, false);
+    assert.equal(game.snapshot(true).hostSubmissions?.[0].correct, null, 'Displaying quick controls does not judge answers');
+    await act(async () => { correct('Alice').props.onClick(); });
+    assert.deepEqual(actions, [{ type: 'judgeSubmission', playerId: alice.id, correct: true }]);
+    for (const overrides of [{ connected: false }, { pending: true }]) {
+      await render(overrides);
+      assert.equal(correct('Alice').props.disabled, true);
+      assert.equal(wrong('Alice').props.disabled, true);
+    }
+    send({ type: 'pause' });
+    await render();
+    assert.equal(correct('Alice').props.disabled, false);
+    assert.equal(wrong('Alice').props.disabled, false);
+    send({ type: 'close' });
+    await render();
+    assert.equal(correct('Alice').props.disabled, false);
+    assert.equal(wrong('Alice').props.disabled, false);
+    assert.equal(correct('Bob').props.disabled, true);
+    assert.equal(wrong('Bob').props.disabled, false);
+    await act(async () => { wrong('Bob').props.onClick(); });
+    assert.deepEqual(actions[1], { type: 'judgeSubmission', playerId: bob.id, correct: false });
+    send({ type: 'judgeSubmission', playerId: alice.id, correct: true });
+    await render();
+    assert.equal(correct('Alice').props.disabled, true);
+    assert.equal(wrong('Alice').props.disabled, true);
+    send({ type: 'startReview' });
+    await render();
+    assert.equal(correct('Bob').props.disabled, true);
+    assert.equal(wrong('Bob').props.disabled, true);
+  } finally {
+    if (view) await act(async () => { view.unmount(); });
+  }
 });

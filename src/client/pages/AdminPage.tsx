@@ -54,7 +54,6 @@ export function AdminConsole({ logout, requirePasscode, development }: { logout:
   const [tab, setTab] = useState<'live' | 'setup'>('live');
   const [confirm, setConfirm] = useState(false);
   const [confirmRestart, setConfirmRestart] = useState(false);
-  const [fastApproval, setFastApproval] = useState(false);
   const active = state?.players.find((p) => p.id === state.activePlayerId);
   const isOpen = state?.phase === 'QUESTION_OPEN';
   const answering = state?.phase === 'ANSWERING';
@@ -164,10 +163,8 @@ export function AdminConsole({ logout, requirePasscode, development }: { logout:
               </section>
             </div>}
         {typed && state.phase !== 'GAME_FINISHED' && <section className="panel">
-          <div className="typed-answers-heading"><h2>Typed answers ({state.submissionCount} submitted)</h2>
-            <label className="fast-approval-toggle"><input type="checkbox" checked={fastApproval}
-              onChange={(event) => setFastApproval(event.target.checked)} />Fast approval</label></div>
-          {fastApproval && <p className="muted">Mark answers here privately while submissions are open or closed. Review starts automatically once submissions are closed and all answers are judged, or when you start it. The TV shows previously judged players in groups: correct first, then wrong or missing, each for four seconds without their answers. Unjudged answers follow individually.</p>}
+          <div className="typed-answers-heading"><h2>Typed answers ({state.submissionCount} submitted)</h2></div>
+          <p className="muted">Optionally mark answers here privately while submissions are open or closed, or leave them for individual TV review. Review starts automatically once submissions are closed and all answers are judged, or when you start it. The TV shows previously judged players in groups: correct first, then wrong or missing, each for four seconds without their answers. Unjudged answers follow individually.</p>
           {state.phase === 'QUESTION_CLOSED' && <p>{state.hostSubmissions?.filter((entry) => entry.correct === null).length ?? 0} awaiting review.
             {' '}Start answer review to show judged groups first, then review remaining answers individually.</p>}
           {state.hostSubmissions?.length ? <ol className="host-submissions">{state.hostSubmissions.map((entry) => <li key={entry.playerId}>
@@ -175,11 +172,11 @@ export function AdminConsole({ logout, requirePasscode, development }: { logout:
               <strong className="submission-player">Player: {state.players.find((player) => player.id === entry.playerId)?.name ?? 'Unknown player'}</strong>
               <div className="submission-text">Answer: {entry.answer ?? 'No answer'}
                 {entry.correct !== null && <span className={entry.correct ? 'positive' : 'muted'}>{entry.correct ? ` / Correct +${state.question?.fixedPoints}` : ' / Wrong or missing +0'}</span>}</div>
-            <div className="submission-rulings" title={!fastApproval ? 'Enable Fast approval to judge here.' : undefined}>
-              <button className="success small" disabled={disabled || !fastApproval || !(isOpen || state.phase === 'QUESTION_CLOSED') || entry.correct !== null || entry.answer === null}
+            <div className="submission-rulings">
+              <button className="success small" disabled={disabled || !(isOpen || state.phase === 'QUESTION_CLOSED') || entry.correct !== null || entry.answer === null}
                 aria-label={`Mark ${state.players.find((player) => player.id === entry.playerId)?.name ?? 'player'} correct`}
                 onClick={() => { void command({ type: 'judgeSubmission', playerId: entry.playerId, correct: true }); }}>Correct +{state.question?.fixedPoints}</button>
-              <button className="danger small" disabled={disabled || !fastApproval || !(isOpen || state.phase === 'QUESTION_CLOSED') || entry.correct !== null}
+              <button className="danger small" disabled={disabled || !(isOpen || state.phase === 'QUESTION_CLOSED') || entry.correct !== null}
                 aria-label={`Mark ${state.players.find((player) => player.id === entry.playerId)?.name ?? 'player'} wrong or missing`}
                 onClick={() => { void command({ type: 'judgeSubmission', playerId: entry.playerId, correct: false }); }}>{entry.answer === null ? 'No answer +0' : 'Wrong +0'}</button>
             </div></div>
