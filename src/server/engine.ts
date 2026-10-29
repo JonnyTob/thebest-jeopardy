@@ -92,7 +92,11 @@ export class GameEngine {
       this.revision++;
     } else if (this.clue.phase === 'BUZZ_RESULT' && this.buzzResult !== null
       && this.now() - this.buzzResult.at >= BUZZ_RESULT_MS) {
-      const correct = this.buzzResult.correct;
+      const result = this.buzzResult;
+      const correct = result.correct;
+      if (!correct && this.settings.lockoutSeconds > 0) {
+        this.clue.lockedOutUntil[result.playerId] = this.now() + this.settings.lockoutSeconds * 1000;
+      }
       this.buzzResult = null;
       if (correct) {
         this.close();
@@ -458,7 +462,7 @@ export class GameEngine {
         if (!action.correct) {
           if (!this.clue.lockedOutIds.includes(player.id)) this.clue.lockedOutIds.push(player.id);
           if (this.settings.lockoutSeconds > 0) {
-            this.clue.lockedOutUntil[player.id] = at + this.settings.lockoutSeconds * 1000;
+            this.clue.lockedOutUntil[player.id] = at + BUZZ_RESULT_MS + this.settings.lockoutSeconds * 1000;
           }
         }
         this.buzzResult = { id: randomUUID(), playerId: player.id, correct: action.correct, delta, at };
@@ -544,7 +548,9 @@ export class GameEngine {
       leaderboardIds: [...this.leaderboardIds],
       lockedOutIds: this.clue.lockedOutIds.filter((id) => this.isLockedOut(id)),
       lockoutRemainingMs: Object.fromEntries(Object.entries(this.clue.lockedOutUntil)
-        .filter(([, until]) => until > now).map(([id, until]) => [id, until - now])),
+        .filter(([, until]) => until > now).map(([id, until]) => [id, until - now -
+          (this.buzzResult?.playerId === id && !this.buzzResult.correct
+            ? Math.max(0, this.buzzResult.at + BUZZ_RESULT_MS - now) : 0)])),
       activePlayerId: this.clue.activePlayerId, pointsAtBuzz: this.clue.pointsAtBuzz,
       currentPoints: question?.mode === 'typed' ? question.fixedPoints ?? 0 : this.clue.pointsAtBuzz ?? pointsAt(elapsed, this.settings),
       clueElapsedMs: elapsed, clockRunning: this.clue.startedAt !== null, paused: this.clue.paused,

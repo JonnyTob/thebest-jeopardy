@@ -1,20 +1,22 @@
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { createApp } from './app.js';
-import { JsonQuizStorage } from './storage.js';
-import { JsonQuizSettingsStorage, loadGlobalSettings } from './settings.js';
+import { ArchiveQuizStorage, ArchiveQuizSettingsStorage } from './storage.js';
+import { loadGlobalSettings } from './settings.js';
 
 const settings = loadGlobalSettings(path.resolve('settings.json'));
-const { port, joinOrigin, ...serverSettings } = settings.server;
+const { port, joinOrigin, startupQuizId, ...serverSettings } = settings.server;
 const passcode = serverSettings.requireAdminPasscode ? process.env.HOST_PASSCODE ?? randomBytes(6).toString('hex') : '';
 if (serverSettings.requireAdminPasscode && passcode.length < 8) throw new Error('HOST_PASSCODE must contain at least 8 characters.');
+const storage = new ArchiveQuizStorage(path.resolve(process.env.QUIZ_DATA_DIR ?? 'quizzes'), startupQuizId);
 const application = await createApp({
-  storage: new JsonQuizStorage(path.resolve('src/data/questions.json')),
+  storage,
+  quizMediaRoot: storage.mediaRoot,
   passcode,
   production: process.argv.includes('--production'),
   joinOrigin,
   gameSetup: settings.gameSetup,
-  settingsStorage: new JsonQuizSettingsStorage(path.resolve('settings/quizzes')),
+  settingsStorage: new ArchiveQuizSettingsStorage(storage),
   serverSettings,
   branding: settings.branding,
 });

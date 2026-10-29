@@ -5,11 +5,11 @@ import path from 'node:path';
 import { test } from 'node:test';
 import type { HostAction } from '../shared/protocol.js';
 import { GameEngine } from './engine.js';
-import { JsonQuizStorage } from './storage.js';
+import { ArchiveQuizStorage } from './storage.js';
 import { START_COUNTDOWN_MS, NEXT_ROUND_MS, REVIEW_RESULT_MS } from '../shared/game.js';
 import { probeMediaDurations } from './mediaDurations.js';
 
-const storage = new JsonQuizStorage(path.resolve('src/data/questions.json'));
+const storage = new ArchiveQuizStorage(path.resolve('quizzes'), 100001);
 
 test('sample quiz demonstrates both modes for every media type with real local assets', async () => {
   const quiz = await storage.load();
@@ -31,7 +31,7 @@ test('sample quiz demonstrates both modes for every media type with real local a
   const assets = new Set([quiz.coverImage, ...quiz.questions.map((question) => question.media)]);
   for (const media of assets) {
     if (!media) continue;
-    const bytes = await readFile(path.resolve('src/public', media.slice(1)));
+    const bytes = await readFile(path.resolve('quizzes/100001/media', media.slice('/media/quiz/'.length)));
     assert.ok(bytes.length > 0, `Empty sample media: ${media}`);
     if (media.endsWith('.svg')) assert.match(bytes.toString('utf8'), /<svg/);
     if (media.endsWith('.wav')) {
@@ -50,7 +50,7 @@ test('sample quiz demonstrates both modes for every media type with real local a
 test('sample quiz plays through mixed buzzer and typed questions to completion', async () => {
   const quiz = await storage.load();
   let time = 0;
-  const durations = await probeMediaDurations(quiz, path.resolve('src/public/media'));
+  const durations = await probeMediaDurations(quiz, path.resolve('quizzes/100001/media'), '/media/quiz/');
   const game = new GameEngine(quiz, () => time, undefined, durations);
   const player = game.join({ name: 'Sample player', avatarId: 'fox' });
   const command = (action: HostAction) => game.command({ id: randomUUID(), revision: game.revision, action });

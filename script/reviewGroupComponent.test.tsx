@@ -58,6 +58,9 @@ test('group cards show only current players and per-player points while video st
   const group = () => view.root.findByProps({ 'aria-label': 'Grouped answer results' });
   assert.match(group().props.className, /review-group-correct/);
   assert.equal(group().props.style.animationDelay, '0ms');
+  const effect = () => group().findByProps({ 'aria-hidden': 'true' });
+  assert.match(effect().props.className, /review-result-correct/);
+  assert.equal(effect().findAllByType('span')[0].props.style.animationDuration, '4000ms');
   assert.equal(group().findAllByType('li').length, 8);
   for (const card of group().findAllByType('li')) {
     assert.equal(card.findAllByType('svg').length, 1);
@@ -75,6 +78,8 @@ test('group cards show only current players and per-player points while video st
   assert.equal(view.root.findByType('video'), video);
   assert.match(group().props.className, /review-group-wrong/);
   assert.equal(group().props.style.animationDelay, '-3300ms', 'late snapshot skips the entrance');
+  assert.match(effect().props.className, /review-result-wrong/);
+  assert.match(effect().findAllByType('span')[0].props.style.animationDelay, /-3300ms/);
   assert.equal(group().findAllByType('li').length, 3);
   assert.ok(group().findAllByType('li').every((card) => card.findByType('span').children.join('') === '+0'));
   html = JSON.stringify(view.toJSON());

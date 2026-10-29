@@ -16,6 +16,7 @@ const revealSchema = z.object({
 
 export const questionSchema = z.object({
   id: z.string().min(1).max(80),
+  keyword: z.string().trim().min(1).max(80).optional(),
   type: z.enum(['text', 'image', 'video', 'audio']),
   question: z.string().trim().min(1).max(500),
   mode: z.enum(['buzzer', 'typed']).optional(),

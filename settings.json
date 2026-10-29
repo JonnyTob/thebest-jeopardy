@@ -6,6 +6,7 @@
   },
   "server": {
     "port": 3000,
+    "startupQuizId": 100001,
     "maxPlayerNameLength": 10,
     "requireAdminPasscode": false,
     "maxPlayers": 12,

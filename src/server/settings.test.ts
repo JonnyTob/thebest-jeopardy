@@ -183,7 +183,7 @@ test('global sections load defaults, respect environment overrides and reject in
   const directory = mkdtempSync(path.join(tmpdir(), 'quiz-global-settings-'));
   const file = path.join(directory, 'settings.json');
   try {
-    const serverDefaults = { maxPlayerNameLength: 24, requireAdminPasscode: true, maxPlayers: 12,
+    const serverDefaults = { startupQuizId: 100001, maxPlayerNameLength: 24, requireAdminPasscode: true, maxPlayers: 12,
       TimerEndOffsetSeconds: 0, countdownSound: '/media/sounds/countdown-beep.wav',
       reviewCorrectSound: '/media/sounds/countdown-beep.wav', reviewWrongSound: '/media/sounds/countdown-beep.wav' };
     const config = { branding, server: { port: 3000, joinOrigin: 'http://example.com:3000' }, gameSetup: defaults };
@@ -191,7 +191,9 @@ test('global sections load defaults, respect environment overrides and reject in
     assert.deepEqual(loadGlobalSettings(file, {}), { ...config, server: { ...config.server, ...serverDefaults } });
     assert.deepEqual(loadGlobalSettings(file, { PORT: '4000', JOIN_ORIGIN: 'http://example.com:4000' }).server,
       { port: 4000, joinOrigin: 'http://example.com:4000', ...serverDefaults });
-    const customServer = { ...config.server, maxPlayerNameLength: 32, requireAdminPasscode: false, maxPlayers: 20,
+    assert.equal(loadGlobalSettings(file, { QUIZ_ID: '100002' }).server.startupQuizId, 100002);
+    assert.throws(() => loadGlobalSettings(file, { QUIZ_ID: '0' }), /Unable to load global settings/);
+    const customServer = { ...config.server, startupQuizId: 100001, maxPlayerNameLength: 32, requireAdminPasscode: false, maxPlayers: 20,
       TimerEndOffsetSeconds: 15, countdownSound: '/media/custom/countdown.wav',
       reviewCorrectSound: '/media/custom/correct.wav', reviewWrongSound: '/media/custom/wrong.wav' };
     writeFileSync(file, JSON.stringify({ ...config, server: customServer }));
@@ -203,6 +205,7 @@ test('global sections load defaults, respect environment overrides and reject in
     for (const invalid of [
       { ...config, server: { port: 3000, lockoutSeconds: 10 } },
       { ...config, gameSetup: { ...defaults, port: 3000 } },
+      { ...config, gameSetup: { ...defaults, title: 'Override' } },
       { ...config, gameSetup: { ...defaults, minimumPoints: 501 } },
       { ...config, gameSetup: { ...defaults, lockoutSeconds: 301 } },
       { ...config, gameSetup: { ...defaults, maxPlayers: 20 } },

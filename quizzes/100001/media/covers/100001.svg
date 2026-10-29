@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="3840" height="2160" viewBox="0 0 3840 2160">
+  <defs>
+    <radialGradient id="backdrop" cx=".5" cy=".27" r=".82">
+      <stop stop-color="#6432a1"/><stop offset=".5" stop-color="#28124e"/><stop offset="1" stop-color="#10091e"/>
+    </radialGradient>
+    <linearGradient id="beam" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#f8d799" stop-opacity=".3"/><stop offset="1" stop-color="#b590ff" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#fff2ba"/><stop offset=".45" stop-color="#ffce68"/><stop offset="1" stop-color="#b76b34"/>
+    </linearGradient>
+    <linearGradient id="podium" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#65408c"/><stop offset="1" stop-color="#21102f"/>
+    </linearGradient>
+    <linearGradient id="button" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#ff99dc"/><stop offset=".55" stop-color="#e74ca8"/><stop offset="1" stop-color="#862971"/>
+    </linearGradient>
+    <linearGradient id="floor" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#8d4297" stop-opacity=".3"/><stop offset="1" stop-color="#160c29" stop-opacity="0"/>
+    </linearGradient>
+    <pattern id="lights" width="120" height="120" patternUnits="userSpaceOnUse">
+      <circle cx="60" cy="60" r="3" fill="#ba95ed" opacity=".25"/>
+    </pattern>
+    <filter id="glow" x="-.5" y="-.5" width="2" height="2">
+      <feGaussianBlur stdDeviation="18"/>
+    </filter>
+    <g id="spark">
+      <path d="M0-22 5-5 22 0 5 5 0 22-5 5-22 0-5-5Z" fill="#ffe8a2"/>
+    </g>
+  </defs>
+  <rect width="3840" height="2160" fill="url(#backdrop)"/>
+  <rect width="3840" height="2160" fill="url(#lights)"/>
+  <path d="M460 0 0 1500 1600 1500Z M3380 0 2240 1500 3840 1500Z" fill="url(#beam)"/>
+  <g fill="none" stroke-linecap="round">
+    <path d="M620 1410V970a1300 930 0 0 1 2600 0v440" stroke="#cb64dc" stroke-width="30" opacity=".5" filter="url(#glow)"/>
+    <path d="M620 1410V970a1300 930 0 0 1 2600 0v440" stroke="#bb62d5" stroke-width="8"/>
+    <path d="M770 1330V990a1150 780 0 0 1 2300 0v340" stroke="#edbf76" stroke-width="5" opacity=".6"/>
+    <path d="M920 1290V1010a1000 630 0 0 1 2000 0v280" stroke="#9c65d5" stroke-width="4" opacity=".6"/>
+  </g>
+  <ellipse cx="1920" cy="1510" rx="1620" ry="460" fill="url(#floor)"/>
+  <g stroke="#c791e8" stroke-opacity=".16" fill="none" stroke-width="2">
+    <ellipse cx="1920" cy="1490" rx="1530" ry="340"/>
+    <ellipse cx="1920" cy="1490" rx="1180" ry="260"/>
+    <path d="M1920 1250 250 1990M1920 1250 1000 2160M1920 1250V2160M1920 1250 2840 2160M1920 1250 3590 1990"/>
+  </g>
+  <g transform="translate(1920 720)">
+    <circle r="320" fill="#af5ac0" opacity=".13"/>
+    <circle r="265" fill="#1f103b" stroke="#d598e9" stroke-width="4"/>
+    <circle r="245" fill="none" stroke="#67428f" stroke-width="2" stroke-dasharray="5 20"/>
+    <path d="M-101-85c0-137 209-146 209-7 0 85-108 81-108 171" fill="none" stroke="#f6ce7b" stroke-width="60" stroke-linecap="round"/>
+    <circle cy="161" r="33" fill="url(#gold)"/>
+  </g>
+  <g transform="translate(1920 1220)">
+    <ellipse cy="245" rx="610" ry="100" fill="#0c0719" opacity=".7"/>
+    <path d="M-410-65H410L365 465H-365Z" fill="url(#podium)" stroke="#9c65b5" stroke-width="4"/>
+    <path d="M-345 0H345L310 400H-310Z" fill="#2c1649" stroke="#98509c" stroke-width="3"/>
+    <rect x="-405" y="45" width="810" height="10" rx="5" fill="#edc36c"/>
+    <ellipse cy="-65" rx="470" ry="100" fill="#1b102d" stroke="#b789d2" stroke-width="5"/>
+    <ellipse cy="-80" rx="250" ry="65" fill="#df8dbe" opacity=".25" filter="url(#glow)"/>
+    <path d="M-255-130V-80c0 83 510 83 510 0v-50" fill="#662050"/>
+    <ellipse cy="-130" rx="255" ry="85" fill="url(#button)" stroke="#ffa3df" stroke-width="5"/>
+    <ellipse cy="-148" rx="185" ry="42" fill="#ffb9e5" opacity=".3"/>
+    <path d="M-145 180H145M-100 225H100" stroke="#b285ce" stroke-width="8" stroke-linecap="round" opacity=".5"/>
+  </g>
+  <g transform="translate(1000 1130) rotate(-14)">
+    <rect x="-150" y="-200" width="300" height="400" rx="38" fill="#352052" stroke="#a978d4" stroke-width="5"/>
+    <rect x="-120" y="-165" width="240" height="265" rx="20" fill="#221139"/>
+    <circle cy="145" r="20" fill="#d394d9"/>
+    <path d="m-54-35 38 38 80-91" fill="none" stroke="#76dfbf" stroke-width="25" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <g transform="translate(2810 1050) rotate(14)">
+    <path d="M-100-160H100V-40c0 120-200 120-200 0Z" fill="url(#gold)"/>
+    <path d="M-100-125H-170v55c0 75 70 105 115 105M100-125h70v55C170 5 100 35 55 35" fill="none" stroke="#e0a754" stroke-width="23"/>
+    <path d="M0 48V155M-80 170H80" stroke="#e7b465" stroke-width="28" stroke-linecap="round"/>
+    <path d="m0-115 15 31 35 5-25 24 6 35-31-16-31 16 6-35-25-24 35-5Z" fill="#fff2bc"/>
+  </g>
+  <g fill="none" stroke-width="13" stroke-linecap="round">
+    <path d="m440 510 20 54M3290 680l40-35M1150 310l-28 42M2700 340l50 20" stroke="#e575c9"/>
+    <path d="m760 720 42-12M3100 390l-18 50M1460 480l-30-28M3440 1100l30 40" stroke="#f0c975"/>
+    <path d="m530 1100 30-30M3050 1430l48 15M1290 880l-15 45M2400 410l-15-35" stroke="#a58ce7"/>
+  </g>
+  <g>
+    <use href="#spark" x="530" y="810"/><use href="#spark" x="3260" y="950"/>
+    <use href="#spark" x="1390" y="360"/><use href="#spark" x="2490" y="650"/>
+    <use href="#spark" x="860" y="420"/><use href="#spark" x="2880" y="300"/>
+  </g>
+  <g fill="#ffe5a0">
+    <circle cx="1180" cy="650" r="7"/><circle cx="2660" cy="830" r="7"/>
+    <circle cx="690" cy="1230" r="6"/><circle cx="3210" cy="1270" r="8"/>
+    <circle cx="1620" cy="260" r="5"/><circle cx="2220" cy="300" r="6"/>
+  </g>
+</svg>

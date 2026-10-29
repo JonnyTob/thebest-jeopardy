@@ -61,6 +61,7 @@ npm start
   },
   "server": {
     "port": 3000,
+    "startupQuizId": 100001,
     "joinOrigin": "http://192.168.1.42:3000",
     "maxPlayerNameLength": 24,
     "requireAdminPasscode": true,
@@ -93,7 +94,8 @@ npm start
   saved player identities or host passcodes.
 - **server**: file-only options; never editable through Game setup.
   `joinOrigin` is optional; omit it for automatic LAN address detection.
-  `PORT` and `JOIN_ORIGIN` environment variables override the file.
+  `PORT`, `JOIN_ORIGIN`, and `QUIZ_ID` environment variables override the corresponding file settings.
+  `startupQuizId` selects the quiz folder to load (a positive safe integer; default 100001).
   Keep the host passcode out of configuration files; use `HOST_PASSCODE` or
   the automatically generated passcode.
   - `maxPlayerNameLength`: maximum nickname length, **24** by default
@@ -128,22 +130,19 @@ npm start
     They are global server settings; restart after changing them and rebuild
     production after adding or replacing assets. They remain enabled by default
     even if `countdownSound` is `null`.
-- **gameSetup**: defaults for the host's editable settings. An optional `title`
-  overrides the title from the question file; omit it to use the quiz's own title.
+- **gameSetup**: defaults for the host's editable game settings.
   `maxAnswerLength` (1-500; default 100) limits typed answers for this quiz.
-- **settings/quizzes/\<quiz-id\>.json**: per-quiz overrides, identified by the
-  numeric quiz ID in the question file. This file has a `gameSetup` section only.
-  A missing per-quiz file means the quiz uses global defaults. You can create a
+- **quizzes/\<quiz-id\>/quiz.json**: per-quiz overrides, identified by the
+  numeric quiz ID in the question file. The quiz file can contain a partial `gameSetup` section; omitted values use global defaults. You can create a
   partial override, for example `{"gameSetup":{"lockoutSeconds":10}}`.
 
-On startup, values are merged in this order: quiz title, global game defaults,
-then per-quiz overrides. **Save setup** writes all current game settings to that
-quiz's file, creating it if needed. This includes the title but never server
+On startup, global game defaults are merged with per-quiz overrides. The title
+comes from `quiz.title`. **Save setup** writes the title to `quiz.title` and the
+current game settings to `gameSetup` in that quiz's `quiz.json`, never server
 options. Saved values take precedence over later global-default changes; remove
 an override from the quiz file to inherit the global value again.
 
-Both development and production read these files from the repository root at
-startup. Restart the server after editing them manually. Missing/invalid global
+Both development and production read global settings from the repository root and quiz files from the configured data directory at startup. Restart the server after editing them manually. Missing/invalid global
 configuration or invalid per-quiz settings stop startup with an error.
 Save failures are reported to the host without changing the running setup.
 Settings persist across restarts; players, scores and active game state do not.
@@ -229,7 +228,7 @@ sharing the QR code.
 - In **Game setup**, set **Wrong-answer lockout seconds** to 1-300 to allow
   retries on the same question. The player's phone shows a countdown, and the
   host's player table shows the remaining seconds. The timer starts when the
-  host rules an answer wrong and continues during the two-second result, pauses,
+  two-second wrong-answer result ends and continues during pauses,
   other players' answers, and disconnections. Once it expires, the player can buzz when buzzers are open.
   The default, **0**, preserves one attempt per question. Setup is locked after
   starting; resetting or advancing a question clears all lockouts.
@@ -344,41 +343,51 @@ awarded points, so use undo first if the scores should be reversed.
 
 ## Questions and media
 
-Edit [src/data/questions.json](./src/data/questions.json), then restart the server.
+Edit [quizzes/100001/quiz.json](./quizzes/100001/quiz.json), then restart the server. Set `server.startupQuizId` in `settings.json` to select the quiz; `QUIZ_ID` overrides it. Set `QUIZ_DATA_DIR` to the archive directory (default `quizzes`). Each quiz lives in `<data directory>/<id>/quiz.json`, with its own files in `<id>/media/`. The ID in the JSON must match the folder name.
 The starter quiz has ten questions covering both modes and all four media types. Questions
 are validated on startup; invalid data fails explicitly. The raw JSON is
 **server-only** and is not exposed as a public HTTP resource.
 
-Each quiz must have a permanent numeric `id` at the top level, alongside `title`
-and `questions`. The starter quiz uses:
+Each file has `quiz` metadata, optional `gameSetup` overrides, and an ordered
+`questions` array. The starter quiz uses:
 
 ```json
 {
-  "id": 100001,
-  "title": "Friday Night Quiz",
-  "coverImage": "/media/covers/100001.svg",
+  "quiz": {
+    "id": 100001,
+    "title": "Friday Night Quiz",
+    "coverImage": "media/covers/100001.svg"
+  },
+  "gameSetup": {},
   "questions": []
 }
 ```
 
 The empty array above illustrates the structure only; a playable quiz requires
-at least one question. Existing quiz files must add the `id` field.
+at least one question.
 Use a unique positive safe integer for each quiz (1 to 9007199254740991).
 Keep the ID when renaming or editing that quiz; assign a different ID when
 creating a separate quiz. Future library entries should use this ID as their
-identifier rather than the title. There is no multi-quiz library or automatic
-cross-file uniqueness check yet.
+identifier rather than the title. Select a quiz at startup using `server.startupQuizId` or `QUIZ_ID`; a library interface is not available yet.
 
 The ID is shown as **Quiz #100001** beside the quiz name on TV, phone, and admin
 live/setup screens. It survives server restarts because it is stored in the quiz
 file, and it cannot be changed through session setup. This is a quiz/library ID,
 not a temporary join PIN or the private host passcode.
 
+Each question has a globally unique UUID `id` and an optional human-readable
+`keyword` (1–80 characters; duplicates are allowed). Generate a new UUID for a
+new question, including an independently editable copy. Preserve the ID when
+editing, moving or reordering the same question. The question array determines
+play order. IDs are checked for duplicates within the loaded quiz; cross-archive
+collision checks are not yet implemented. Generate UUIDs independently rather
+than reusing IDs across quizzes.
+
 ### Question modes
 
 The bundled quiz is also a playable examples catalog:
 
-| # | Question ID | Type / mode | Features to try |
+| # | Keyword | Type / mode | Features to try |
 | --- | --- | --- | --- |
 | 1 | `warm-up` | Text / buzzer | Omitted `mode` defaults to buzzer; separate headline and clue text |
 | 2 | `mystery-image` | Image / buzzer | Deterministic 8 x 6 tile reveal over 20 seconds; buzz freezes it |
@@ -404,7 +413,7 @@ The `players` helper only joins players; it does not submit typed answers.
 All referenced media is bundled and works offline: the original rocket image,
 an original ringed-planet illustration, a synthesized WAV (three ascending notes,
 then three descending notes), and a silent 1280 x 720 MP4 of moving coloured
-shapes. The latter three live in [src/public/media/examples/](./src/public/media/examples/).
+shapes. The latter three live in [quizzes/100001/media/examples/](./quizzes/100001/media/examples/).
 The MP4 uses H.264 for broad browser compatibility.
 Audio/video plays on the TV only and may need its playback-unlock button.
 The bundled countdown beep is [Beep Tone Sound SFX by qubodup](https://opengameart.org/content/beep-tone-sound-sfx),
@@ -419,7 +428,8 @@ question requires its own fixed point value and submission timer in seconds:
 
 ```json
 {
-  "id": "movie-1",
+  "id": "a5e29af7-9704-4f8e-a981-64628ef6c69a",
+  "keyword": "movie-1",
   "type": "text",
   "mode": "typed",
   "question": "Name the movie.",
@@ -439,7 +449,7 @@ another tab cannot submit again. The host sets the per-quiz answer length in
 
 Each quiz can optionally set `coverImage` to its own local image path. The
 starter quiz includes an original **3840 x 2160 SVG illustration** in
-[src/public/media/covers/100001.svg](./src/public/media/covers/100001.svg).
+[quizzes/100001/media/covers/100001.svg](./quizzes/100001/media/covers/100001.svg).
 It is resolution-independent and remains sharp on 4K displays.
 Use the Quiz ID in the filename to keep covers organized; other local SVG,
 PNG, JPEG, or WebP covers can be referenced in the same way.
@@ -455,8 +465,7 @@ A configured image that fails to load shows an explicit warning while keeping
 the title and QR available. Rebuild after replacing public assets in production.
 Hiding the TV's join information does not disable joining via an existing link.
 
-Place local media in [src/public/media/](./src/public/media/) and reference it as
-`/media/your-file.ext`. Rebuild after changing public assets for production.
+Place quiz media in its `media/` folder and reference it as `media/your-file.ext`. Quiz files and media are read from the configured data directory at runtime; restart after changing quiz JSON. Shared TV sounds remain in `src/public/media/sounds/`.
 Use the fields described in the [project specification](./QUIZ_NIGHT_PROJECT_SPEC.md);
 the first image effects supported are `static` and `tiles`.
 
@@ -464,10 +473,11 @@ An audio clue can use:
 
 ```json
 {
-  "id": "audio-1",
+  "id": "1a3000f3-d438-4de1-9a89-756d4bf1423f",
+  "keyword": "audio-1",
   "type": "audio",
   "question": "Name this sound",
-  "media": "/media/your-audio.mp3",
+  "media": "media/your-audio.mp3",
   "answer": "Your private answer",
   "visualizer": { "enabled": true, "style": "spectrum" },
   "playback": { "startSeconds": 0, "endSeconds": 20 }
@@ -485,7 +495,6 @@ src/
   client/       React pages, shared UI, media rendering, and styles
   server/       HTTP/Socket.IO server, authoritative engine, storage, and tests
   shared/       Runtime validation, typed protocol, scoring/reveal helpers and tests
-  data/         Private question JSON
   public/media/ Locally served clue assets
 ```
 

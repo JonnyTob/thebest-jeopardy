@@ -63,6 +63,7 @@ function ReviewGroupOverlay({ group, players }: { group: ReviewGroup; players: P
   const members = group.playerIds.flatMap((id) => players.find((player) => player.id === id) ?? []);
   return <section className={`review-group review-group-${group.outcome}`} aria-label="Grouped answer results"
     aria-live="polite" aria-atomic="true" style={{ animationDelay: `${delay.current}ms` }}>
+    <ReviewResultAnimation correct={correct} remaining={group.remainingMs} duration={REVIEW_GROUP_MS} />
     <header className="review-group-heading"><span className="eyebrow">FAST APPROVAL / GROUP RESULT</span>
       <h2>{correct ? 'Correct answers' : 'Wrong or missing answers'}</h2></header>
     <ul className="review-group-grid" tabIndex={0} aria-label="Players in this group">
@@ -74,9 +75,9 @@ function ReviewGroupOverlay({ group, players }: { group: ReviewGroup; players: P
   </section>;
 }
 
-function ReviewResultAnimation({ correct, remaining }: { correct: boolean; remaining: number | null }) {
+function ReviewResultAnimation({ correct, remaining, duration = REVIEW_RESULT_MS }: { correct: boolean; remaining: number | null; duration?: number }) {
   // Capture the initial server offset once so snapshots do not restart the animation.
-  const delay = useRef(-Math.max(0, Math.min(REVIEW_RESULT_MS, REVIEW_RESULT_MS - (remaining ?? 0))));
+  const delay = useRef(-Math.max(0, Math.min(duration, duration - (remaining ?? 0))));
   return <div className={`review-result-animation ${correct ? 'review-result-correct' : 'review-result-wrong'}`} aria-hidden="true">
     {Array.from({ length: 10 }, (_, index) => <span key={index} className="review-result-item" style={{
       '--x': `${8 + index * 9.2}%`,
@@ -84,6 +85,7 @@ function ReviewResultAnimation({ correct, remaining }: { correct: boolean; remai
       '--spin': `${index % 2 ? 150 : -150}deg`,
       '--offset': `${index * 70}ms`,
       animationDelay: `calc(${delay.current}ms + var(--offset))`,
+      animationDuration: `${duration}ms`,
     } as CSSProperties}>{correct ? '' : '$'}</span>)}
   </div>;
 }

@@ -5,7 +5,7 @@ import { parseFile, parseStream } from 'music-metadata';
 import type { Quiz } from '../shared/protocol.js';
 
 /** Probe once at startup. Missing, unsupported, or unreadable files remain unknown. */
-export async function probeMediaDurations(quiz: Quiz, mediaRoot: string): Promise<Record<string, number>> {
+export async function probeMediaDurations(quiz: Quiz, mediaRoot: string, prefix = '/media/'):  Promise<Record<string, number>> {
   const durations: Record<string, number> = Object.create(null) as Record<string, number>;
   let root: string;
   try { root = await realpath(mediaRoot); } catch { return durations; }
@@ -13,9 +13,9 @@ export async function probeMediaDurations(quiz: Quiz, mediaRoot: string): Promis
     .filter((question) => question.type === 'audio' || question.type === 'video')
     .map((question) => question.media).filter((value): value is string => !!value));
   for (const media of paths) {
-    if (!/^\/media\/[a-zA-Z0-9_./-]+$/.test(media) || media.includes('..') || !/\.(wav|mp3|mp4)$/i.test(media)) continue;
+    if (!media.startsWith(prefix) || !/^\/media\/[a-zA-Z0-9_./-]+$/.test(media) || media.includes('..') || !/\.(wav|mp3|mp4)$/i.test(media)) continue;
     try {
-      const file = await realpath(path.resolve(root, media.slice('/media/'.length)));
+      const file = await realpath(path.resolve(root, media.slice(prefix.length)));
       const relative = path.relative(root, file);
       if (!relative || relative.startsWith(`..${path.sep}`) || relative === '..' || path.isAbsolute(relative)) continue;
       if (!(await stat(file)).isFile()) continue;

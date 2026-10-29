@@ -235,11 +235,11 @@ td:last-child, th:last-child { padding-right: 0; }
 .review-overlay p.positive { color: var(--green); }
 .review-group { position: absolute; z-index: 2; inset: 8px; display: flex; flex-direction: column; gap: clamp(8px, 1.2vh, 16px); min-height: 0; padding: clamp(12px, 1.8vw, 28px); border: 1px solid #65d8ae; border-radius: 14px; background: linear-gradient(145deg, #123b32f5, #1d102bf7 65%); box-shadow: 0 12px 40px #0009; animation: review-group-arrive-leave 4s ease both; }
 .review-group-wrong { border-color: #e86da7; background: linear-gradient(145deg, #491b3bf5, #1d102bf7 65%); }
-.review-group-heading { flex: none; }
+.review-group-heading { position: relative; z-index: 2; flex: none; }
 .review-group-heading h2 { color: #fff3d4; font-size: clamp(1.15rem, 2.2vw, 2.5rem); }
 .review-group-correct .eyebrow { color: var(--green); }
 .review-group-wrong .eyebrow { color: #ff9bcb; }
-.review-group-grid { list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr)); align-content: start; gap: clamp(6px, .7vw, 12px); overflow-y: auto; overscroll-behavior: contain; min-height: 0; margin: 0; padding: 2px 4px 4px 2px; }
+.review-group-grid { position: relative; z-index: 2; list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr)); align-content: start; gap: clamp(6px, .7vw, 12px); overflow-y: auto; overscroll-behavior: contain; min-height: 0; margin: 0; padding: 2px 4px 4px 2px; }
 .review-group-grid:focus-visible { outline: 2px solid var(--gold); outline-offset: -2px; }
 .review-group-player { display: flex; align-items: center; gap: clamp(7px, .8vw, 14px); min-width: 0; padding: clamp(7px, .8vw, 14px); border: 1px solid #ffffff24; border-radius: 12px; background: #140c24ad; }
 .review-group-player .avatar { width: clamp(38px, 4vw, 64px); height: auto; }

@@ -1,7 +1,7 @@
 import { createServer } from 'node:http';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { networkInterfaces } from 'node:os';
-import { readFile } from 'node:fs/promises';
+import { readFile, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import express from 'express';
 import { Server } from 'socket.io';
@@ -19,6 +19,7 @@ interface SocketData {
 interface AppOptions {
   storage: QuizStorage;
   passcode: string;
+  quizMediaRoot?: string;
   production?: boolean;
   serveClient?: boolean;
   joinOrigin?: string;
@@ -46,7 +47,8 @@ export async function createApp(options: AppOptions) {
   const serverSettings = serverSettingsSchema.parse(options.serverSettings ?? {});
   const joinSchema = createJoinSchema(serverSettings.maxPlayerNameLength);
   const mediaDurations = await probeMediaDurations(quiz,
-    path.resolve(options.production ? 'dist/client/media' : 'src/public/media'));
+    options.quizMediaRoot ?? path.resolve(options.production ? 'dist/client/media' : 'src/public/media'),
+    options.quizMediaRoot ? '/media/quiz/' : '/media/');
   const engine = new GameEngine(quiz, undefined, serverSettings, mediaDurations);
   engine.settings = settingsSchema.parse({
     ...engine.settings,
@@ -55,6 +57,19 @@ export async function createApp(options: AppOptions) {
   });
   const app = express();
   app.disable('x-powered-by');
+  if (options.quizMediaRoot) {
+    const mediaRoot = await realpath(options.quizMediaRoot);
+    app.use('/media/quiz', async (req, res, next) => {
+      try {
+        const file = await realpath(path.resolve(mediaRoot, '.' + decodeURIComponent(req.path)));
+        const relative = path.relative(mediaRoot, file);
+        if (!relative || relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+          res.sendStatus(404); return;
+        }
+        next();
+      } catch { res.sendStatus(404); }
+    }, express.static(mediaRoot, { dotfiles: 'deny', fallthrough: false }));
+  }
   const httpServer = createServer(app);
   const io = new Server<ClientEvents, ServerEvents, Record<string, never>, SocketData>(httpServer, {
     maxHttpBufferSize: 16384,
@@ -251,7 +266,7 @@ export async function createApp(options: AppOptions) {
     const hosts = Object.values(networkInterfaces()).flatMap((entries) =>
       (entries ?? []).filter((entry) => entry.family === 'IPv4' && !entry.internal).map((entry) => entry.address));
     res.json({ joinUrls: joinOrigin ? [`${joinOrigin}/play`] : hosts.map((host) => `http://${host}:${port}/play`),
-      preferredJoinUrl: joinOrigin ? `${joinOrigin}/play` : undefined, source: 'src/data/questions.json',
+      preferredJoinUrl: joinOrigin ? `${joinOrigin}/play` : undefined, source: 'quiz archive',
       serverSettings, branding, development: !options.production });
   });
 

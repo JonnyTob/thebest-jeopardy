@@ -35,7 +35,7 @@ test('independent review sound configuration reaches API and all socket snapshot
       writeFileSync(file, JSON.stringify({ branding: {}, server: { port: 3000, ...server }, gameSetup: {
         leaderboardCount: 8, startPoints: 500, minimumPoints: 100, dropPoints: 100, dropEverySeconds: 5,
       } }));
-      const { server: { port: _port, joinOrigin: _joinOrigin, ...serverSettings } } = loadGlobalSettings(file, {});
+      const { server: { port: _port, joinOrigin: _joinOrigin, startupQuizId: _startupQuizId, ...serverSettings } } = loadGlobalSettings(file, {});
       const application = await createApp({ storage, passcode: 'test-host-passcode', serveClient: false, serverSettings });
       const sockets: Socket<ServerEvents, ClientEvents>[] = [];
       try {

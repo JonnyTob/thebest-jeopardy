@@ -139,13 +139,15 @@ test('buzzer result and automatic transitions broadcast to players and displays 
     const reconnect = await connect({ role: 'player', token: joined.data.token });
     assert.equal(reconnect.state.buzzResult?.id, wrong.buzzResult?.id);
     assert.equal(reconnect.state.buzzResult?.remainingMs, 1000);
-    assert.deepEqual(reconnect.state.lockedOutIds, []);
+    assert.deepEqual(reconnect.state.lockedOutIds, [joined.data.playerId]);
     const reopened = waitFor(display, (state) => state.phase === 'QUESTION_OPEN' && state.buzzResult === null);
     time = 7000;
     const resumed = await reopened;
     assert.equal(resumed.questionInstanceId, first.questionInstanceId);
     assert.equal(resumed.clueElapsedMs, 0);
     assert.equal(resumed.clockRunning, true);
+    assert.equal((await player.timeout(5000).emitWithAck('player:buzz')).ok, false);
+    time += 1000;
     assert.ok((await player.timeout(5000).emitWithAck('player:buzz')).ok);
     const correctBroadcast = waitFor(display, (state) => state.phase === 'BUZZ_RESULT');
     assert.ok((await send({ type: 'judge', correct: true })).ok);
@@ -155,13 +157,13 @@ test('buzzer result and automatic transitions broadcast to players and displays 
     assert.equal(correct.buzzResult?.correct, true);
     assert.doesNotMatch(JSON.stringify(correct), /SECRET/);
     const next = waitFor(player, (state) => state.phase === 'NEXT_ROUND');
-    time = 10000;
+    time = 11000;
     const transition = await next;
     assert.equal(transition.buzzResult, null);
     assert.equal(transition.nextRoundCountdownMs, 3000);
     assert.equal(transition.questionInstanceId, first.questionInstanceId);
     const second = waitFor(display, (state) => state.phase === 'QUESTION_OPEN' && state.questionIndex === 1);
-    time = 13000;
+    time = 14000;
     assert.equal((await second).clueElapsedMs, 0);
   } finally {
     for (const socket of sockets) socket.disconnect();
@@ -789,7 +791,7 @@ test('development serves all pages, modules and public media without exposing se
     assert.deepEqual(bytes, readFileSync(path.resolve('src/public', soundPath.slice(1))));
     assert.equal(bytes.toString('ascii', 0, 4), 'RIFF');
     assert.equal(bytes.toString('ascii', 8, 12), 'WAVE');
-    for (const file of ['src/data/questions.json', 'settings.json']) {
+    for (const file of ['src/server/index.ts', 'settings.json']) {
       const response = await fetch(`${base}/@fs${path.resolve(file)}`);
       assert.equal(response.status, 403);
       assert.doesNotMatch(await response.text(), /A rocket/);

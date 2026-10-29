@@ -4,25 +4,27 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { brandingSchema, serverSettingsSchema, settingsSchema, type Settings } from '../shared/protocol.js';
 
-const gameSetupOverridesSchema = z.object({
+export const gameSetupOverridesSchema = z.object({
   ...settingsSchema.shape,
   lockoutSeconds: settingsSchema.shape.lockoutSeconds.removeDefault(),
   maxAnswerLength: settingsSchema.shape.maxAnswerLength.removeDefault(),
 }).partial().strict();
 
+export const archiveGameSetupSchema = gameSetupOverridesSchema.omit({ title: true });
+
 const serverSchema = z.object({
   ...serverSettingsSchema.shape,
   port: z.number().int().min(1).max(65535),
   joinOrigin: z.string().optional(),
+  startupQuizId: z.number().int().positive().max(Number.MAX_SAFE_INTEGER).default(100001),
 }).strict();
+
+const { title: _title, ...gameSetupShape } = settingsSchema.shape;
 
 const globalSettingsSchema = z.object({
   branding: brandingSchema,
   server: serverSchema,
-  gameSetup: z.object({
-    ...settingsSchema.shape,
-    title: settingsSchema.shape.title.optional(),
-  }).strict(),
+  gameSetup: z.object(gameSetupShape).strict(),
 }).strict();
 
 export function loadGlobalSettings(file: string, env: NodeJS.ProcessEnv = process.env) {
@@ -33,6 +35,7 @@ export function loadGlobalSettings(file: string, env: NodeJS.ProcessEnv = proces
       ...settings.server,
       ...(env.PORT !== undefined ? { port: Number(env.PORT) } : {}),
       ...(env.JOIN_ORIGIN !== undefined ? { joinOrigin: env.JOIN_ORIGIN } : {}),
+      ...(env.QUIZ_ID !== undefined ? { startupQuizId: Number(env.QUIZ_ID) } : {}),
     });
     return { ...settings, server };
   } catch (cause) {

@@ -334,16 +334,16 @@ test('timed lockouts reject early buzzes, expire at the exact boundary and resta
   assert.equal(alice.score, -500);
   advance(2000);
   game.tick();
-  advance(7999);
+  advance(9999);
   assert.equal(game.snapshot().lockoutRemainingMs[alice.id], 1);
   assert.throws(() => game.buzz(alice.id), /locked out/);
   advance(1);
   assert.deepEqual(game.snapshot().lockedOutIds, []);
   assert.deepEqual(game.snapshot().lockoutRemainingMs, {});
   game.buzz(alice.id);
-  assert.equal(game.snapshot().pointsAtBuzz, 400);
+  assert.equal(game.snapshot().pointsAtBuzz, 300);
   command({ type: 'judge', correct: false });
-  assert.equal(alice.score, -900);
+  assert.equal(alice.score, -800);
   assert.deepEqual(game.snapshot().lockedOutIds, [alice.id]);
   assert.equal(game.snapshot().lockoutRemainingMs[alice.id], 10000);
 });
@@ -358,7 +358,7 @@ test('timed lockouts continue while paused, answering or disconnected, without r
   advance(2000);
   game.tick();
   command({ type: 'pause' });
-  advance(8000);
+  advance(10000);
   game.setConnected(alice.id, true);
   assert.deepEqual(game.snapshot().lockedOutIds, []);
   assert.throws(() => game.buzz(alice.id), /not open/);
@@ -368,7 +368,7 @@ test('timed lockouts continue while paused, answering or disconnected, without r
   advance(2000);
   game.tick();
   game.buzz(bob.id);
-  advance(8000);
+  advance(10000);
   assert.deepEqual(game.snapshot().lockedOutIds, []);
   assert.throws(() => game.buzz(alice.id), /not open/);
   command({ type: 'judge', correct: false });
@@ -423,9 +423,26 @@ test('undo restores timed eligibility and prior deadlines without resetting anot
   assert.equal(bob.score, 0);
   assert.equal(game.snapshot().activePlayerId, bob.id);
   assert.deepEqual(game.snapshot().lockedOutIds, [alice.id]);
-  assert.equal(game.snapshot().lockoutRemainingMs[alice.id], 5000);
+  assert.equal(game.snapshot().lockoutRemainingMs[alice.id], 7000);
   command({ type: 'undo' });
   assert.equal(alice.score, 0);
   assert.equal(game.snapshot().activePlayerId, alice.id);
   assert.deepEqual(game.snapshot().lockoutRemainingMs, {});
+});
+
+
+test('a two-second lockout starts after the wrong-answer result', () => {
+  const { game, alice, bob, command, advance } = setup();
+  command({ type: 'setup', settings: { ...game.settings, lockoutSeconds: 2 } });
+  command({ type: 'start' });
+  game.buzz(alice.id);
+  command({ type: 'judge', correct: false });
+  assert.equal(game.snapshot().lockoutRemainingMs[alice.id], 2000);
+  advance(2000);
+  game.tick();
+  assert.equal(game.snapshot().lockoutRemainingMs[alice.id], 2000);
+  assert.throws(() => game.buzz(alice.id), /locked out/);
+  game.buzz(bob.id);
+  advance(2000);
+  assert.equal(game.snapshot().lockoutRemainingMs[alice.id], undefined);
 });

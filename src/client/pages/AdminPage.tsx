@@ -270,11 +270,11 @@ function Setup({ state }: { state: Snapshot }) {
       <button className="primary" type="submit">Save setup</button></fieldset>
     {message && <p role="status">{message}</p>}
     <p className="muted">Wrong answers always lose the frozen point value. The minimum value is not a deadline.</p>
-    <p className="muted">Global defaults load from settings.json. Save setup writes this quiz's settings to settings/quizzes/{state.quizId}.json for future sessions. Server options are file-only.</p>
-    <p className="muted">Timed lockouts start at the wrong-answer ruling and keep counting down during pauses and other players' answers. Players can buzz again when the timer ends and buzzers are open.</p>
+    <p className="muted">Global defaults load from settings.json. Save setup writes this quiz's settings to its quiz.json file for future sessions. Server options are file-only.</p>
+    <p className="muted">Timed lockouts start after the wrong-answer result and keep counting down during pauses and other players' answers. Players can buzz again when the timer ends and buzzers are open.</p>
   </form><section className="panel setup-guide"><h2>Before you start</h2><ol><li>Connect the TV and choose <strong>Extend</strong>, not Duplicate.</li>
     <li>Open <a href="/display" target="_blank" rel="noreferrer">the TV display</a> there and press F11.</li><li>Keep this private console on the laptop.</li>
     <li>Join phones on the same Wi-Fi. Allow the server port through the firewall.</li><li>For audio/video clues, enable playback in the TV browser.</li></ol>
-    <h3>Question source</h3><code>src/data/questions.json</code><p>{state.questionCount} questions loaded. Edit this file and restart the server to load a different quiz. Restarting clears players and scores.</p>
+    <h3>Question source</h3><code>Quiz archive</code><p>{state.questionCount} questions loaded. Edit the quiz file and restart the server to reload it. Restarting clears players and scores.</p>
     <h3>Avatars & theme</h3><p>Six original, bundled SVG characters. Purple, gold, and magenta game-show theme.</p><JoinLink compact /></section></div>;
 }
