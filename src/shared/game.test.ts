@@ -28,21 +28,26 @@ test('game-start countdown gives each number and the launch message one second',
 });
 
 test('default points hit exact boundaries and stay at minimum indefinitely', () => {
-  const settings = { title: 'Test', leaderboardCount: 8, startPoints: 500, minimumPoints: 100, dropPoints: 100, dropEverySeconds: 5, questionTimerSeconds: 30, lockoutSeconds: 0, maxAnswerLength: 100 };
+  const settings = { title: 'Test', leaderboardCount: 8, startPoints: 500, minimumPoints: 100, dropPoints: 100, dropEverySeconds: 5, pointDecayDelaySeconds: 0, questionTimerSeconds: 30, lockoutSeconds: 0, maxAnswerLength: 100 };
   for (const [elapsed, expected] of [[0, 500], [4999, 500], [5000, 400], [10000, 300], [15000, 200], [20000, 100], [999999, 100]]) {
     assert.equal(pointsAt(elapsed, settings), expected);
   }
   assert.equal(valueWindowMs(settings), 20000);
 });
 
-test('point decay starts with the first interval and rejects the removed delay setting', () => {
+test('point decay waits for the configured delay before its first interval', () => {
   const settings = settingsSchema.parse({ title: 'Test', leaderboardCount: 8, startPoints: 500,
-    minimumPoints: 100, dropPoints: 100, dropEverySeconds: 5 });
-  for (const [elapsed, expected] of [[0, 500], [2999, 500], [4999, 500],
-    [5000, 400], [10000, 300], [20000, 100], [23000, 100]]) {
+    minimumPoints: 100, dropPoints: 100, dropEverySeconds: 5, pointDecayDelaySeconds: 3 });
+  for (const [elapsed, expected] of [[0, 500], [2999, 500], [3000, 500],
+    [7999, 500], [8000, 400], [13000, 300], [23000, 100]]) {
     assert.equal(pointsAt(elapsed, settings), expected);
   }
-  assert.equal('pointDecayDelaySeconds' in settingsSchema.parse({ ...settings, pointDecayDelaySeconds: 5 }), false);
+  const base = { title: 'Test', leaderboardCount: 8, startPoints: 500,
+    minimumPoints: 100, dropPoints: 100, dropEverySeconds: 5 };
+  assert.equal(settingsSchema.parse(base).pointDecayDelaySeconds, 5);
+  for (const delay of [-1, 301, 1.5, '5']) {
+    assert.equal(settingsSchema.safeParse({ ...base, pointDecayDelaySeconds: delay }).success, false);
+  }
 });
 
 test('tile order is a deterministic permutation, including seed zero', () => {

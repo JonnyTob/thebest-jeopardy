@@ -21,6 +21,7 @@
     "minimumPoints": 100,
     "dropPoints": 20,
     "dropEverySeconds": 1,
+    "pointDecayDelaySeconds": 5,
     "questionTimerSeconds": 30,
     "lockoutSeconds": 2,
     "maxAnswerLength": 20

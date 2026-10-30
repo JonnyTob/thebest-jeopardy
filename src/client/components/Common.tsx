@@ -86,14 +86,17 @@ export function countdownSeconds(remainingMs: number): string {
 
 export function PointBar({ state }: { state: Snapshot }) {
   const pointWindowMs = valueWindowMs(state.settings);
-  const pointElapsedMs = Math.min(state.clueElapsedMs, pointWindowMs);
+  const delayMs = state.settings.pointDecayDelaySeconds * 1000;
+  const pointElapsedMs = Math.min(Math.max(0, state.clueElapsedMs - delayMs), pointWindowMs);
   const pointRemaining = pointWindowMs === 0 ? 0 : Math.max(0, 1 - pointElapsedMs / pointWindowMs);
   const countdown = countdownSeconds(questionTimerMs(state) - state.clueElapsedMs);
   return <div className="point-bar">
     <div className="point-label"><span>POINT VALUE</span><strong>{state.currentPoints.toLocaleString()} <small>pts</small></strong></div>
     <div className="point-track" role="progressbar" aria-label="Point reduction progress" aria-valuenow={Math.round(pointRemaining * 100)}
       aria-valuemin={0} aria-valuemax={100}><div style={{ width: `${pointRemaining * 100}%` }} /></div>
-    <div className="point-meta"><span>{state.currentPoints === state.settings.minimumPoints ? 'Minimum value' : state.clockRunning ? 'Points decreasing' : 'Points frozen'}</span>
+    <div className="point-meta"><span>{state.currentPoints === state.settings.minimumPoints ? 'Minimum value'
+      : state.clockRunning && state.clueElapsedMs < delayMs ? `Points held: ${countdownSeconds(delayMs - state.clueElapsedMs)}s`
+        : state.clockRunning ? 'Points decreasing' : 'Points frozen'}</span>
       <span className="submission-countdown">{state.phase === 'QUESTION_OPEN' ? 'Buzzing closes in' : 'Buzzing closed'}: <strong>{countdown}s</strong></span></div>
   </div>;
 }

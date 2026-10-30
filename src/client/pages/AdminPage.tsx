@@ -276,6 +276,7 @@ function Setup({ state }: { state: Snapshot }) {
         ['minimumPoints', 'Minimum points', 1, 10000],
         ['dropPoints', 'Points dropped per step', 1, 10000],
         ['dropEverySeconds', 'Seconds between drops', 1, 120],
+        ['pointDecayDelaySeconds', 'Wait before points start dropping (seconds)', 0, 300],
         ['questionTimerSeconds', 'Default question countdown seconds', 1, 3600],
         ['lockoutSeconds', 'Wrong-answer lockout seconds (0 = entire question)', 0, 300],
         ['maxAnswerLength', 'Maximum typed answer characters', 1, 500],

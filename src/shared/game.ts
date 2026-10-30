@@ -11,8 +11,9 @@ export function startCountdownText(remainingMs: number): string {
 }
 
 export function pointsAt(elapsedMs: number, settings: Settings): number {
+  const decayElapsedMs = Math.max(0, elapsedMs - settings.pointDecayDelaySeconds * 1000);
   return Math.max(settings.minimumPoints,
-    settings.startPoints - Math.floor(elapsedMs / (settings.dropEverySeconds * 1000)) * settings.dropPoints);
+    settings.startPoints - Math.floor(decayElapsedMs / (settings.dropEverySeconds * 1000)) * settings.dropPoints);
 }
 
 export function valueWindowMs(settings: Settings): number {

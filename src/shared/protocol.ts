@@ -94,6 +94,7 @@ export const settingsSchema = z.object({
   minimumPoints: z.number().int().min(1).max(10000),
   dropPoints: z.number().int().min(1).max(10000),
   dropEverySeconds: z.number().min(1).max(120),
+  pointDecayDelaySeconds: z.number().int().min(0).max(300).default(5),
   questionTimerSeconds: z.number().int().min(1).max(3600).default(30),
   lockoutSeconds: z.number().int().min(0).max(300).default(0),
   maxAnswerLength: z.number().int().min(1).max(500).default(100),

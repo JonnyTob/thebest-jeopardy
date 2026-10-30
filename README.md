@@ -77,6 +77,7 @@ npm start
     "minimumPoints": 100,
     "dropPoints": 100,
     "dropEverySeconds": 5,
+    "pointDecayDelaySeconds": 5,
     "questionTimerSeconds": 30,
     "lockoutSeconds": 0,
     "maxAnswerLength": 100
@@ -136,8 +137,10 @@ npm start
   `maxAnswerLength` (1-500; default 100) limits typed answers for this quiz.
   `questionTimerSeconds` (1-3600; default 30) is the countdown for questions
   without their own `timerSeconds` override. It can also be changed in Game setup.
-  Buzzer points start dropping after the first `dropEverySeconds` interval;
-  typed questions keep their fixed points.
+  `pointDecayDelaySeconds` (0-300; default 5) holds the starting point value
+  before reductions begin. It applies to every buzzer question type; typed
+  questions keep their fixed points. The first reduction happens after this
+  delay plus one `dropEverySeconds` interval.
 - **quizzes/\<quiz-id\>/quiz.json**: per-quiz overrides, identified by the
   numeric quiz ID in the question file. The quiz file can contain a partial `gameSetup` section; omitted values use global defaults. You can create a
   partial override, for example `{"gameSetup":{"lockoutSeconds":10}}`.
@@ -239,7 +242,8 @@ sharing the QR code.
   The default, **0**, preserves one attempt per question. Setup is locked after
   starting; resetting or advancing a question clears all lockouts.
 - Configurable starting/minimum points and decay steps. Defaults are
-  **500 -> 400 -> 300 -> 200 -> 100**, with five-second reduction intervals.
+  **500 -> 400 -> 300 -> 200 -> 100**, with a five-second delay followed by
+  five-second reduction intervals.
   Minimum value and media ending do not close a question; its countdown does.
   Buzzer questions close at
   zero, while typed questions close submissions and begin review as appropriate.

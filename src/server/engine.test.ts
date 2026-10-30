@@ -16,6 +16,7 @@ const quiz: Quiz = {
 function setup() {
   let time = 0;
   const game = new GameEngine(quiz, () => time);
+  game.settings.pointDecayDelaySeconds = 0;
   const alice = game.join({ name: 'Alice', avatarId: 'fox' });
   const bob = game.join({ name: 'Bob', avatarId: 'cat' });
   const command = (action: HostAction) => {

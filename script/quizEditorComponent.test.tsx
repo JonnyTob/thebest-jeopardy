@@ -327,6 +327,7 @@ test('preview timeline matches typed deadlines, image reveal, media offsets and 
   const game = new GameEngine({ id: 42, title: 'Quiz', questions: [{
     id: 'one', type: 'text', mode: 'buzzer', question: 'Live', answer: 'LIVE SECRET',
   }] }, undefined, serverSettingsSchema.parse({ typedAnswerGraceSeconds: 2 }));
+  game.settings.pointDecayDelaySeconds = 0;
   const base = game.snapshot(true);
   const image = { id: 'c1283d6f-bdd5-4d28-99c1-f2b344406394', type: 'image' as const,
     mode: 'typed' as const, question: 'Draft', answer: 'Preview only', media: 'media/image.png',

@@ -90,6 +90,30 @@ test('typed submission deadline remains independent of point decay', () => {
   assert.equal(game.snapshot().clueElapsedMs, 5000);
 });
 
+test('point decay delay applies to every buzzer media type without shifting its close time', () => {
+  for (const type of ['text', 'image', 'audio', 'video'] as const) {
+    let time = 0;
+    const game = new GameEngine({ id: 7, title: 'Decay', questions: [{
+      id: type, type, mode: 'buzzer', question: 'Clue', answer: 'Answer', timerSeconds: 8,
+      ...(type === 'text' ? {} : { media: `/media/clue.${type}` }),
+    }] }, () => time);
+    game.settings.pointDecayDelaySeconds = 2;
+    game.settings.dropEverySeconds = 1;
+    game.join({ name: 'Alice', avatarId: 'fox' });
+    game.command({ id: randomUUID(), revision: game.revision, action: { type: 'start' } });
+    time += START_COUNTDOWN_MS;
+    game.tick();
+    time += 2999;
+    assert.equal(game.snapshot().currentPoints, 500, type);
+    time++;
+    assert.equal(game.snapshot().currentPoints, 400, type);
+    time += 5000;
+    game.tick();
+    assert.equal(game.snapshot().phase, 'QUESTION_CLOSED', type);
+    assert.equal(game.snapshot().clueElapsedMs, 8000, type);
+  }
+});
+
 test('a late deadline tick clamps elapsed time, rejects pre-tick late answers and closes only once', () => {
   const { game, player, advance } = setup({ offset: 3 });
   const instance = game.snapshot().questionInstanceId!;
@@ -453,6 +477,7 @@ test('undo cancels automatic transitions, restores final rulings and rearms a fr
 
 test('undo also cancels an automatic buzzer transition and restores the answering state', () => {
   const { game, player, command, advance } = setup({ mode: 'buzzer' });
+  game.settings.pointDecayDelaySeconds = 0;
   advance(6000);
   game.buzz(player!.id);
   command({ type: 'judge', correct: true });

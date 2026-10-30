@@ -13,6 +13,7 @@ const quiz: Quiz = { id: 1, title: 'Buzzer results', questions: [
 function setup(last = false, lockoutSeconds = 0) {
   let time = 0;
   const game = new GameEngine({ ...quiz, questions: last ? quiz.questions.slice(0, 1) : quiz.questions }, () => time);
+  game.settings.pointDecayDelaySeconds = 0;
   const alice = game.join({ name: 'Alice', avatarId: 'fox' });
   const bob = game.join({ name: 'Bob', avatarId: 'cat' });
   const command = (action: HostAction) => game.command({ id: randomUUID(), revision: game.revision, action });

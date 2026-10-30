@@ -9,6 +9,7 @@ const archiveMediaSchema = z.string().regex(/^media\/[a-zA-Z0-9_./-]+$/)
 export const gameSetupOverridesSchema = z.strictObject({
   ...settingsSchema.shape,
   questionTimerSeconds: settingsSchema.shape.questionTimerSeconds.removeDefault(),
+  pointDecayDelaySeconds: settingsSchema.shape.pointDecayDelaySeconds.removeDefault(),
   lockoutSeconds: settingsSchema.shape.lockoutSeconds.removeDefault(),
   maxAnswerLength: settingsSchema.shape.maxAnswerLength.removeDefault(),
 }).partial();

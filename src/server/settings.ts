@@ -19,6 +19,7 @@ const globalSettingsSchema = z.object({
   server: serverSchema,
   gameSetup: z.object({ ...gameSetupShape,
     questionTimerSeconds: settingsSchema.shape.questionTimerSeconds.removeDefault().optional(),
+    pointDecayDelaySeconds: settingsSchema.shape.pointDecayDelaySeconds.removeDefault().optional(),
   }).strict(),
 }).strict();
 
