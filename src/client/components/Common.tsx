@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 import { Link } from 'react-router-dom';
-import type { AvatarId, Snapshot } from '../../shared/protocol';
 import { valueWindowMs } from '../../shared/game';
+import type { AvatarId, Snapshot } from '../../shared/protocol';
 import { useSession } from '../session';
 import { branding } from '../branding';
 
@@ -69,20 +69,32 @@ export function nextRoundCountdownText(remainingMs: number | null): string {
   return remainingMs !== null && remainingMs > 0 ? String(Math.ceil(remainingMs / 1000)) : "LET'S GO!";
 }
 
-export function typedTimerMs(state: Snapshot): number {
-  return Math.max(0, (state.question?.timerSeconds ?? state.settings.questionTimerSeconds)
-    + (state.question?.mode === 'typed' ? state.serverSettings.typedAnswerGraceSeconds : 0)) * 1000;
+export function questionTimerMs(state: Snapshot): number {
+  return Math.max(0, state.question?.timerSeconds ?? state.settings.questionTimerSeconds) * 1000;
+}
+
+export function typedGraceRemainingMs(state: Snapshot): number {
+  if (state.question?.mode !== 'typed' || state.phase !== 'QUESTION_OPEN'
+    || state.clueElapsedMs < questionTimerMs(state)) return 0;
+  return Math.max(0, questionTimerMs(state) + state.serverSettings.typedAnswerGraceSeconds * 1000 - state.clueElapsedMs);
+}
+
+export function countdownSeconds(remainingMs: number): string {
+  const seconds = Math.max(0, remainingMs) / 1000;
+  return seconds <= 5 ? (Math.ceil(seconds * 10) / 10).toFixed(1) : String(Math.ceil(seconds));
 }
 
 export function PointBar({ state }: { state: Snapshot }) {
-  const windowMs = valueWindowMs(state.settings);
-  const remaining = windowMs === 0 ? 0 : Math.max(0, 1 - state.clueElapsedMs / windowMs);
+  const pointWindowMs = valueWindowMs(state.settings);
+  const pointElapsedMs = Math.min(state.clueElapsedMs, pointWindowMs);
+  const pointRemaining = pointWindowMs === 0 ? 0 : Math.max(0, 1 - pointElapsedMs / pointWindowMs);
+  const countdown = countdownSeconds(questionTimerMs(state) - state.clueElapsedMs);
   return <div className="point-bar">
-    <div className="point-label"><span>TIME / POINT VALUE</span><strong>{state.currentPoints.toLocaleString()} <small>pts</small></strong></div>
-    <div className="point-track" role="progressbar" aria-label="Remaining high-value window" aria-valuenow={Math.round(remaining * 100)}
-      aria-valuemin={0} aria-valuemax={100}><div style={{ width: `${remaining * 100}%` }} /></div>
-    <div className="point-meta"><span>{state.clockRunning ? 'Clock running' : 'Clock frozen'}{remaining === 0 ? ' / minimum value' : ''}</span>
-      <span>{(state.clueElapsedMs / 1000).toFixed(1)}s / {windowMs / 1000}s</span></div>
+    <div className="point-label"><span>POINT VALUE</span><strong>{state.currentPoints.toLocaleString()} <small>pts</small></strong></div>
+    <div className="point-track" role="progressbar" aria-label="Point reduction progress" aria-valuenow={Math.round(pointRemaining * 100)}
+      aria-valuemin={0} aria-valuemax={100}><div style={{ width: `${pointRemaining * 100}%` }} /></div>
+    <div className="point-meta"><span>{state.currentPoints === state.settings.minimumPoints ? 'Minimum value' : state.clockRunning ? 'Points decreasing' : 'Points frozen'}</span>
+      <span className="submission-countdown">{state.phase === 'QUESTION_OPEN' ? 'Buzzing closes in' : 'Buzzing closed'}: <strong>{countdown}s</strong></span></div>
   </div>;
 }
 

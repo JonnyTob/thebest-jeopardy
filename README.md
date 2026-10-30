@@ -114,7 +114,8 @@ npm start
   - `typedAnswerGraceSeconds`: extra answering time for typed questions, **0** by
     default (whole seconds, 0-300). Submissions automatically close at the question's
     `timerSeconds` plus this offset. For example, 30 + 2 closes after 32 seconds
-    of unpaused clue time. Only typed-answer countdowns include the offset. This is global-only,
+    of unpaused clue time. The visible countdown reaches zero at `timerSeconds`,
+    then submissions stay open during the grace period. This is global-only,
     not editable through Game setup or per-quiz overrides. Restart after changing it.
   - `countdownSound`: local WAV path for the TV countdown beep, default
     `/media/sounds/countdown-beep.wav`. Set to `null` to disable it, or use a
@@ -135,6 +136,8 @@ npm start
   `maxAnswerLength` (1-500; default 100) limits typed answers for this quiz.
   `questionTimerSeconds` (1-3600; default 30) is the countdown for questions
   without their own `timerSeconds` override. It can also be changed in Game setup.
+  Buzzer points start dropping after the first `dropEverySeconds` interval;
+  typed questions keep their fixed points.
 - **quizzes/\<quiz-id\>/quiz.json**: per-quiz overrides, identified by the
   numeric quiz ID in the question file. The quiz file can contain a partial `gameSetup` section; omitted values use global defaults. You can create a
   partial override, for example `{"gameSetup":{"lockoutSeconds":10}}`.
@@ -236,9 +239,14 @@ sharing the QR code.
   The default, **0**, preserves one attempt per question. Setup is locked after
   starting; resetting or advancing a question clears all lockouts.
 - Configurable starting/minimum points and decay steps. Defaults are
-  **500 -> 400 -> 300 -> 200 -> 100**, every five seconds. Minimum value and media
-  ending do not close a question; its countdown does. Buzzer questions close at
+  **500 -> 400 -> 300 -> 200 -> 100**, with five-second reduction intervals.
+  Minimum value and media ending do not close a question; its countdown does.
+  Buzzer questions close at
   zero, while typed questions close submissions and begin review as appropriate.
+  Buzzer clues show one bar for point reduction and a numeric countdown until
+  buzzing closes. Video continues to its clip end even if buzzing closes first.
+  Points may reach their minimum before the question closes, or remain above it
+  when time runs out.
 - Pause/resume, close/skip, reveal, next, question reset, media restart, manual
   positive/negative adjustments, and undo. Commands have idempotency IDs and stale
   revision checks.
@@ -268,8 +276,12 @@ sharing the QR code.
   The server automatically closes submissions at the question's `timerSeconds`
   (or `gameSetup.questionTimerSeconds` when omitted) plus the global
   `server.typedAnswerGraceSeconds`. Pausing pauses the timer and submissions.
-  TV, host and phone countdowns include this offset; the TV bar shrinks over that
-  full duration. It freezes when paused or closed; points remain fixed.
+  TV, host and phone countdowns reach zero at `timerSeconds`, then show the
+  remaining answer grace time until submissions close. The TV bar freezes when
+  paused or closed; points remain fixed.
+  On typed video clues, the video continues playing on the TV after submissions
+  close, up to its clip end or until the quiz advances. The submission clock
+  remains stopped.
   The host can see all submissions privately; other players see only the count.
   Use **Close submissions & start review** to close the clue and start TV review
   in one step. Alternatively, use **Close submissions**, then

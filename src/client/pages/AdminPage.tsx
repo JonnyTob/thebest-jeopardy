@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { rankPlayers, startCountdownText } from '../../shared/game';
 import { serverSettingsSchema, settingsSchema, type Player, type Settings, type Snapshot } from '../../shared/protocol';
 import { SessionProvider, useAnimatedState, useSession } from '../session';
-import { Avatar, Brand, Connection, JoinLink, PointBar, QuizName, SessionError, buzzerLabel, nextRoundCountdownText, typedTimerMs } from '../components/Common';
+import { Avatar, Brand, Connection, JoinLink, PointBar, QuizName, SessionError, buzzerLabel, countdownSeconds, nextRoundCountdownText, questionTimerMs, typedGraceRemainingMs } from '../components/Common';
 import { Media } from '../components/Media';
 import { QuizEditor } from '../components/QuizEditor';
 
@@ -118,7 +118,9 @@ export function AdminConsole({ logout, requirePasscode, development, passcode = 
               <section className="panel admin-question"><span className="eyebrow">CURRENT QUESTION / {state.question?.type.toUpperCase()} / {typed ? 'EVERYONE ANSWERS' : 'BUZZER'}</span>
                 <h2>{state.question?.question}</h2><div className="admin-media"><Media state={state} preview /></div>
                 <div className="private-answer"><span className="eyebrow">PRIVATE ANSWER / HOST ONLY</span><strong>{state.privateAnswer}</strong></div>
-                {typed ? <p>{state.question?.fixedPoints} fixed points / time remaining: {Math.max(0, Math.ceil((typedTimerMs(state) - state.clueElapsedMs) / 1000))}s</p> : <><PointBar state={state} /><p>Time remaining: {Math.max(0, Math.ceil((typedTimerMs(state) - state.clueElapsedMs) / 1000))}s</p></>}</section>
+                {typed ? <p>{state.question?.fixedPoints} fixed points / {typedGraceRemainingMs(state) > 0
+                  ? `answer grace: ${countdownSeconds(typedGraceRemainingMs(state))}s`
+                  : `time remaining: ${countdownSeconds(questionTimerMs(state) - state.clueElapsedMs)}s`}</p> : <PointBar state={state} />}</section>
               <section className="panel game-actions"><span className="eyebrow">GAME ACTIONS</span>
                 {finishing && <div className="notice" role="status"><strong>Finishing the clue / score frozen</strong>
                   <p>{!connected ? 'Connection lost. Waiting to reconnect...' : state.mediaFinishNeedsSkip

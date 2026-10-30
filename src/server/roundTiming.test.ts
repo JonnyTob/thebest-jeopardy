@@ -78,6 +78,18 @@ test('typed deadline includes the global offset and rejects at the boundary befo
   }
 });
 
+test('typed submission deadline remains independent of point decay', () => {
+  const { game, player, advance } = setup({ offset: 3 });
+  advance(4999);
+  game.tick();
+  assert.equal(game.snapshot().phase, 'QUESTION_OPEN');
+  game.submitAnswer(player!.id, game.snapshot().questionInstanceId!, 'Answer');
+  advance(1);
+  game.tick();
+  assert.equal(game.snapshot().phase, 'QUESTION_CLOSED');
+  assert.equal(game.snapshot().clueElapsedMs, 5000);
+});
+
 test('a late deadline tick clamps elapsed time, rejects pre-tick late answers and closes only once', () => {
   const { game, player, advance } = setup({ offset: 3 });
   const instance = game.snapshot().questionInstanceId!;

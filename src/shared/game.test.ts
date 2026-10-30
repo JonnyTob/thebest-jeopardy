@@ -35,6 +35,16 @@ test('default points hit exact boundaries and stay at minimum indefinitely', () 
   assert.equal(valueWindowMs(settings), 20000);
 });
 
+test('point decay starts with the first interval and rejects the removed delay setting', () => {
+  const settings = settingsSchema.parse({ title: 'Test', leaderboardCount: 8, startPoints: 500,
+    minimumPoints: 100, dropPoints: 100, dropEverySeconds: 5 });
+  for (const [elapsed, expected] of [[0, 500], [2999, 500], [4999, 500],
+    [5000, 400], [10000, 300], [20000, 100], [23000, 100]]) {
+    assert.equal(pointsAt(elapsed, settings), expected);
+  }
+  assert.equal('pointDecayDelaySeconds' in settingsSchema.parse({ ...settings, pointDecayDelaySeconds: 5 }), false);
+});
+
 test('tile order is a deterministic permutation, including seed zero', () => {
   for (const seed of [0, 814, 1234]) {
     const order = tileOrder(48, seed);

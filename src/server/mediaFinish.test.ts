@@ -9,6 +9,60 @@ const audio: Question = { id: 'one', type: 'audio', mode: 'buzzer', question: 'L
 const image: Question = { id: 'one', type: 'image', mode: 'buzzer', question: 'Look', answer: 'SECRET', media: '/media/a.png',
   reveal: { effect: 'tiles', durationSeconds: 10, columns: 8, rows: 6, seed: 1 } };
 
+test('typed video keeps playing after submissions close and stops at its clip end', () => {
+  for (const closeEarly of [false, true]) {
+    let time = 0;
+    const question: Question = { id: 'one', type: 'video', mode: 'typed', fixedPoints: 250,
+      timerSeconds: 5, question: 'Watch', answer: 'SECRET', media: '/media/video.mp4' };
+    const game = new GameEngine({ id: 1, title: 'Video', questions: [question] }, () => time,
+      undefined, { '/media/video.mp4': 8 });
+    game.join({ name: 'Alice', avatarId: 'fox' });
+    const send = (action: HostAction) => game.command({ id: randomUUID(), revision: game.revision, action });
+    send({ type: 'start' });
+    time += START_COUNTDOWN_MS;
+    game.tick();
+    time += closeEarly ? 3000 : 5200;
+    if (closeEarly) send({ type: 'close' });
+    else game.tick();
+    assert.equal(game.snapshot().phase, 'QUESTION_CLOSED');
+    assert.equal(game.snapshot().displayClockRunning, true);
+    assert.equal(game.snapshot().clueElapsedMs, closeEarly ? 3000 : 5000);
+    assert.equal(game.snapshot().mediaPositionSeconds, closeEarly ? 3 : 5.2);
+    time += closeEarly ? 5000 : 2800;
+    game.tick();
+    assert.equal(game.snapshot().phase, 'QUESTION_CLOSED');
+    assert.equal(game.snapshot().displayClockRunning, false);
+    assert.equal(game.snapshot().mediaPositionSeconds, 8);
+  }
+});
+
+test('buzzer video keeps playing after the independent buzzing deadline', () => {
+  for (const closeEarly of [false, true]) {
+    let time = 0;
+    const question: Question = { id: 'one', type: 'video', mode: 'buzzer',
+      timerSeconds: 5, question: 'Watch', answer: 'SECRET', media: '/media/video.mp4' };
+    const game = new GameEngine({ id: 1, title: 'Video', questions: [question] }, () => time,
+      undefined, { '/media/video.mp4': 8 });
+    const player = game.join({ name: 'Alice', avatarId: 'fox' });
+    const send = (action: HostAction) => game.command({ id: randomUUID(), revision: game.revision, action });
+    send({ type: 'start' });
+    time += START_COUNTDOWN_MS;
+    game.tick();
+    time += closeEarly ? 3000 : 5200;
+    if (closeEarly) send({ type: 'close' });
+    else game.tick();
+    assert.equal(game.snapshot().phase, 'QUESTION_CLOSED');
+    assert.equal(game.snapshot().clueElapsedMs, closeEarly ? 3000 : 5000);
+    assert.equal(game.snapshot().mediaPositionSeconds, closeEarly ? 3 : 5.2);
+    assert.equal(game.snapshot().displayClockRunning, true);
+    assert.throws(() => game.buzz(player.id), /not open/);
+    time += closeEarly ? 5000 : 2800;
+    game.tick();
+    assert.equal(game.snapshot().displayClockRunning, false);
+    assert.equal(game.snapshot().mediaPositionSeconds, 8);
+  }
+});
+
 function setup(question: Question, durations: Record<string, number> = {}, last = false) {
   let time = 0;
   const quiz: Quiz = { id: 1, title: 'Media', questions: [question, ...last ? [] : [

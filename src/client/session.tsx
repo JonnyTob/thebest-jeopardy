@@ -147,9 +147,10 @@ export function useAnimatedSnapshot(state: Snapshot | null, receivedAt: number, 
   if (!state) return null;
   const extra = connected ? Math.max(0, now - receivedAt) : 0;
   const clueExtra = state.clockRunning ? extra : 0;
-  const displayExtra = state.displayClockRunning
-    ? Math.min(extra, state.phase === 'MEDIA_FINISH' ? state.mediaFinishRemainingMs ?? Infinity : Infinity) : 0;
-  const finishRemaining = state.mediaFinishRemainingMs === null ? null : Math.max(0, state.mediaFinishRemainingMs - displayExtra);
+  const visualExtra = state.displayClockRunning && !state.clockRunning
+    ? Math.min(extra, state.mediaFinishRemainingMs ?? Infinity) : 0;
+  const displayExtra = clueExtra + visualExtra;
+  const finishRemaining = state.mediaFinishRemainingMs === null ? null : Math.max(0, state.mediaFinishRemainingMs - visualExtra);
   const elapsed = state.clueElapsedMs + clueExtra;
   return { ...state, clockRunning: state.clockRunning && connected,
     displayClockRunning: state.displayClockRunning && connected && (state.phase !== 'MEDIA_FINISH' || finishRemaining === null || finishRemaining > 0),

@@ -76,6 +76,28 @@ test('the React interpolation hook advances only the display clock and clamps kn
   await act(async () => { view.unmount(); });
 });
 
+test('running question advances its submission and video clocks once each', async (t) => {
+  let now = 1000;
+  t.mock.method(performance, 'now', () => now);
+  let result: Snapshot | null = null;
+  function Probe({ state }: { state: Snapshot }) {
+    result = useAnimatedSnapshot(state, 1000, true);
+    return null;
+  }
+  const open = { ...base, phase: 'QUESTION_OPEN' as const, clockRunning: true,
+    mediaFinishRemainingMs: null, pointsAtBuzz: null };
+  let view!: ReactTestRenderer;
+  await act(async () => { view = create(createElement(Probe, { state: open })); });
+  now = 2500;
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 70)); });
+  const animated = result as Snapshot | null;
+  assert.ok(animated);
+  assert.equal(animated.clueElapsedMs, 3500);
+  assert.equal(animated.displayElapsedMs, 3500);
+  assert.equal(animated.mediaPositionSeconds, 5.5);
+  await act(async () => { view.unmount(); });
+});
+
 test('video stays mounted through result and resumes, stops at finish, restarts and pauses on disconnect', async () => {
   const media = makeMedia();
   let view!: ReactTestRenderer;
@@ -101,6 +123,25 @@ test('video stays mounted through result and resumes, stops at finish, restarts 
   await act(async () => { view.update(createElement(QuestionClue, { state: { ...base, mediaVersion: 1, mediaPositionSeconds: 3, displayClockRunning: false } })); });
   assert.equal(media.paused, true);
   assert.equal(media.currentTime, 3);
+  await act(async () => { view.unmount(); });
+});
+
+test('typed video keeps playing when submissions close', async () => {
+  const media = makeMedia();
+  const question = { ...base.question!, mode: 'typed' as const, fixedPoints: 250, timerSeconds: 3 };
+  const open = { ...base, question, phase: 'QUESTION_OPEN' as const, clockRunning: true,
+    mediaFinishRemainingMs: null, mediaPositionSeconds: 4 };
+  let view!: ReactTestRenderer;
+  await act(async () => { view = create(createElement(Media, { state: open }), { createNodeMock: () => media }); });
+  await act(async () => { view.root.findByType('video').props.onLoadedMetadata(); });
+  assert.equal(media.paused, false);
+  const closed = { ...open, phase: 'QUESTION_CLOSED' as const, clockRunning: false,
+    displayClockRunning: true, mediaPositionSeconds: 5, mediaFinishRemainingMs: 2000 };
+  await act(async () => { view.update(createElement(Media, { state: closed })); });
+  assert.equal(media.paused, false);
+  await act(async () => { view.update(createElement(Media, { state: { ...closed,
+    displayClockRunning: false, mediaPositionSeconds: 7, mediaFinishRemainingMs: null } })); });
+  assert.equal(media.paused, true);
   await act(async () => { view.unmount(); });
 });
 

@@ -1,7 +1,7 @@
 import type { Player, ReviewGroup, Snapshot } from '../../shared/protocol';
 import { useRef, type CSSProperties } from 'react';
 import { REVIEW_GROUP_MS, REVIEW_RESULT_MS } from '../../shared/game';
-import { Avatar, PointBar, typedTimerMs } from './Common';
+import { Avatar, PointBar, countdownSeconds, questionTimerMs, typedGraceRemainingMs } from './Common';
 import { Media } from './Media';
 
 export function QuestionClue({ state }: { state: Snapshot }) {
@@ -10,10 +10,11 @@ export function QuestionClue({ state }: { state: Snapshot }) {
   const answeringPlayer = state.phase === 'ANSWERING' ? state.players.find((player) => player.id === state.activePlayerId) : undefined;
   const buzzResult = state.phase === 'BUZZ_RESULT' ? state.buzzResult : null;
   const buzzPlayer = state.players.find((player) => player.id === buzzResult?.playerId);
-  const timerMs = typedTimerMs(state);
+  const timerMs = questionTimerMs(state);
   const remainingMs = Math.max(0, timerMs - state.clueElapsedMs);
-  const remainingSeconds = Math.ceil(remainingMs / 1000);
+  const remainingSeconds = countdownSeconds(remainingMs);
   const remainingPercent = timerMs > 0 ? Math.min(100, remainingMs / timerMs * 100) : 0;
+  const graceRemainingMs = typedGraceRemainingMs(state);
 
   return <>
     <div className="clue-heading"><span className="eyebrow">THE QUESTION</span><h1>{state.question?.question}</h1></div>
@@ -51,9 +52,8 @@ export function QuestionClue({ state }: { state: Snapshot }) {
         <div style={{ width: `${remainingPercent}%` }} />
       </div>
       <div className="point-meta"><strong>{state.question?.fixedPoints} fixed points</strong>
-        <span>{state.clockRunning ? 'Clock running' : 'Clock frozen'}</span></div>
-    </div> : <><PointBar state={state} /><div className="clue-countdown" aria-label="Question time remaining">
-      Time remaining: {remainingSeconds}s</div></>}
+        <span>{graceRemainingMs > 0 ? `Answer grace: ${countdownSeconds(graceRemainingMs)}s` : state.clockRunning ? 'Clock running' : 'Clock frozen'}</span></div>
+    </div> : <PointBar state={state} />}
   </>;
 }
 

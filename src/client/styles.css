@@ -141,7 +141,7 @@ code { color: var(--gold); overflow-wrap: anywhere; }
 .point-track { height: 12px; background: #4e3069; border-radius: 100px; overflow: hidden; }
 .point-track > div { height: 100%; background: linear-gradient(90deg, #edbe58, #ffea8e); border-radius: inherit; transition: width .08s linear; }
 .point-meta { display: flex; justify-content: space-between; gap: 8px; font-size: .68rem; color: var(--muted); font-variant-numeric: tabular-nums; }
-.clue-countdown { color: var(--muted); font-size: .8rem; font-variant-numeric: tabular-nums; text-align: right; }
+.submission-countdown strong { color: var(--gold); font-size: 1.45rem; font-variant-numeric: tabular-nums; }
 .admin-bottom-grid { display: grid; grid-template-columns: minmax(0, 2.4fr) minmax(240px, 1fr); gap: 22px; align-items: start; }
 .table-heading { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; }
 .table-heading h2 { flex-shrink: 0; margin-right: auto; }

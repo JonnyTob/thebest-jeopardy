@@ -128,10 +128,19 @@ export class GameEngine {
       this.finishMedia();
       this.revision++;
     } else if (this.clue.phase === 'QUESTION_OPEN' && !this.clue.paused && this.elapsed() >= this.submissionDeadline()) {
+      const overshoot = this.elapsed() - this.submissionDeadline();
       this.close();
       this.clue.elapsedMs = this.submissionDeadline();
+      if (this.mediaFinishAt !== null) this.mediaFinishElapsedMs = overshoot;
       if (this.quiz.questions[this.clue.questionIndex]?.mode === 'typed'
         && this.clue.reviewQueue.every((entry) => entry.correct !== null)) this.beginReview();
+      this.revision++;
+    }
+    if (this.clue.phase !== 'MEDIA_FINISH' && this.mediaFinishAt !== null
+      && this.mediaFinishDurationMs !== null && this.now() - this.mediaFinishAt >= this.mediaFinishDurationMs) {
+      this.mediaFinishElapsedMs += this.mediaFinishDurationMs;
+      this.mediaFinishAt = null;
+      this.mediaFinishDurationMs = null;
       this.revision++;
     }
   }
@@ -144,6 +153,11 @@ export class GameEngine {
   }
 
   private beginNextRound() {
+    if (this.mediaFinishAt !== null) {
+      this.mediaFinishElapsedMs = this.visualFinishElapsed();
+      this.mediaFinishAt = null;
+      this.mediaFinishDurationMs = null;
+    }
     this.reviewGroup = null;
     this.freeze();
     this.clue.paused = false;
@@ -287,11 +301,20 @@ export class GameEngine {
   }
 
   private close() {
+    const closingOpenQuestion = this.clue.phase === 'QUESTION_OPEN';
     this.freeze();
     this.clue.phase = 'QUESTION_CLOSED';
     this.clue.paused = false;
     this.clue.activePlayerId = null;
     this.clue.pointsAtBuzz = null;
+    if (closingOpenQuestion && this.quiz.questions[this.clue.questionIndex]?.type === 'video') {
+      const remaining = this.remainingPlaybackMs();
+      if (remaining === null || remaining > 0) {
+        this.mediaFinishAt = this.now();
+        this.mediaFinishDurationMs = remaining;
+        this.mediaFinishElapsedMs = 0;
+      }
+    }
     if (this.quiz.questions[this.clue.questionIndex]?.mode === 'typed') {
       const submitted = new Set(this.clue.submissions.map((entry) => entry.playerId));
       this.clue.reviewQueue = [...structuredClone(this.clue.submissions),

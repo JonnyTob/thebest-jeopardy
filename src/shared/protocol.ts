@@ -184,7 +184,7 @@ export interface Snapshot {
   /** Visual clock includes post-ruling playback; the scoring clock remains frozen. */
   displayElapsedMs: number;
   displayClockRunning: boolean;
-  /** Null outside MEDIA_FINISH or when its duration is unknown. */
+  /** Null when no post-close playback is active or its duration is unknown. */
   mediaFinishRemainingMs: number | null;
   mediaFinishNeedsSkip: boolean;
   revealProgress: number;

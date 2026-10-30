@@ -31,8 +31,8 @@
       "type": "video",
       "question": "Navn på låt",
       "mode": "buzzer",
-      "timerSeconds": 20,
-      "media": "media/sabotage-fe02.mp4",
+      "timerSeconds": 10,
+      "media": "media/sabotageII-cb1d.mp4",
       "answer": "Sabotage"
     },
     {

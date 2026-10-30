@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { avatars, type AvatarId, type Snapshot } from '../../shared/protocol';
 import { rankPlayers } from '../../shared/game';
 import { useAnimatedState, useSession } from '../session';
-import { Avatar, Brand, Connection, QuizName, SessionError, nextRoundCountdownText, typedTimerMs } from '../components/Common';
+import { Avatar, Brand, Connection, QuizName, SessionError, countdownSeconds, nextRoundCountdownText, questionTimerMs, typedGraceRemainingMs } from '../components/Common';
 import { branding } from '../branding';
 
 export function PlayPage() {
@@ -92,7 +92,8 @@ function TypedAnswer({ state }: { state: Snapshot }) {
   const { connected, pending, submitAnswer, playerId } = useSession();
   const [answer, setAnswer] = useState('');
   const open = state.phase === 'QUESTION_OPEN' && !state.paused;
-  const remaining = Math.max(0, Math.ceil((typedTimerMs(state) - state.clueElapsedMs) / 1000));
+  const remaining = countdownSeconds(questionTimerMs(state) - state.clueElapsedMs);
+  const graceRemainingMs = typedGraceRemainingMs(state);
   function submit(event: FormEvent) {
     event.preventDefault();
     if (state.questionInstanceId) void submitAnswer(answer, state.questionInstanceId);
@@ -119,7 +120,8 @@ function TypedAnswer({ state }: { state: Snapshot }) {
   </section>;
   return <section className="panel typed-answer"><span className="eyebrow">EVERYONE ANSWERS / {state.question?.fixedPoints} POINTS</span>
     <h2>{state.mySubmitted ? 'Answer submitted' : open ? 'Your answer' : state.paused ? 'Host paused' : 'Submissions closed'}</h2>
-    {state.phase === 'QUESTION_OPEN' && <p>Time remaining: {remaining}s</p>}
+    {(state.phase === 'QUESTION_OPEN' || state.phase === 'QUESTION_CLOSED') && <p>{graceRemainingMs > 0
+      ? `Answer grace: ${countdownSeconds(graceRemainingMs)}s` : `Time remaining: ${remaining}s`}</p>}
     {state.mySubmitted ? <p>Your answer is locked in. Watch the TV for review.</p>
       : open ? <form onSubmit={submit}><label>Type your answer
         <input value={answer} maxLength={state.settings.maxAnswerLength} required
