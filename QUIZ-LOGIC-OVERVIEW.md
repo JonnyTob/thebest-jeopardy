@@ -75,9 +75,8 @@ flowchart TD
     A -->|Host judges wrong| B[Display wrong result: 2 s]
     B -->|Wrong| O
     A -->|Host judges correct| K[Display official answer and points: 3 s]
-    K -->|Media remains| M[Resume media or tile reveal<br/>Buzzing closed]
-    K -->|Media complete| D[Question resolved]
-    M -->|Media ends or host skips| D
+    K -->|After 3 s| M[Finish remaining media or tile reveal, if any<br/>Buzzing closed]
+    M --> D[Question resolved]
     O -->|Timer expires or host closes| C[BUZZING CLOSED<br/>Display official answer]
     C --> D
 ```
