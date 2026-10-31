@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
-import { BUZZ_RESULT_MS, NEXT_ROUND_MS, START_COUNTDOWN_MS } from '../shared/game.js';
+import { BUZZ_RESULT_MS, BUZZ_CORRECT_ANSWER_MS, NEXT_ROUND_MS, START_COUNTDOWN_MS } from '../shared/game.js';
 import type { HostAction, Quiz } from '../shared/protocol.js';
 import { GameEngine } from './engine.js';
 
@@ -24,7 +24,7 @@ function setup(last = false, lockoutSeconds = 0) {
   return { game, alice, bob, command, advance: (ms: number) => { time += ms; } };
 }
 
-test('correct result holds frozen public clue through the boundary, then starts a full countdown at the actual tick', () => {
+test('correct result reveals the answer for three seconds, then starts a full countdown at the actual tick', () => {
   const { game, alice, bob, command, advance } = setup();
   advance(6000);
   game.buzz(alice.id);
@@ -32,7 +32,7 @@ test('correct result holds frozen public clue through the boundary, then starts 
   command({ type: 'judge', correct: true });
   const held = game.snapshot();
   assert.equal(held.phase, 'BUZZ_RESULT');
-  assert.deepEqual(held.buzzResult, { id: held.buzzResult?.id, playerId: alice.id, correct: true, delta: 400, remainingMs: BUZZ_RESULT_MS });
+  assert.deepEqual(held.buzzResult, { id: held.buzzResult?.id, playerId: alice.id, correct: true, delta: 400, remainingMs: BUZZ_CORRECT_ANSWER_MS });
   assert.ok(held.buzzResult?.id);
   assert.equal(alice.score, 400);
   assert.equal(held.reviewResultId, null);
@@ -42,12 +42,12 @@ test('correct result holds frozen public clue through the boundary, then starts 
   assert.equal(held.revealProgress, before.revealProgress);
   assert.equal(held.mediaPositionSeconds, before.mediaPositionSeconds);
   assert.equal(held.questionInstanceId, before.questionInstanceId);
-  assert.equal(held.revealedAnswer, null);
+  assert.equal(held.revealedAnswer, 'SECRET');
   assert.deepEqual(game.snapshot(true).buzzResult, held.buzzResult);
   assert.deepEqual(game.snapshot(false, bob.id).buzzResult, held.buzzResult);
-  assert.doesNotMatch(JSON.stringify(held), /SECRET/);
+  assert.doesNotMatch(JSON.stringify(held.question), /SECRET/);
   const revision = game.revision;
-  advance(BUZZ_RESULT_MS - 1);
+  advance(BUZZ_CORRECT_ANSWER_MS - 1);
   game.tick();
   assert.equal(game.revision, revision);
   assert.equal(game.snapshot().buzzResult?.remainingMs, 1);
@@ -168,7 +168,7 @@ test('undo before and after the automatic transition restores answering and canc
     const instance = game.snapshot().questionInstanceId;
     command({ type: 'judge', correct });
     const oldId = game.snapshot().buzzResult!.id;
-    if (after) { advance(BUZZ_RESULT_MS); game.tick(); }
+    if (after) { advance(correct ? BUZZ_CORRECT_ANSWER_MS : BUZZ_RESULT_MS); game.tick(); }
     command({ type: 'undo' });
     assert.equal(game.snapshot().phase, 'ANSWERING');
     assert.equal(game.snapshot().activePlayerId, alice.id);
@@ -184,7 +184,7 @@ test('undo before and after the automatic transition restores answering and canc
     assert.equal(game.snapshot().phase, 'ANSWERING');
     command({ type: 'judge', correct: true });
     assert.notEqual(game.snapshot().buzzResult!.id, oldId);
-    advance(BUZZ_RESULT_MS);
+    advance(BUZZ_CORRECT_ANSWER_MS);
     game.tick();
     assert.equal(game.snapshot().phase, last ? 'GAME_FINISHED' : 'NEXT_ROUND');
     assert.equal(game.snapshot().nextRoundCountdownMs, last ? null : NEXT_ROUND_MS);

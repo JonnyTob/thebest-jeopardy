@@ -73,15 +73,8 @@ export function questionTimerMs(state: Snapshot): number {
   return Math.max(0, state.question?.timerSeconds ?? state.settings.questionTimerSeconds) * 1000;
 }
 
-export function typedGraceRemainingMs(state: Snapshot): number {
-  if (state.question?.mode !== 'typed' || state.phase !== 'QUESTION_OPEN'
-    || state.clueElapsedMs < questionTimerMs(state)) return 0;
-  return Math.max(0, questionTimerMs(state) + state.serverSettings.typedAnswerGraceSeconds * 1000 - state.clueElapsedMs);
-}
-
 export function countdownSeconds(remainingMs: number): string {
-  const seconds = Math.max(0, remainingMs) / 1000;
-  return seconds <= 5 ? (Math.ceil(seconds * 10) / 10).toFixed(1) : String(Math.ceil(seconds));
+  return String(Math.ceil(Math.max(0, remainingMs) / 1000));
 }
 
 export function PointBar({ state }: { state: Snapshot }) {

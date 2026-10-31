@@ -168,7 +168,8 @@ test('wrong uses frozen penalty, locks player out and resumes; correct closes at
   command({ type: 'judge', correct: true });
   assert.equal(bob.score, 200);
   assert.equal(game.snapshot().phase, 'BUZZ_RESULT');
-  advance(2000);
+  assert.equal(game.snapshot().revealedAnswer, 'SECRET FIRST');
+  advance(3000);
   game.tick();
   assert.equal(game.snapshot().phase, 'NEXT_ROUND');
 });

@@ -36,6 +36,10 @@ test('TV review overlays the current player without replacing text or media clue
     game.submitAnswer(bob.id, instance, 'Bob guess');
     let html = renderToStaticMarkup(createElement(QuestionClue, { state: game.snapshot() }));
     assert.doesNotMatch(html, /Current answer review|Alice guess|Bob guess|SECRET CORRECT ANSWER/);
+    send({ type: 'close' });
+    html = renderToStaticMarkup(createElement(QuestionClue, { state: game.snapshot() }));
+    assert.match(html, /SECRET CORRECT ANSWER/);
+    assert.doesNotMatch(html, /Alice guess|Bob guess|Current answer review/);
     send({ type: 'startReview' });
     html = renderToStaticMarkup(createElement(QuestionClue, { state: game.snapshot() }));
     assert.match(html, /Visible question/);
@@ -93,13 +97,15 @@ test('TV review overlays the current player without replacing text or media clue
     assert.match(html, /Alice/);
     assert.match(html, correct ? /Correct \+500/ : /Wrong -500/);
     assert.match(html, correct ? /review-result-correct/ : /review-result-wrong/);
-    assert.doesNotMatch(html, /SECRET|Future clue/);
+    if (correct) assert.match(html, /Answer: SECRET BUZZER ANSWER/);
+    else assert.doesNotMatch(html, /SECRET/);
+    assert.doesNotMatch(html, /Future clue/);
     send({ type: 'undo' });
     html = renderToStaticMarkup(createElement(QuestionClue, { state: game.snapshot() }));
     assert.doesNotMatch(html, /Buzzer answer result|review-result-animation/);
     assert.match(html, /Player answering/);
     send({ type: 'judge', correct });
-    time += 2000;
+    time += correct ? 3000 : 2000;
     game.tick();
     html = renderToStaticMarkup(createElement(QuestionClue, { state: game.snapshot() }));
     assert.doesNotMatch(html, /Buzzer answer result|review-result-animation|Player answering/);

@@ -31,9 +31,9 @@ function setup() {
 
 test('groups reveal only current judged players, then unjudged individuals, without rescoring', () => {
   const { game, players: [alice, bob, carol, dave, eve], send, advance } = setup();
+  send({ type: 'close' });
   send({ type: 'judgeSubmission', playerId: alice.id, correct: true });
   send({ type: 'judgeSubmission', playerId: bob.id, correct: false });
-  send({ type: 'close' });
   send({ type: 'judgeSubmission', playerId: eve.id, correct: false });
   game.setConnected(bob.id, false);
   const start = send({ type: 'startReview' });
@@ -125,6 +125,7 @@ test('undo during either group restores the preceding score snapshot and cancels
 test('reset and restart discard group timers without undoing already awarded points on reset', () => {
   for (const action of ['reset', 'restartQuiz'] as const) {
     const { game, players: [alice], send, advance } = setup();
+    send({ type: 'close' });
     send({ type: 'judgeSubmission', playerId: alice.id, correct: true });
     send({ type: 'startReview' });
     send({ type: action });

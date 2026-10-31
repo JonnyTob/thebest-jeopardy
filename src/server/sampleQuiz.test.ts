@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import type { HostAction } from '../shared/protocol.js';
 import { GameEngine } from './engine.js';
 import { ArchiveQuizStorage } from './storage.js';
-import { START_COUNTDOWN_MS, NEXT_ROUND_MS, REVIEW_RESULT_MS } from '../shared/game.js';
+import { START_COUNTDOWN_MS, NEXT_ROUND_MS, REVIEW_RESULT_MS, BUZZ_CORRECT_ANSWER_MS } from '../shared/game.js';
 import { probeMediaDurations } from './mediaDurations.js';
 
 const storage = new ArchiveQuizStorage(path.resolve('quizzes'), 100001);
@@ -80,7 +80,8 @@ test('sample quiz plays through mixed buzzer and typed questions to completion',
       game.buzz(player.id);
       expectedScore += game.snapshot().pointsAtBuzz!;
       command({ type: 'judge', correct: true });
-      time += 2000;
+      assert.equal(game.snapshot().revealedAnswer, question.answer);
+      time += BUZZ_CORRECT_ANSWER_MS;
       game.tick();
       if (game.snapshot().phase === 'MEDIA_FINISH') {
         const remaining = game.snapshot().mediaFinishRemainingMs;

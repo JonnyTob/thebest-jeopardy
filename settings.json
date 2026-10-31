@@ -10,7 +10,6 @@
     "maxPlayerNameLength": 10,
     "requireAdminPasscode": false,
     "maxPlayers": 12,
-    "typedAnswerGraceSeconds": 3,
     "countdownSound": "/media/sounds/countdown-beep.wav",
     "reviewCorrectSound": "/media/sounds/countdown-beep.wav",
     "reviewWrongSound": "/media/sounds/countdown-beep.wav"

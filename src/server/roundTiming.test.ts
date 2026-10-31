@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
-import { NEXT_ROUND_MS, START_COUNTDOWN_MS, REVIEW_RESULT_MS, REVIEW_GROUP_MS } from '../shared/game.js';
-import { quizSchema, serverSettingsSchema, type HostAction } from '../shared/protocol.js';
+import { NEXT_ROUND_MS, START_COUNTDOWN_MS, REVIEW_RESULT_MS, REVIEW_GROUP_MS, BUZZ_CORRECT_ANSWER_MS } from '../shared/game.js';
+import { quizSchema, type HostAction } from '../shared/protocol.js';
 import { GameEngine } from './engine.js';
 
 const quiz = quizSchema.parse({
@@ -15,7 +15,7 @@ const quiz = quizSchema.parse({
   ],
 });
 
-function setup({ offset = 0, last = false, empty = false, mode = 'typed' as 'typed' | 'buzzer' } = {}) {
+function setup({ last = false, empty = false, mode = 'typed' as 'typed' | 'buzzer' } = {}) {
   let time = 0;
   const questions = (last ? quiz.questions.slice(0, 1) : quiz.questions)
     .map((question, index) => {
@@ -24,8 +24,7 @@ function setup({ offset = 0, last = false, empty = false, mode = 'typed' as 'typ
       const { fixedPoints: _points, timerSeconds: _timer, ...buzzer } = question;
       return { ...buzzer, mode };
     });
-  const game = new GameEngine({ ...quiz, questions }, () => time,
-    serverSettingsSchema.parse({ typedAnswerGraceSeconds: offset }));
+  const game = new GameEngine({ ...quiz, questions }, () => time);
   const player = empty ? undefined : game.join({ name: 'Alice', avatarId: 'fox' });
   const command = (action: HostAction) => {
     const request = { id: randomUUID(), revision: game.revision, action };
@@ -40,54 +39,50 @@ function setup({ offset = 0, last = false, empty = false, mode = 'typed' as 'typ
   return { game, player, command, advance: (ms: number) => { time += ms; } };
 }
 
-test('typed deadline includes the global offset and rejects at the boundary before a tick', async (t) => {
-  for (const offset of [0, 1, 300]) {
-    await t.test(`offset=${offset}`, () => {
-      const { game, player, command, advance } = setup({ offset });
-      const late = game.join({ name: 'Bob', avatarId: 'cat' });
-      const instance = game.snapshot().questionInstanceId!;
-      const deadline = (2 + offset) * 1000;
-      advance(deadline - 1);
-      game.tick();
-      assert.equal(game.snapshot().phase, 'QUESTION_OPEN');
-      assert.equal(game.snapshot().currentPoints, 250);
-      game.submitAnswer(player!.id, instance, 'On time');
-      const revision = game.revision;
-      advance(1);
-      assert.throws(() => game.submitAnswer(late.id, instance, 'At deadline'), /timer has ended/);
-      assert.equal(game.snapshot().phase, 'QUESTION_OPEN', 'submission rejection must not depend on tick');
-      assert.equal(game.snapshot().submissionCount, 1);
-      assert.equal(game.revision, revision);
-      game.tick();
-      assert.equal(game.revision, revision + 1);
-      assert.equal(game.snapshot().phase, 'QUESTION_CLOSED');
-      assert.equal(game.snapshot().clueElapsedMs, deadline);
-      assert.equal(game.snapshot().clockRunning, false);
-      assert.equal(game.snapshot().nextRoundCountdownMs, null);
-      assert.deepEqual(game.snapshot(true).hostSubmissions, [
-        { playerId: player!.id, answer: 'On time', correct: null },
-        { playerId: late.id, answer: null, correct: null },
-      ]);
-      advance(10000);
-      game.tick();
-      assert.equal(game.revision, revision + 1);
-      assert.equal(game.snapshot().clueElapsedMs, deadline);
-      command({ type: 'startReview' });
-      assert.equal(game.snapshot().review?.answer, 'On time');
-    });
-  }
+test('typed deadline equals timerSeconds and rejects at the boundary before a tick', () => {
+  const { game, player, command, advance } = setup();
+  const late = game.join({ name: 'Bob', avatarId: 'cat' });
+  const instance = game.snapshot().questionInstanceId!;
+  const deadline = 2000;
+  advance(deadline - 1);
+  game.tick();
+  assert.equal(game.snapshot().phase, 'QUESTION_OPEN');
+  assert.equal(game.snapshot().currentPoints, 250);
+  game.submitAnswer(player!.id, instance, 'On time');
+  const revision = game.revision;
+  advance(1);
+  assert.throws(() => game.submitAnswer(late.id, instance, 'At deadline'), /timer has ended/);
+  assert.equal(game.snapshot().phase, 'QUESTION_OPEN', 'submission rejection must not depend on tick');
+  assert.equal(game.snapshot().submissionCount, 1);
+  assert.equal(game.revision, revision);
+  game.tick();
+  assert.equal(game.revision, revision + 1);
+  assert.equal(game.snapshot().phase, 'QUESTION_CLOSED');
+  assert.equal(game.snapshot().clueElapsedMs, deadline);
+  assert.equal(game.snapshot().clockRunning, false);
+  assert.equal(game.snapshot().nextRoundCountdownMs, null);
+  assert.deepEqual(game.snapshot(true).hostSubmissions, [
+    { playerId: player!.id, answer: 'On time', correct: null },
+    { playerId: late.id, answer: null, correct: null },
+  ]);
+  advance(10000);
+  game.tick();
+  assert.equal(game.revision, revision + 1);
+  assert.equal(game.snapshot().clueElapsedMs, deadline);
+  command({ type: 'startReview' });
+  assert.equal(game.snapshot().review?.answer, 'On time');
 });
 
 test('typed submission deadline remains independent of point decay', () => {
-  const { game, player, advance } = setup({ offset: 3 });
-  advance(4999);
+  const { game, player, advance } = setup();
+  advance(1999);
   game.tick();
   assert.equal(game.snapshot().phase, 'QUESTION_OPEN');
   game.submitAnswer(player!.id, game.snapshot().questionInstanceId!, 'Answer');
   advance(1);
   game.tick();
   assert.equal(game.snapshot().phase, 'QUESTION_CLOSED');
-  assert.equal(game.snapshot().clueElapsedMs, 5000);
+  assert.equal(game.snapshot().clueElapsedMs, 2000);
 });
 
 test('point decay delay applies to every buzzer media type without shifting its close time', () => {
@@ -115,7 +110,7 @@ test('point decay delay applies to every buzzer media type without shifting its 
 });
 
 test('a late deadline tick clamps elapsed time, rejects pre-tick late answers and closes only once', () => {
-  const { game, player, advance } = setup({ offset: 3 });
+  const { game, player, advance } = setup();
   const instance = game.snapshot().questionInstanceId!;
   advance(12000);
   const revision = game.revision;
@@ -124,14 +119,14 @@ test('a late deadline tick clamps elapsed time, rejects pre-tick late answers an
   assert.equal(game.snapshot().submissionCount, 0);
   game.tick();
   assert.equal(game.snapshot().phase, 'QUESTION_CLOSED');
-  assert.equal(game.snapshot().clueElapsedMs, 5000);
+  assert.equal(game.snapshot().clueElapsedMs, 2000);
   assert.deepEqual(game.snapshot(true).hostSubmissions, [{ playerId: player!.id, answer: null, correct: null }]);
   game.tick();
   assert.equal(game.revision, revision + 1);
 });
 
 test('typed deadline uses active clue time across pauses and ignores media restarts', () => {
-  const { game, player, command, advance } = setup({ offset: 1 });
+  const { game, player, command, advance } = setup();
   const instance = game.snapshot().questionInstanceId!;
   advance(1500);
   command({ type: 'pause' });
@@ -145,25 +140,25 @@ test('typed deadline uses active clue time across pauses and ignores media resta
   command({ type: 'restartMedia' });
   assert.equal(game.snapshot().mediaPositionSeconds, 0);
   command({ type: 'resume' });
-  advance(1499);
+  advance(499);
   game.tick();
-  assert.equal(game.snapshot().clueElapsedMs, 2999);
+  assert.equal(game.snapshot().clueElapsedMs, 1999);
   game.submitAnswer(player!.id, instance, 'Still on time');
   command({ type: 'pause' });
   advance(10000);
   game.tick();
-  assert.equal(game.snapshot().clueElapsedMs, 2999);
+  assert.equal(game.snapshot().clueElapsedMs, 1999);
   command({ type: 'resume' });
   advance(1);
   game.tick();
   assert.equal(game.snapshot().phase, 'QUESTION_CLOSED');
-  assert.equal(game.snapshot().clueElapsedMs, 3000);
+  assert.equal(game.snapshot().clueElapsedMs, 2000);
   assert.equal(game.snapshot().paused, false);
   assert.equal(game.snapshot().clockRunning, false);
 });
 
-test('buzzer questions close at their countdown, without the typed-answer offset', () => {
-  const { game, player, advance } = setup({ mode: 'buzzer', offset: 300 });
+test('buzzer questions close at their countdown', () => {
+  const { game, player, advance } = setup({ mode: 'buzzer' });
   advance(29999);
   const revision = game.revision;
   game.tick();
@@ -203,20 +198,23 @@ test('every clue type uses its question countdown override or the global default
 const completionPaths = ['review', 'closed', 'open-close', 'open-tick', 'open-review',
   'empty-close', 'empty-tick', 'empty-review'] as const;
 
-test('a late auto-close starts a full transition at the tick, not at the expired submission deadline', () => {
-  const { game, player, command, advance } = setup({ offset: 1 });
+test('a late auto-close waits for review and starts a full transition when the host begins it', () => {
+  const { game, player, command, advance } = setup();
   game.submitAnswer(player!.id, game.snapshot().questionInstanceId!, 'Answer');
-  command({ type: 'judgeSubmission', playerId: player!.id, correct: true });
   advance(20000);
   game.tick();
+  assert.equal(game.snapshot().phase, 'QUESTION_CLOSED');
+  assert.equal(game.snapshot().revealedAnswer, 'CURRENT SECRET');
+  command({ type: 'judgeSubmission', playerId: player!.id, correct: true });
+  command({ type: 'startReview' });
   assert.equal(game.snapshot().phase, 'REVIEW_GROUP');
   assert.equal(game.snapshot().reviewGroup?.remainingMs, REVIEW_GROUP_MS);
-  assert.equal(game.snapshot().clueElapsedMs, 3000);
+  assert.equal(game.snapshot().clueElapsedMs, 2000);
   advance(REVIEW_GROUP_MS);
   game.tick();
   assert.equal(game.snapshot().phase, 'NEXT_ROUND');
   assert.equal(game.snapshot().questionIndex, 0);
-  assert.equal(game.snapshot().clueElapsedMs, 3000);
+  assert.equal(game.snapshot().clueElapsedMs, 2000);
   assert.equal(game.snapshot().nextRoundCountdownMs, 3000);
   const revision = game.revision;
   game.tick();
@@ -234,6 +232,8 @@ test('a late auto-close starts a full transition at the tick, not at the expired
 test('an empty queue transition cannot be cancelled by undo without a score history', () => {
   const { game, command, advance } = setup({ empty: true });
   command({ type: 'close' });
+  assert.equal(game.snapshot().phase, 'QUESTION_CLOSED');
+  command({ type: 'startReview' });
   const before = game.snapshot(true);
   assert.equal(before.phase, 'NEXT_ROUND');
   assert.equal(before.canUndo, false);
@@ -253,6 +253,7 @@ test('typed completion automatically transitions or finishes the last question o
         const instance = game.snapshot().questionInstanceId;
         if (player) game.submitAnswer(player.id, instance!, 'PRIVATE SUBMISSION');
         if (path === 'review') {
+          command({ type: 'close' });
           command({ type: 'startReview' });
           command({ type: 'judgeReview', correct: true });
           advance(REVIEW_RESULT_MS);
@@ -262,8 +263,7 @@ test('typed completion automatically transitions or finishes the last question o
           command({ type: 'judgeSubmission', playerId: player!.id, correct: true });
         } else {
           if (player) {
-            command({ type: 'judgeSubmission', playerId: player.id, correct: true });
-            assert.equal(game.snapshot().phase, 'QUESTION_OPEN', 'last live ruling must wait for close');
+            assert.equal(game.snapshot().phase, 'QUESTION_OPEN');
             assert.equal(game.snapshot().nextRoundCountdownMs, null);
             advance(1999);
             game.tick();
@@ -272,7 +272,12 @@ test('typed completion automatically transitions or finishes the last question o
           if (path.endsWith('tick')) {
             advance(player ? 1 : 2000);
             game.tick();
-          } else command({ type: path.endsWith('review') ? 'startReview' : 'close' });
+          } else command({ type: 'close' });
+          if (player) command({ type: 'judgeSubmission', playerId: player.id, correct: true });
+        }
+        if (game.snapshot().phase === 'QUESTION_CLOSED') {
+          assert.equal(game.snapshot().revealedAnswer, 'CURRENT SECRET');
+          command({ type: 'startReview' });
         }
         if (game.snapshot().phase === 'REVIEW_GROUP') {
           advance(REVIEW_GROUP_MS);
@@ -322,10 +327,11 @@ test('next round retains the old clue through 2999ms, opens only on tick and sta
           trigger = command({ type: 'judge', correct: true });
         } else {
           game.submitAnswer(player!.id, first.questionInstanceId!, 'PRIVATE SUBMISSION');
+          command({ type: 'close' });
           command({ type: 'startReview' });
           trigger = command({ type: 'judgeReview', correct: true });
         }
-        advance(REVIEW_RESULT_MS);
+        advance(manual ? BUZZ_CORRECT_ANSWER_MS : REVIEW_RESULT_MS);
         game.tick();
         const revision = game.revision;
         assert.equal(game.snapshot().phase, 'NEXT_ROUND');
@@ -390,6 +396,7 @@ test('next round retains the old clue through 2999ms, opens only on tick and sta
 test('NEXT_ROUND rejects every host action except undo and rejects player play without mutating state', () => {
   const { game, player, command, advance } = setup();
   game.submitAnswer(player!.id, game.snapshot().questionInstanceId!, 'Answer');
+  command({ type: 'close' });
   command({ type: 'startReview' });
   command({ type: 'judgeReview', correct: true });
   advance(REVIEW_RESULT_MS);
@@ -424,13 +431,13 @@ test('undo cancels automatic transitions, restores final rulings and rearms a fr
           const { game, player, command, advance } = setup({ last });
           const instance = game.snapshot().questionInstanceId!;
           game.submitAnswer(player!.id, instance, 'Private ruling');
-          if (path === 'review') command({ type: 'startReview' });
+          if (path === 'review') { command({ type: 'close' }); command({ type: 'startReview' }); }
           else if (path === 'closed') command({ type: 'close' });
+          else if (path === 'open-close' || path === 'open-review') command({ type: 'close' });
+          else if (path === 'open-tick') { advance(2000); game.tick(); }
           const ruling = command(path === 'review' ? { type: 'judgeReview', correct }
             : { type: 'judgeSubmission', playerId: player!.id, correct });
-          if (path === 'open-close') command({ type: 'close' });
-          else if (path === 'open-review') command({ type: 'startReview' });
-          else if (path === 'open-tick') { advance(2000); game.tick(); }
+          if (game.snapshot().phase === 'QUESTION_CLOSED') command({ type: 'startReview' });
           if (path === 'review') { advance(REVIEW_RESULT_MS); game.tick(); }
           else { advance(REVIEW_GROUP_MS); game.tick(); }
           assert.equal(game.snapshot().phase, last ? 'GAME_FINISHED' : 'NEXT_ROUND');
@@ -440,7 +447,7 @@ test('undo cancels automatic transitions, restores final rulings and rearms a fr
           advance(1000);
           const undo = command({ type: 'undo' });
           const restored = game.snapshot(true);
-          assert.equal(restored.phase, path === 'review' ? 'REVIEW' : path === 'closed' ? 'QUESTION_CLOSED' : 'QUESTION_OPEN');
+          assert.equal(restored.phase, path === 'review' ? 'REVIEW' : 'QUESTION_CLOSED');
           assert.equal(restored.nextRoundCountdownMs, null);
           assert.equal(restored.countdownId, null);
           assert.equal(restored.questionInstanceId, instance);

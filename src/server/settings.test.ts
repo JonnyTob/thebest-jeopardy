@@ -131,26 +131,17 @@ test('countdownSound defaults to a local WAV, accepts null and safe custom WAV p
   }
 });
 
-test('typedAnswerGraceSeconds defaults to zero, validates integer seconds and is global-server-only', () => {
-  assert.equal(serverSettingsSchema.parse({}).typedAnswerGraceSeconds, 0);
+test('removed typed-answer grace setting is rejected from global and archive configuration', () => {
   const directory = mkdtempSync(path.join(tmpdir(), 'quiz-timer-settings-'));
   const file = path.join(directory, 'settings.json');
   const storage = new JsonQuizSettingsStorage(path.join(directory, 'quizzes'));
   const config = { branding, server: { port: 3000 }, gameSetup: defaults };
   try {
-    for (const typedAnswerGraceSeconds of [0, 1, 150, 300]) {
-      assert.equal(serverSettingsSchema.parse({ typedAnswerGraceSeconds }).typedAnswerGraceSeconds, typedAnswerGraceSeconds);
-      writeFileSync(file, JSON.stringify({ ...config, server: { ...config.server, typedAnswerGraceSeconds } }));
-      assert.equal(loadGlobalSettings(file, {}).server.typedAnswerGraceSeconds, typedAnswerGraceSeconds);
-    }
-    for (const typedAnswerGraceSeconds of [-1, 301, 0.5, '1', null, true, NaN, Infinity]) {
-      assert.equal(serverSettingsSchema.safeParse({ typedAnswerGraceSeconds }).success, false);
-      writeFileSync(file, JSON.stringify({ ...config, server: { ...config.server, typedAnswerGraceSeconds } }));
-      assert.throws(() => loadGlobalSettings(file, {}), /Unable to load global settings/);
-    }
+    assert.equal(serverSettingsSchema.safeParse({ typedAnswerGraceSeconds: 3 }).success, false);
     for (const invalid of [
-      { ...config, typedAnswerGraceSeconds: 10 },
-      { ...config, gameSetup: { ...defaults, typedAnswerGraceSeconds: 10 } },
+      { ...config, typedAnswerGraceSeconds: 3 },
+      { ...config, gameSetup: { ...defaults, typedAnswerGraceSeconds: 3 } },
+      { ...config, server: { ...config.server, typedAnswerGraceSeconds: 3 } },
       { ...config, server: { ...config.server, timerEndOffsetSeconds: 10 } },
     ]) {
       writeFileSync(file, JSON.stringify(invalid));
@@ -159,19 +150,19 @@ test('typedAnswerGraceSeconds defaults to zero, validates integer seconds and is
     const settings = { ...defaults, title: 'Quiz' };
     storage.save(100001, settings);
     for (const invalid of [
-      { gameSetup: { typedAnswerGraceSeconds: 10 } },
-      { gameSetup: {}, server: { typedAnswerGraceSeconds: 10 } },
-      { gameSetup: {}, typedAnswerGraceSeconds: 10 },
+      { gameSetup: { typedAnswerGraceSeconds: 3 } },
+      { gameSetup: {}, server: { typedAnswerGraceSeconds: 3 } },
+      { gameSetup: {}, typedAnswerGraceSeconds: 3 },
     ]) {
       writeFileSync(path.join(directory, 'quizzes', '100001.json'), JSON.stringify(invalid));
       assert.throws(() => storage.load(100001), /Invalid quiz settings/);
     }
     const command = hostCommandSchema.parse({ id: randomUUID(), revision: 0,
-      action: { type: 'setup', settings: { ...settings, typedAnswerGraceSeconds: 10 } } });
+      action: { type: 'setup', settings: { ...settings, typedAnswerGraceSeconds: 3 } } });
     assert.equal(command.action.type, 'setup');
     if (command.action.type !== 'setup') assert.fail('Expected setup command');
-    assert.deepEqual(command.action.settings, settings, 'host setup cannot introduce a server-only setting');
-    storage.save(100001, { ...settings, ...{ typedAnswerGraceSeconds: 10 } });
+    assert.deepEqual(command.action.settings, settings, 'host setup cannot reintroduce a removed setting');
+    storage.save(100001, { ...settings, ...{ typedAnswerGraceSeconds: 3 } });
     assert.deepEqual(storage.load(100001), settings);
     assert.deepEqual(JSON.parse(readFileSync(path.join(directory, 'quizzes', '100001.json'), 'utf8')), { gameSetup: settings });
   } finally {
@@ -184,7 +175,7 @@ test('global sections load defaults, respect environment overrides and reject in
   const file = path.join(directory, 'settings.json');
   try {
     const serverDefaults = { startupQuizId: 100001, maxPlayerNameLength: 24, requireAdminPasscode: true, maxPlayers: 12,
-      typedAnswerGraceSeconds: 0, countdownSound: '/media/sounds/countdown-beep.wav',
+      countdownSound: '/media/sounds/countdown-beep.wav',
       reviewCorrectSound: '/media/sounds/countdown-beep.wav', reviewWrongSound: '/media/sounds/countdown-beep.wav' };
     const config = { branding, server: { port: 3000, joinOrigin: 'http://example.com:3000' }, gameSetup: defaults };
     writeFileSync(file, JSON.stringify(config));
@@ -194,7 +185,7 @@ test('global sections load defaults, respect environment overrides and reject in
     assert.equal(loadGlobalSettings(file, { QUIZ_ID: '100002' }).server.startupQuizId, 100002);
     assert.throws(() => loadGlobalSettings(file, { QUIZ_ID: '0' }), /Unable to load global settings/);
     const customServer = { ...config.server, startupQuizId: 100001, maxPlayerNameLength: 32, requireAdminPasscode: false, maxPlayers: 20,
-      typedAnswerGraceSeconds: 15, countdownSound: '/media/custom/countdown.wav',
+      countdownSound: '/media/custom/countdown.wav',
       reviewCorrectSound: '/media/custom/correct.wav', reviewWrongSound: '/media/custom/wrong.wav' };
     writeFileSync(file, JSON.stringify({ ...config, server: customServer }));
     assert.deepEqual(loadGlobalSettings(file, {}).server, customServer);

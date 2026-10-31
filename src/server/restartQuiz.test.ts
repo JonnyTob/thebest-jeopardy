@@ -76,6 +76,7 @@ test('restart discards typed submissions and invalidates their question instance
   game.tick();
   const instance = game.snapshot().questionInstanceId!;
   game.submitAnswer(player.id, instance, 'Private answer');
+  send({ type: 'close' });
   send({ type: 'judgeSubmission', playerId: player.id, correct: true });
   send({ type: 'restartQuiz' });
   const state = game.snapshot(true);

@@ -32,6 +32,7 @@ function setup() {
   send({ type: 'start' }); time += START_COUNTDOWN_MS; game.tick();
   const instance = game.snapshot().questionInstanceId!;
   players.forEach((player, index) => game.submitAnswer(player.id, instance, `PRIVATE ANSWER ${index}`));
+  send({ type: 'close' });
   players.slice(0, 8).forEach((player) => send({ type: 'judgeSubmission', playerId: player.id, correct: true }));
   players.slice(8, 11).forEach((player) => send({ type: 'judgeSubmission', playerId: player.id, correct: false }));
   send({ type: 'startReview' });
@@ -139,7 +140,7 @@ test('host controls, instructions, TV sound and phone status follow the current 
   await act(async () => { view.unmount(); });
 });
 
-test('host quick rulings are available by default and retain phase, connection and judgment guards', async () => {
+test('host quick rulings unlock after closure and retain connection and judgment guards', async () => {
   let time = 0;
   const game = new GameEngine({ id: 1, title: 'Quick rulings', questions: [
     { id: 'one', type: 'text', mode: 'typed', fixedPoints: 250, timerSeconds: 30,
@@ -167,9 +168,13 @@ test('host quick rulings are available by default and retain phase, connection a
   try {
     await render();
     assert.equal(view.root.findAllByProps({ type: 'checkbox' }).length, 0);
+    assert.equal(correct('Alice').props.disabled, true);
+    assert.equal(wrong('Alice').props.disabled, true);
+    assert.equal(game.snapshot(true).hostSubmissions?.[0].correct, null, 'Displaying quick controls does not judge answers');
+    send({ type: 'close' });
+    await render();
     assert.equal(correct('Alice').props.disabled, false);
     assert.equal(wrong('Alice').props.disabled, false);
-    assert.equal(game.snapshot(true).hostSubmissions?.[0].correct, null, 'Displaying quick controls does not judge answers');
     await act(async () => { correct('Alice').props.onClick(); });
     assert.deepEqual(actions, [{ type: 'judgeSubmission', playerId: alice.id, correct: true }]);
     for (const overrides of [{ connected: false }, { pending: true }]) {
@@ -177,11 +182,6 @@ test('host quick rulings are available by default and retain phase, connection a
       assert.equal(correct('Alice').props.disabled, true);
       assert.equal(wrong('Alice').props.disabled, true);
     }
-    send({ type: 'pause' });
-    await render();
-    assert.equal(correct('Alice').props.disabled, false);
-    assert.equal(wrong('Alice').props.disabled, false);
-    send({ type: 'close' });
     await render();
     assert.equal(correct('Alice').props.disabled, false);
     assert.equal(wrong('Alice').props.disabled, false);

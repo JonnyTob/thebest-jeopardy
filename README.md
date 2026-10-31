@@ -66,7 +66,6 @@ npm start
     "maxPlayerNameLength": 24,
     "requireAdminPasscode": true,
     "maxPlayers": 12,
-    "typedAnswerGraceSeconds": 3,
     "countdownSound": "/media/sounds/countdown-beep.wav",
     "reviewCorrectSound": "/media/sounds/countdown-beep.wav",
     "reviewWrongSound": "/media/sounds/countdown-beep.wav"
@@ -112,12 +111,6 @@ npm start
     players, including disconnected players, until the host removes them.
     Reconnecting an existing player does not use another slot. New players
     cannot join a full game; phones show the limit and the server also enforces it.
-  - `typedAnswerGraceSeconds`: extra answering time for typed questions, **0** by
-    default (whole seconds, 0-300). Submissions automatically close at the question's
-    `timerSeconds` plus this offset. For example, 30 + 2 closes after 32 seconds
-    of unpaused clue time. The visible countdown reaches zero at `timerSeconds`,
-    then submissions stay open during the grace period. This is global-only,
-    not editable through Game setup or per-quiz overrides. Restart after changing it.
   - `countdownSound`: local WAV path for the TV countdown beep, default
     `/media/sounds/countdown-beep.wav`. Set to `null` to disable it, or use a
     different local path such as `/media/sounds/my-beep.wav`. Place a short single beep under
@@ -215,25 +208,22 @@ sharing the QR code.
 
 ## Implemented core flow
 
-- Authenticated host commands; server-filtered public snapshots never contain the
-  official answer until the host explicitly reveals it. Typed submissions are
+- Authenticated host commands; server-filtered public snapshots reveal the official
+  answer when typed submissions close or a buzzer answer is judged correct. Typed submissions are
   private to the host until each submission is displayed during review.
 - Server-arbitrated first buzz, a frozen points-at-buzz value, and no answer
   countdown. Correct awards the frozen value; wrong deducts it and locks that
-  player out. The TV displays the result for two seconds with the same gold or
-  flying-money animation and sound as typed review. Clue time and media remain
-  frozen during the result. After a correct ruling, any remaining audio, video,
-  or tiled-image reveal resumes with buzzing closed and the score frozen; the
-  game advances when it finishes. Text, static images, and finished media advance
-  immediately after the result. Wrong reopens the same clue to eligible players.
-  Undo cancels the result or playback and restores the ruling.
+  player out. A correct ruling immediately shows the official answer and awarded
+  points for three seconds, then resumes any remaining audio, video or tile reveal
+  with buzzing closed. The quiz advances automatically when that finishes. A wrong ruling shows its
+  result for two seconds and reopens the clue to eligible players. Clue time and
+  media remain frozen during either result. Undo cancels the result or media finish
+  and restores the ruling.
 - The server uses clip start/end settings and probes local WAV, MP3 and MP4
-  durations at startup to time playback. If it cannot determine an endpoint, the
-  host must use **Skip finishing media** when ready. The host can also skip or
-  restart known media during this phase. Timing is server-based, not a guarantee
-  that the TV actually played the clip: browser autoplay restrictions, buffering,
-  missing files or a disconnected TV can interrupt playback. Enable TV media and
-  check the display; use **Restart media only** or skip when necessary.
+  durations at startup. If the endpoint is unknown, the host uses **Skip finishing media**
+  after playback ends. Browser autoplay restrictions, buffering, missing files or
+  a disconnected TV can interrupt playback. Enable TV media and check the display;
+  use **Restart media only** while the question is open or finishing when necessary.
 - In **Game setup**, set **Wrong-answer lockout seconds** to 1-300 to allow
   retries on the same question. The player's phone shows a countdown, and the
   host's player table shows the remaining seconds. The timer starts when the
@@ -278,18 +268,19 @@ sharing the QR code.
   the browser's reduced-motion preference.
 - **Everyone answers** questions accept one final typed submission per player.
   The server automatically closes submissions at the question's `timerSeconds`
-  (or `gameSetup.questionTimerSeconds` when omitted) plus the global
-  `server.typedAnswerGraceSeconds`. Pausing pauses the timer and submissions.
-  TV, host and phone countdowns reach zero at `timerSeconds`, then show the
-  remaining answer grace time until submissions close. The TV bar freezes when
-  paused or closed; points remain fixed.
+  (or `gameSetup.questionTimerSeconds` when omitted). The visible countdown and
+  submission deadline reach zero together. The countdown displays whole seconds
+  through zero. Pausing pauses the timer and submissions.
+  The TV bar freezes when paused or closed; points remain fixed. The official
+  answer appears on the TV while submissions are closed, then hides when the host
+  starts review. Review never starts automatically just because all answers are judged.
   On typed video clues, the video continues playing on the TV after submissions
   close, up to its clip end or until the quiz advances. The submission clock
   remains stopped.
   The host can see all submissions privately; other players see only the count.
-  Use **Close submissions & start review** to close the clue and start TV review
-  in one step. Alternatively, use **Close submissions**, then
-  **Start answer review**. Mark each answer correct or wrong. Correct earns the question's fixed points;
+  Use **Close submissions** to end answering early, or wait for the timer to close it.
+  Then use **Start answer review** when fast review is complete. Mark each answer
+  correct or wrong. Correct earns the question's fixed points;
   wrong or missing answers earn zero. The leaderboard updates immediately.
   Review order is submission order, followed by non-submitters in join order.
   Players present when submissions close are included, even if disconnected;
@@ -302,10 +293,11 @@ sharing the QR code.
 - **Next-round transition:** moving to another question shows a synchronized
   three-second **NEXT ROUND / 3 -> 2 -> 1** countdown on TV, host and phones.
   The next clue and its full timer/media start only when this ends. Correct buzzer
-  rulings advance after their result hold and any remaining clue playback; completed
+  rulings advance after their three-second answer display and any remaining media;
+  completed
   typed reviews advance after their hold. The host can still manually advance a
   skipped/closed buzzer question. If no question remains, final standings appear
-  after the hold and any remaining playback. Other game controls are blocked during
+  after the hold and any remaining media. Other game controls are blocked during
   transition, but **Undo last score change** cancels it and restores that ruling.
   Undo history clears when the next question opens, not when the countdown starts.
   Typed review no longer pauses for a separate official-answer reveal step.
@@ -328,28 +320,22 @@ to judge answers privately without showing each one on the TV. There is no switc
 to enable: use these optional quick rulings or leave answers for normal TV review.
 This is manual judging, not automatic answer matching.
 
-1. Optionally mark submitted answers **Correct** or **Wrong**
-  immediately, even while others are still answering or the question is paused.
-  Correct earns the fixed points immediately; wrong earns zero.
-2. **Close submissions** freezes the roster and adds missing answers, which can
-  be marked **No answer** for zero points. Private judging remains available.
-3. Use **Start answer review** (or **Close submissions & start review**). The TV
+1. **Close submissions** freezes the roster and adds missing answers. This also
+  happens automatically when the question timer reaches zero. The TV displays the
+  official answer while the host prepares review.
+2. Optionally mark closed submissions **Correct**, **Wrong**, or **No answer**
+  privately. Correct earns the fixed points immediately; wrong or missing earns zero.
+3. Use **Start answer review** when ready. The TV
   first shows fast-approved correct players together with their points, then wrong
   or missing players together with +0. Each nonempty group appears for four
   seconds with its configured result sound. Answers themselves stay private.
   Remaining unjudged entries then appear individually in their original order.
-  If every roster entry is already judged when submissions close (manually or
-  automatically), grouped review starts automatically, followed by the next-round
-  transition. The final fast ruling after closure also starts grouped review
-  automatically. Judging all received answers while submissions are still open
-  does not close them early.
+  Review does not start automatically, even when every roster entry is judged.
 
-Quick rulings are available before TV review starts, both while submissions are
-open and after they close. Normal review remains available for any unjudged answers.
-Undo applies to private rulings too, including zero-point rulings; it restores
-the previous score and judgment state and can return the question to open or closed;
-undo during a group cancels the grouped sequence.
-Answers received after a ruling are retained when that ruling is undone.
+Quick rulings are available after submissions close and before TV review starts.
+Normal review remains available for any unjudged answers. Undo applies to private
+rulings too, including zero-point rulings; it restores the previous score and
+judgment state in the closed question. Undo during a group cancels the grouped sequence.
 The host list retains all entries and their outcomes. TV review numbering still
 refers to positions in the full roster, so skipping judged entries can skip numbers.
 
@@ -471,22 +457,21 @@ The bundled quiz is also a playable examples catalog:
 
 | # | Keyword | Type / mode | Features to try |
 | --- | --- | --- | --- |
-| 1 | `warm-up` | Text / typed | Separate headline and clue text; 250 fixed points and a 30-second timer plus global offset |
+| 1 | `warm-up` | Text / typed | Separate headline and clue text; 250 fixed points and a 30-second timer |
 | 2 | `mystery-image` | Image / buzzer | Deterministic 8 x 6 tile reveal over 20 seconds; buzz freezes it |
-| 3 | `everyone-answers-text` | Text / typed | Everyone submits privately; 250 fixed points and a 30-second timer plus global offset |
+| 3 | `everyone-answers-text` | Text / typed | Everyone submits privately; 250 fixed points and a 30-second timer |
 | 4 | `static-image` | Image / buzzer | Explicit `mode` and `static` reveal; count the five gold stars |
-| 5 | `everyone-answers-image` | Image / typed | 6 x 4 tiles with a different seed; 15-second reveal independent of the 25-second timer plus global offset |
+| 5 | `everyone-answers-image` | Image / typed | 6 x 4 tiles with a different seed; 15-second reveal independent of the 25-second timer |
 | 6 | `audio-buzzer` | Audio / buzzer | Full eight-second original chime clip with live spectrum visualization |
 | 7 | `everyone-answers-audio` | Audio / typed | Only seconds 4.5-8 of the same clip; visualization disabled; 300 fixed points |
 | 8 | `video-buzzer` | Video / buzzer | Full original silent moving-shapes clip; aspect-preserving playback |
-| 9 | `everyone-answers-video` | Video / typed | Seconds 2-6 of the clip; 150 fixed points and a 20-second timer plus global offset |
+| 9 | `everyone-answers-video` | Video / typed | Seconds 2-6 of the clip; 150 fixed points and a 20-second timer |
 | 10 | `last-call` | Text / buzzer | Return to buzzer mode after typed review, then finish the quiz |
 
-For typed questions, join from a real phone/browser, submit, then use
-**Close submissions & start review**, then the correct/wrong rulings. Each result
-advances automatically after two seconds. Starting review while open, including while paused, immediately
-closes submissions. Alternatively wait for automatic closure and choose
-**Start answer review**. After its result hold, the final ruling advances via the
+For typed questions, join from a real phone/browser, submit, then wait for the
+timer or use **Close submissions**. Make any private fast judgments, then click
+**Start answer review**. Each individual result advances automatically after two
+seconds. After its result hold, the final ruling advances via the
 three-second next-round countdown (or finishes the quiz). A wrong or missing
 typed answer earns zero, unlike the negative penalty for a wrong buzzer answer.
 Clip endings do not close questions; typed submission deadlines do.

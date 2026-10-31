@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
-import { pointsAt, rankPlayers, START_COUNTDOWN_MS, NEXT_ROUND_MS, REVIEW_RESULT_MS, REVIEW_GROUP_MS, BUZZ_RESULT_MS } from '../shared/game.js';
+import { pointsAt, rankPlayers, START_COUNTDOWN_MS, NEXT_ROUND_MS, REVIEW_RESULT_MS, REVIEW_GROUP_MS, BUZZ_RESULT_MS, BUZZ_CORRECT_ANSWER_MS } from '../shared/game.js';
 import { serverSettingsSchema, type HostCommand, type JoinRequest, type Phase, type Player, type Quiz, type ScoreEvent, type Settings, type Snapshot, type ServerSettings, type TypedReview } from '../shared/protocol.js';
 
 export class GameError extends Error {}
@@ -100,7 +100,7 @@ export class GameEngine {
       this.advanceReview(this.clue.reviewIndex + 1);
       this.revision++;
     } else if (this.clue.phase === 'BUZZ_RESULT' && this.buzzResult !== null
-      && this.now() - this.buzzResult.at >= BUZZ_RESULT_MS) {
+      && this.now() - this.buzzResult.at >= (this.buzzResult.correct ? BUZZ_CORRECT_ANSWER_MS : BUZZ_RESULT_MS)) {
       const result = this.buzzResult;
       const correct = result.correct;
       if (!correct && this.settings.lockoutSeconds > 0) {
@@ -132,8 +132,6 @@ export class GameEngine {
       this.close();
       this.clue.elapsedMs = this.submissionDeadline();
       if (this.mediaFinishAt !== null) this.mediaFinishElapsedMs = overshoot;
-      if (this.quiz.questions[this.clue.questionIndex]?.mode === 'typed'
-        && this.clue.reviewQueue.every((entry) => entry.correct !== null)) this.beginReview();
       this.revision++;
     }
     if (this.clue.phase !== 'MEDIA_FINISH' && this.mediaFinishAt !== null
@@ -147,9 +145,7 @@ export class GameEngine {
 
   private submissionDeadline(): number {
     const question = this.quiz.questions[this.clue.questionIndex];
-    return question
-      ? ((question.timerSeconds ?? this.settings.questionTimerSeconds)
-        + (question.mode === 'typed' ? this.serverSettings.typedAnswerGraceSeconds : 0)) * 1000 : Infinity;
+    return question ? (question.timerSeconds ?? this.settings.questionTimerSeconds) * 1000 : Infinity;
   }
 
   private beginNextRound() {
@@ -416,8 +412,6 @@ export class GameEngine {
       case 'close':
         this.require(this.isActive(), 'There is no active question to close.');
         this.close();
-        if (this.quiz.questions[this.clue.questionIndex]?.mode === 'typed'
-          && this.clue.reviewQueue.every((entry) => entry.correct !== null)) this.beginReview();
         break;
       case 'reveal':
         this.require(this.clue.phase === 'QUESTION_CLOSED' || this.clue.phase === 'REVIEW_COMPLETE', 'Close the question before revealing its answer.');
@@ -426,18 +420,14 @@ export class GameEngine {
         this.clue.phase = 'ANSWER_REVEALED';
         break;
       case 'startReview':
-        this.require(['QUESTION_OPEN', 'QUESTION_CLOSED'].includes(this.clue.phase) &&
-          this.quiz.questions[this.clue.questionIndex]?.mode === 'typed',
-          'Start review from an open or closed typed-answer question.');
-        if (this.clue.phase === 'QUESTION_OPEN') this.close();
+        this.require(this.clue.phase === 'QUESTION_CLOSED' && this.quiz.questions[this.clue.questionIndex]?.mode === 'typed',
+          'Close typed-answer submissions before starting review.');
         this.beginReview();
         break;
       case 'judgeSubmission': {
-        this.require(['QUESTION_OPEN', 'QUESTION_CLOSED'].includes(this.clue.phase) && this.quiz.questions[this.clue.questionIndex]?.mode === 'typed',
-          'Fast approval is only available on open or closed typed questions before starting review.');
-        const entries = this.clue.phase === 'QUESTION_OPEN' ? this.clue.submissions : this.clue.reviewQueue;
-        this.judgeTypedAnswer(entries.find((entry) => entry.playerId === action.playerId), action.correct);
-        if (this.clue.phase === 'QUESTION_CLOSED' && entries.every((entry) => entry.correct !== null)) this.beginReview();
+        this.require(this.clue.phase === 'QUESTION_CLOSED' && this.quiz.questions[this.clue.questionIndex]?.mode === 'typed',
+          'Fast approval requires closed typed-answer submissions before starting review.');
+        this.judgeTypedAnswer(this.clue.reviewQueue.find((entry) => entry.playerId === action.playerId), action.correct);
         break;
       }
       case 'judgeReview': {
@@ -577,7 +567,8 @@ export class GameEngine {
       coverImage: this.quiz.coverImage ?? null,
       questionIndex: this.clue.questionIndex, questionCount: this.quiz.questions.length,
       question: publicQuestion,
-      revealedAnswer: this.clue.phase === 'ANSWER_REVEALED' ? question.answer : null,
+      revealedAnswer: this.clue.phase === 'ANSWER_REVEALED' || (this.clue.phase === 'BUZZ_RESULT' && this.buzzResult?.correct)
+        || (this.clue.phase === 'QUESTION_CLOSED' && question?.mode === 'typed') ? question.answer : null,
       ...(host && question ? { privateAnswer: question.answer } : {}),
       players: [...this.players.values()].map((p) => ({ ...p })),
       leaderboardIds: [...this.leaderboardIds],
@@ -603,7 +594,8 @@ export class GameEngine {
       mySubmitted: !!playerId && this.clue.submissions.some((entry) => entry.playerId === playerId),
       buzzResult: this.buzzResult === null ? null : {
         id: this.buzzResult.id, playerId: this.buzzResult.playerId, correct: this.buzzResult.correct,
-        delta: this.buzzResult.delta, remainingMs: Math.max(0, BUZZ_RESULT_MS - (now - this.buzzResult.at)),
+        delta: this.buzzResult.delta, remainingMs: Math.max(0,
+          (this.buzzResult.correct ? BUZZ_CORRECT_ANSWER_MS : BUZZ_RESULT_MS) - (now - this.buzzResult.at)),
       },
       reviewGroup: this.reviewGroup === null ? null : {
         id: this.reviewGroup.id, outcome: this.reviewGroup.outcome, playerIds: [...this.reviewGroup.playerIds],

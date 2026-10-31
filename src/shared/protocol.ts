@@ -111,7 +111,6 @@ export const serverSettingsSchema = z.object({
   maxPlayerNameLength: z.number().int().min(1).max(100).default(24),
   requireAdminPasscode: z.boolean().default(true),
   maxPlayers: z.number().int().min(1).max(1000).default(12),
-  typedAnswerGraceSeconds: z.number().int().min(0).max(300).default(0),
   countdownSound: localMedia.refine((value) => /\.wav$/i.test(value), 'Countdown sound must be a WAV file')
     .nullable().default('/media/sounds/countdown-beep.wav'),
   reviewCorrectSound: localMedia.refine((value) => /\.wav$/i.test(value), 'Review correct sound must be a WAV file')

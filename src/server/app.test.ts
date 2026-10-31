@@ -10,7 +10,7 @@ import { createApp } from './app.js';
 import { JsonQuizSettingsStorage } from './settings.js';
 import type { ClientEvents, ServerEvents, Snapshot, Result, HostAction } from '../shared/protocol.js';
 
-test('media finish broadcasts the visual clock and accepts skip only from an authenticated host', async (t) => {
+test('correct buzzer answer broadcasts immediately, then resumes media before advancing', async (t) => {
   let time = 0;
   t.mock.method(performance, 'now', () => time);
   const application = await createApp({ storage: { load: async () => ({ id: 1, title: 'Media socket quiz', questions: [
@@ -51,25 +51,24 @@ test('media finish broadcasts the visual clock and accepts skip only from an aut
     time = 4000; await opened;
     time = 5000;
     assert.ok((await player.timeout(5000).emitWithAck('player:buzz')).ok);
+    const correct = waitFor(display, (state) => state.phase === 'BUZZ_RESULT' && state.buzzResult?.correct === true);
     assert.ok((await send(host, { type: 'judge', correct: true })).ok);
-    const finishing = waitFor(display, (state) => state.phase === 'MEDIA_FINISH');
-    time = 7000;
-    const started = await finishing;
-    assert.equal(started.mediaFinishRemainingMs, 7000);
-    assert.equal(started.clockRunning, false);
-    assert.equal(started.displayClockRunning, true);
-    const updated = waitFor(display, (state) => state.phase === 'MEDIA_FINISH' && state.mediaPositionSeconds === 3);
-    time = 9000;
-    const moving = await updated;
-    assert.equal(moving.clueElapsedMs, 1000);
-    assert.equal(moving.mediaFinishRemainingMs, 5000);
-    assert.doesNotMatch(JSON.stringify(moving), /SECRET|FUTURE/);
+    const revealed = await correct;
+    assert.equal(revealed.revealedAnswer, 'SECRET');
+    assert.equal(revealed.buzzResult?.remainingMs, 3000);
+    assert.equal(revealed.mediaFinishRemainingMs, null);
     const reconnect = await connect({ role: 'player', token: joined.data.token });
-    assert.equal(reconnect.state.mediaPositionSeconds, 3);
-    assert.equal(reconnect.state.displayClockRunning, true);
+    assert.equal(reconnect.state.revealedAnswer, 'SECRET');
     assert.equal((await send(player, { type: 'skipMedia' })).ok, false);
-    assert.equal(application.engine.snapshot().phase, 'MEDIA_FINISH');
-    assert.ok((await send(host, { type: 'skipMedia' })).ok);
+    const finishing = waitFor(display, (state) => state.phase === 'MEDIA_FINISH');
+    time = 8000;
+    const resumed = await finishing;
+    assert.equal(resumed.mediaFinishRemainingMs, 7000);
+    assert.equal(resumed.displayClockRunning, true);
+    assert.equal(resumed.revealedAnswer, null);
+    const next = waitFor(display, (state) => state.phase === 'NEXT_ROUND');
+    time = 15000;
+    await next;
     assert.equal(application.engine.snapshot().phase, 'NEXT_ROUND');
     assert.equal(application.engine.snapshot().nextRoundCountdownMs, 3000);
   } finally {
@@ -155,7 +154,8 @@ test('buzzer result and automatic transitions broadcast to players and displays 
     assert.notEqual(correct.buzzResult?.id, wrong.buzzResult?.id);
     assert.equal(correct.buzzResult?.delta, 500);
     assert.equal(correct.buzzResult?.correct, true);
-    assert.doesNotMatch(JSON.stringify(correct), /SECRET/);
+    assert.equal(correct.revealedAnswer, 'SECRET ONE');
+    assert.equal(correct.buzzResult?.remainingMs, 3000);
     const next = waitFor(player, (state) => state.phase === 'NEXT_ROUND');
     time = 11000;
     const transition = await next;
@@ -181,7 +181,7 @@ test('server interval broadcasts typed auto-close, next-round countdowns and fre
       { id: 'two', type: 'text', mode: 'typed', fixedPoints: 400, timerSeconds: 2,
         question: 'FUTURE CLUE', answer: 'FUTURE SECRET' },
     ] }) },
-    passcode: 'test-host-passcode', serveClient: false, serverSettings: { typedAnswerGraceSeconds: 1 },
+    passcode: 'test-host-passcode', serveClient: false,
   });
   const sockets: Socket<ServerEvents, ClientEvents>[] = [];
   const publicStates: Snapshot[] = [];
@@ -237,18 +237,19 @@ test('server interval broadcasts typed auto-close, next-round countdowns and fre
     const first = await opened;
     assert.equal(first.countdownId, null);
     assert.equal(first.clueElapsedMs, 0);
-    assert.equal(first.serverSettings.typedAnswerGraceSeconds, 1);
     const submitted = await player.timeout(5000).emitWithAck('player:submitAnswer', {
       questionInstanceId: first.questionInstanceId!, answer: 'PRIVATE GUESS',
     });
     assert.ok(submitted.ok);
-    const beforeDeadline = waitFor(display, (state) => state.clueElapsedMs === 2999);
-    time = 6999;
+    const beforeDeadline = waitFor(display, (state) => state.clueElapsedMs === 1999);
+    time = 5999;
     assert.equal((await beforeDeadline).phase, 'QUESTION_OPEN');
     const closed = waitFor(display, (state) => state.phase === 'QUESTION_CLOSED');
-    time = 7000;
-    assert.equal((await closed).clueElapsedMs, 3000);
+    time = 6000;
+    assert.equal((await closed).clueElapsedMs, 2000);
     await send({ type: 'judgeSubmission', playerId: joined.data.playerId, correct: true });
+    assert.equal(application.engine.snapshot().phase, 'QUESTION_CLOSED');
+    await send({ type: 'startReview' });
     assert.equal(application.engine.snapshot().phase, 'REVIEW_GROUP');
     const groupId = application.engine.snapshot().reviewGroup?.id;
     assert.ok(groupId);
@@ -261,7 +262,7 @@ test('server interval broadcasts typed auto-close, next-round countdowns and fre
     assert.equal(reconnect.state.review, null);
     const revision = application.engine.revision;
     const countdown = waitFor(display, (state) => state.reviewGroup?.remainingMs === 3000);
-    time = 8000;
+    time = 7000;
     const countdownState = await countdown;
     assert.equal(countdownState.revision, revision, 'countdowns broadcast even without revision changes');
     assert.equal(countdownState.reviewGroup?.id, groupId);
@@ -275,6 +276,7 @@ test('server interval broadcasts typed auto-close, next-round countdowns and fre
     assert.equal(afterUndo.state.phase, 'QUESTION_CLOSED');
     assert.equal(afterUndo.state.players[0].score, 0);
     await send({ type: 'judgeSubmission', playerId: joined.data.playerId, correct: true });
+    await send({ type: 'startReview' });
     assert.notEqual(application.engine.snapshot().reviewGroup?.id, groupId);
     const nextRound = waitFor(display, (state) => state.phase === 'NEXT_ROUND');
     time = 15000;
@@ -290,7 +292,8 @@ test('server interval broadcasts typed auto-close, next-round countdowns and fre
     for (const state of publicStates) {
       assert.equal(state.hostSubmissions, undefined);
       assert.equal(state.privateAnswer, undefined);
-      assert.doesNotMatch(JSON.stringify(state), /PRIVATE GUESS|CURRENT SECRET|FUTURE/);
+      assert.doesNotMatch(JSON.stringify(state), /PRIVATE GUESS|FUTURE/);
+      assert.equal(state.revealedAnswer, state.phase === 'QUESTION_CLOSED' ? 'CURRENT SECRET' : null);
     }
     const next = waitFor(player, (state) => state.phase === 'QUESTION_OPEN' && state.questionIndex === 1);
     time = 18000;
@@ -331,7 +334,11 @@ test('server interval broadcasts typed auto-close, next-round countdowns and fre
     assert.equal(final.nextRoundCountdownMs, null);
     assert.equal(final.players[0].score, 250);
     assert.equal(final.questionIndex, 1);
-    for (const state of publicStates) assert.doesNotMatch(JSON.stringify(state), /PRIVATE GUESS|CURRENT SECRET|FUTURE SECRET/);
+    for (const state of publicStates) {
+      assert.doesNotMatch(JSON.stringify(state), /PRIVATE GUESS/);
+      assert.equal(state.revealedAnswer, state.phase === 'QUESTION_CLOSED'
+        ? state.questionIndex === 0 ? 'CURRENT SECRET' : 'FUTURE SECRET' : null);
+    }
   } finally {
     for (const socket of sockets) socket.disconnect();
     await application.close();
@@ -450,7 +457,7 @@ test('server nickname and player limits are advertised and enforced, including r
     };
     const info = await (await fetch(`${url}/api/info`)).json();
     assert.deepEqual(info.serverSettings, { maxPlayerNameLength: 32, maxPlayers: 1, requireAdminPasscode: true,
-      typedAnswerGraceSeconds: 0, countdownSound: '/media/sounds/countdown-beep.wav',
+      countdownSound: '/media/sounds/countdown-beep.wav',
       reviewCorrectSound: '/media/sounds/countdown-beep.wav', reviewWrongSound: '/media/sounds/countdown-beep.wav' });
     assert.deepEqual(application.engine.snapshot().serverSettings, info.serverSettings);
     const host = await connect({ role: 'host', passcode: 'test-host-passcode' });
@@ -551,7 +558,7 @@ test('global defaults and per-quiz overrides reach the host, save through socket
       questions: [{ id: 'one', type: 'text', mode: 'buzzer', question: 'Clue', answer: 'Answer' }] }) },
     passcode: 'test-host-passcode', serveClient: false, settingsStorage,
     gameSetup: { title: 'Global title', startPoints: 700, lockoutSeconds: 20 },
-    serverSettings: { typedAnswerGraceSeconds: 7 },
+    serverSettings: { maxPlayers: 20 },
   };
   try {
     writeFileSync(path.join(directory, '100001.json'), '{"gameSetup":{"title":"Quiz title","lockoutSeconds":10}}');
@@ -574,16 +581,16 @@ test('global defaults and per-quiz overrides reach the host, save through socket
         socket.connect();
       });
       assert.deepEqual(snapshot.settings, application.engine.settings);
-      assert.equal(snapshot.serverSettings.typedAnswerGraceSeconds, 7);
+      assert.equal(snapshot.serverSettings.maxPlayers, 20);
       const info = await (await fetch(`http://127.0.0.1:${address.port}/api/info`)).json();
-      assert.equal(info.serverSettings.typedAnswerGraceSeconds, 7);
+      assert.equal(info.serverSettings.maxPlayers, 20);
       const saved = { ...snapshot.settings, title: 'Persisted title', lockoutSeconds: 15 };
       const result = await socket.timeout(5000).emitWithAck('host:command', {
         id: randomUUID(), revision: snapshot.revision,
-        action: { type: 'setup', settings: { ...saved, ...{ typedAnswerGraceSeconds: 300 } } },
+        action: { type: 'setup', settings: { ...saved, ...{ maxPlayers: 300 } } },
       });
       assert.ok(result.ok);
-      assert.equal(application.engine.snapshot().serverSettings.typedAnswerGraceSeconds, 7);
+      assert.equal(application.engine.snapshot().serverSettings.maxPlayers, 20);
       assert.deepEqual(application.engine.settings, saved);
       assert.deepEqual(JSON.parse(readFileSync(path.join(directory, '100001.json'), 'utf8')), { gameSetup: saved });
       assert.deepEqual(settingsStorage.load(100002), {});
@@ -596,7 +603,7 @@ test('global defaults and per-quiz overrides reach the host, save through socket
       assert.equal(restarted.engine.settings.title, 'Persisted title');
       assert.equal(restarted.engine.settings.lockoutSeconds, 15);
       assert.equal(restarted.engine.settings.startPoints, 700);
-      assert.equal(restarted.engine.snapshot().serverSettings.typedAnswerGraceSeconds, 7);
+      assert.equal(restarted.engine.snapshot().serverSettings.maxPlayers, 20);
     } finally {
       await restarted.close();
     }

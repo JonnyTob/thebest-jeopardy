@@ -21,7 +21,7 @@
       "question": "Let's start with a little space travel.",
       "mode": "typed",
       "fixedPoints": 250,
-      "timerSeconds": 30,
+      "timerSeconds": 10,
       "text": "Which planet in our solar system is known as the Red Planet?",
       "answer": "Mars"
     },

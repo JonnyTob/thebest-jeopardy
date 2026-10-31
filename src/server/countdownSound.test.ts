@@ -129,8 +129,8 @@ test('production build copies and serves the configured default WAV intact', asy
       { cwd: directory, timeout: 30000 });
     const result = JSON.parse(stdout);
     assert.equal(result.soundPath, defaultSound);
-    assert.equal(result.phase, 'MEDIA_FINISH');
-    assert.equal(result.remaining, 8000);
+    assert.equal(result.phase, 'BUZZ_RESULT');
+    assert.equal(result.remaining, null);
     assert.equal(result.status, 200);
     assert.match(result.type, /audio\/(wav|wave|x-wav)/i);
     const bytes = Buffer.from(result.bytes, 'base64');

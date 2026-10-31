@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { rankPlayers, startCountdownText } from '../../shared/game';
 import { serverSettingsSchema, settingsSchema, type Player, type Settings, type Snapshot } from '../../shared/protocol';
 import { SessionProvider, useAnimatedState, useSession } from '../session';
-import { Avatar, Brand, Connection, JoinLink, PointBar, QuizName, SessionError, buzzerLabel, countdownSeconds, nextRoundCountdownText, questionTimerMs, typedGraceRemainingMs } from '../components/Common';
+import { Avatar, Brand, Connection, JoinLink, PointBar, QuizName, SessionError, buzzerLabel, countdownSeconds, nextRoundCountdownText, questionTimerMs } from '../components/Common';
 import { Media } from '../components/Media';
 import { QuizEditor } from '../components/QuizEditor';
 
@@ -118,9 +118,7 @@ export function AdminConsole({ logout, requirePasscode, development, passcode = 
               <section className="panel admin-question"><span className="eyebrow">CURRENT QUESTION / {state.question?.type.toUpperCase()} / {typed ? 'EVERYONE ANSWERS' : 'BUZZER'}</span>
                 <h2>{state.question?.question}</h2><div className="admin-media"><Media state={state} preview /></div>
                 <div className="private-answer"><span className="eyebrow">PRIVATE ANSWER / HOST ONLY</span><strong>{state.privateAnswer}</strong></div>
-                {typed ? <p>{state.question?.fixedPoints} fixed points / {typedGraceRemainingMs(state) > 0
-                  ? `answer grace: ${countdownSeconds(typedGraceRemainingMs(state))}s`
-                  : `time remaining: ${countdownSeconds(questionTimerMs(state) - state.clueElapsedMs)}s`}</p> : <PointBar state={state} />}</section>
+                {typed ? <p>{state.question?.fixedPoints} fixed points / time remaining: {countdownSeconds(questionTimerMs(state) - state.clueElapsedMs)}s</p> : <PointBar state={state} />}</section>
               <section className="panel game-actions"><span className="eyebrow">GAME ACTIONS</span>
                 {finishing && <div className="notice" role="status"><strong>Finishing the clue / score frozen</strong>
                   <p>{!connected ? 'Connection lost. Waiting to reconnect...' : state.mediaFinishNeedsSkip
@@ -143,10 +141,10 @@ export function AdminConsole({ logout, requirePasscode, development, passcode = 
                         onClick={() => { void command({ type: 'judgeReview', correct: false }); }}>{state.review.answer === null ? 'No answer +0' : 'Wrong +0'}</button></div>
                     {state.review.correct !== null && <p role="status">{connected ? 'Advancing automatically after the result...' : 'Connection lost. Waiting to reconnect...'}</p>}
                   </div>}
-                  <button disabled={disabled || !(isOpen || state.phase === 'QUESTION_CLOSED')}
+                  <button disabled={disabled || state.phase !== 'QUESTION_CLOSED'}
                     onClick={() => { void command({ type: 'startReview' }); }}>
-                    {isOpen ? 'Close submissions & start review' : 'Start answer review'}</button>
-                  {isOpen && <p className="muted">Submissions close automatically when time runs out. Starting review closes them immediately.</p>}
+                    Start answer review</button>
+                  {isOpen && <p className="muted">Submissions close automatically when time runs out. Use Close submissions to end them early.</p>}
                 </> : <>
                 {active && (answering || buzzResult) ? <div className="host-answering"><Avatar id={active.avatarId} /><div><h2>{active.name}</h2>
                   {buzzResult ? <p role="status" className={buzzResult.correct ? 'positive' : 'negative'}>
@@ -176,7 +174,7 @@ export function AdminConsole({ logout, requirePasscode, development, passcode = 
             </div>}
         {typed && state.phase !== 'GAME_FINISHED' && <section className="panel">
           <div className="typed-answers-heading"><h2>Typed answers ({state.submissionCount} submitted)</h2></div>
-          <p className="muted">Optionally mark answers here privately while submissions are open or closed, or leave them for individual TV review. Review starts automatically once submissions are closed and all answers are judged, or when you start it. The TV shows previously judged players in groups: correct first, then wrong or missing, each for four seconds without their answers. Unjudged answers follow individually.</p>
+          <p className="muted">After submissions close, optionally mark answers here privately or leave them for individual TV review. The official answer stays on TV until you start review. The TV then shows previously judged players in groups: correct first, then wrong or missing, each for four seconds without their answers. Unjudged answers follow individually.</p>
           {state.phase === 'QUESTION_CLOSED' && <p>{state.hostSubmissions?.filter((entry) => entry.correct === null).length ?? 0} awaiting review.
             {' '}Start answer review to show judged groups first, then review remaining answers individually.</p>}
           {state.hostSubmissions?.length ? <ol className="host-submissions">{state.hostSubmissions.map((entry) => <li key={entry.playerId}>
@@ -185,10 +183,10 @@ export function AdminConsole({ logout, requirePasscode, development, passcode = 
               <div className="submission-text">Answer: {entry.answer ?? 'No answer'}
                 {entry.correct !== null && <span className={entry.correct ? 'positive' : 'muted'}>{entry.correct ? ` / Correct +${state.question?.fixedPoints}` : ' / Wrong or missing +0'}</span>}</div>
             <div className="submission-rulings">
-              <button className="success small" disabled={disabled || !(isOpen || state.phase === 'QUESTION_CLOSED') || entry.correct !== null || entry.answer === null}
+              <button className="success small" disabled={disabled || state.phase !== 'QUESTION_CLOSED' || entry.correct !== null || entry.answer === null}
                 aria-label={`Mark ${state.players.find((player) => player.id === entry.playerId)?.name ?? 'player'} correct`}
                 onClick={() => { void command({ type: 'judgeSubmission', playerId: entry.playerId, correct: true }); }}>Correct +{state.question?.fixedPoints}</button>
-              <button className="danger small" disabled={disabled || !(isOpen || state.phase === 'QUESTION_CLOSED') || entry.correct !== null}
+              <button className="danger small" disabled={disabled || state.phase !== 'QUESTION_CLOSED' || entry.correct !== null}
                 aria-label={`Mark ${state.players.find((player) => player.id === entry.playerId)?.name ?? 'player'} wrong or missing`}
                 onClick={() => { void command({ type: 'judgeSubmission', playerId: entry.playerId, correct: false }); }}>{entry.answer === null ? 'No answer +0' : 'Wrong +0'}</button>
             </div></div>

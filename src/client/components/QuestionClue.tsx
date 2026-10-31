@@ -1,7 +1,7 @@
 import type { Player, ReviewGroup, Snapshot } from '../../shared/protocol';
 import { useRef, type CSSProperties } from 'react';
-import { REVIEW_GROUP_MS, REVIEW_RESULT_MS } from '../../shared/game';
-import { Avatar, PointBar, countdownSeconds, questionTimerMs, typedGraceRemainingMs } from './Common';
+import { REVIEW_GROUP_MS, REVIEW_RESULT_MS, BUZZ_CORRECT_ANSWER_MS } from '../../shared/game';
+import { Avatar, PointBar, countdownSeconds, questionTimerMs } from './Common';
 import { Media } from './Media';
 
 export function QuestionClue({ state }: { state: Snapshot }) {
@@ -14,15 +14,15 @@ export function QuestionClue({ state }: { state: Snapshot }) {
   const remainingMs = Math.max(0, timerMs - state.clueElapsedMs);
   const remainingSeconds = countdownSeconds(remainingMs);
   const remainingPercent = timerMs > 0 ? Math.min(100, remainingMs / timerMs * 100) : 0;
-  const graceRemainingMs = typedGraceRemainingMs(state);
 
   return <>
     <div className="clue-heading"><span className="eyebrow">THE QUESTION</span><h1>{state.question?.question}</h1></div>
     <div className="media-area"><Media state={state} />
-      {state.revealedAnswer && <div className="answer-reveal"><span className="eyebrow">THE ANSWER</span><h2>{state.revealedAnswer}</h2></div>}
+      {state.revealedAnswer && !buzzResult?.correct && <div className="answer-reveal"><span className="eyebrow">THE ANSWER</span><h2>{state.revealedAnswer}</h2></div>}
       {state.phase === 'REVIEW' && state.reviewResultId && state.review?.correct !== null && state.review?.correct !== undefined
         && <ReviewResultAnimation key={state.reviewResultId} correct={state.review.correct} remaining={state.reviewRemainingMs} />}
-      {buzzResult && <ReviewResultAnimation key={buzzResult.id} correct={buzzResult.correct} remaining={buzzResult.remainingMs} />}
+      {buzzResult && <ReviewResultAnimation key={buzzResult.id} correct={buzzResult.correct} remaining={buzzResult.remainingMs}
+        duration={buzzResult.correct ? BUZZ_CORRECT_ANSWER_MS : REVIEW_RESULT_MS} />}
       {state.phase === 'REVIEW_GROUP' && state.reviewGroup && <ReviewGroupOverlay key={state.reviewGroup.id}
         group={state.reviewGroup} players={state.players} />}
       {state.phase === 'REVIEW' && state.review && <section className="review-overlay" aria-label="Current answer review" aria-live="polite" aria-atomic="true">
@@ -42,6 +42,7 @@ export function QuestionClue({ state }: { state: Snapshot }) {
         {buzzPlayer && <div className="review-player"><Avatar id={buzzPlayer.avatarId} /><h2>{buzzPlayer.name}</h2></div>}
         <p className={buzzResult.correct ? 'positive review-answer' : 'negative review-answer'}>
           {buzzResult.correct ? 'Correct' : 'Wrong'} {buzzResult.delta > 0 ? '+' : ''}{buzzResult.delta}</p>
+        {buzzResult.correct && state.revealedAnswer && <strong className="review-answer">Answer: {state.revealedAnswer}</strong>}
       </section>}
     </div>
     {typed ? <div className="point-bar">
@@ -52,7 +53,7 @@ export function QuestionClue({ state }: { state: Snapshot }) {
         <div style={{ width: `${remainingPercent}%` }} />
       </div>
       <div className="point-meta"><strong>{state.question?.fixedPoints} fixed points</strong>
-        <span>{graceRemainingMs > 0 ? `Answer grace: ${countdownSeconds(graceRemainingMs)}s` : state.clockRunning ? 'Clock running' : 'Clock frozen'}</span></div>
+        <span>{state.clockRunning ? 'Clock running' : 'Clock frozen'}</span></div>
     </div> : <PointBar state={state} />}
   </>;
 }

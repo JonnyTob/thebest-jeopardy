@@ -41,16 +41,48 @@ test('typed question validation requires fixed points while all modes allow a co
     minimumPoints: 100, dropPoints: 100, dropEverySeconds: 5, maxAnswerLength: 501 }).success, false);
 });
 
-test('one-click review atomically closes open typed submissions before or after the deadline before tick, including when paused', () => {
+test('official typed answer is visible after close and hidden when review begins', () => {
+  const { game, alice, command } = setup();
+  command({ type: 'start' });
+  assert.equal(game.snapshot().revealedAnswer, null);
+  game.submitAnswer(alice.id, game.snapshot().questionInstanceId!, 'Guess');
+  command({ type: 'close' });
+  assert.equal(game.snapshot().phase, 'QUESTION_CLOSED');
+  assert.equal(game.snapshot().revealedAnswer, 'SECRET');
+  assert.equal(game.snapshot(false, alice.id).revealedAnswer, 'SECRET');
+  command({ type: 'startReview' });
+  assert.equal(game.snapshot().phase, 'REVIEW');
+  assert.equal(game.snapshot().revealedAnswer, null);
+});
+
+test('fully judged typed answers still wait for the host to start review', () => {
+  const { game, alice, bob, carol, command } = setup();
+  command({ type: 'start' });
+  game.submitAnswer(alice.id, game.snapshot().questionInstanceId!, 'Guess');
+  command({ type: 'close' });
+  for (const player of [alice, bob, carol]) {
+    command({ type: 'judgeSubmission', playerId: player.id, correct: player.id === alice.id });
+    assert.equal(game.snapshot().phase, 'QUESTION_CLOSED');
+    assert.equal(game.snapshot().revealedAnswer, 'SECRET');
+  }
+  command({ type: 'startReview' });
+  assert.equal(game.snapshot().phase, 'REVIEW_GROUP');
+  assert.equal(game.snapshot().revealedAnswer, null);
+});
+
+test('typed review requires a separate close, including after deadline before tick and while paused', () => {
   for (const [elapsed, paused] of [[1000, false], [3000, false], [1000, true]] as const) {
     const { game, alice, bob, carol, command, advance } = setup();
-    assert.throws(() => command({ type: 'startReview' }), /open or closed typed-answer/);
+    assert.throws(() => command({ type: 'startReview' }), /Close typed-answer submissions/);
     command({ type: 'start' });
     const instance = game.snapshot().questionInstanceId!;
     game.submitAnswer(bob.id, instance, 'First submission');
     game.setConnected(carol.id, false);
     advance(elapsed);
     if (paused) command({ type: 'pause' });
+    assert.throws(() => command({ type: 'startReview' }), /Close typed-answer submissions/);
+    command({ type: 'close' });
+    assert.equal(game.snapshot().revealedAnswer, 'SECRET');
     const reviewCommand = { id: randomUUID(), revision: game.revision, action: { type: 'startReview' } } as const;
     game.command(reviewCommand);
     assert.equal(game.snapshot().phase, 'REVIEW');
@@ -72,24 +104,26 @@ test('one-click review atomically closes open typed submissions before or after 
     advance(REVIEW_RESULT_MS);
     game.tick();
     assert.equal(game.snapshot().review?.playerId, alice.id);
-    assert.throws(() => command({ type: 'startReview' }), /open or closed typed-answer/);
+    assert.throws(() => command({ type: 'startReview' }), /Close typed-answer submissions/);
   }
 });
 
-test('one-click review handles empty queues and rejects buzzer questions without closing them', () => {
+test('closed typed review handles empty queues and rejects buzzer questions', () => {
   let time = 0;
   const game = new GameEngine(quiz, () => time);
   const command = (action: HostAction) => game.command({ id: randomUUID(), revision: game.revision, action });
   command({ type: 'start' });
   time += START_COUNTDOWN_MS;
   game.tick();
+  assert.throws(() => command({ type: 'startReview' }), /Close typed-answer submissions/);
+  command({ type: 'close' });
   command({ type: 'startReview' });
   assert.equal(game.snapshot().phase, 'NEXT_ROUND');
   assert.equal(game.snapshot().nextRoundCountdownMs, 3000);
   assert.equal(game.snapshot().clockRunning, false);
   time += NEXT_ROUND_MS;
   game.tick();
-  assert.throws(() => command({ type: 'startReview' }), /open or closed typed-answer/);
+  assert.throws(() => command({ type: 'startReview' }), /Close typed-answer submissions/);
   assert.equal(game.snapshot().phase, 'QUESTION_OPEN');
   assert.equal(game.snapshot().clockRunning, true);
 });
@@ -206,18 +240,21 @@ test('fast approval enforces phase, roster and missing-answer rules and complete
   assert.throws(() => judge(alice.id, true), /before starting review/);
   command({ type: 'start' });
   game.submitAnswer(alice.id, game.snapshot().questionInstanceId!, 'Private answer');
-  assert.throws(() => judge(bob.id, false), /not found/);
+  assert.throws(() => judge(alice.id, true), /closed typed-answer/);
   command({ type: 'pause' });
-  judge(alice.id, true);
-  assert.equal(alice.score, 250);
+  assert.throws(() => judge(alice.id, true), /closed typed-answer/);
   assert.equal(game.snapshot().paused, true);
   command({ type: 'close' });
+  judge(alice.id, true);
+  assert.equal(alice.score, 250);
   const late = game.join({ name: 'Late', avatarId: 'frog' });
   assert.throws(() => judge(late.id, true), /not found/);
   assert.throws(() => judge(bob.id, true), /missing answer/);
   assert.throws(() => judge(alice.id, true), /already/);
   judge(bob.id, false);
   judge(carol.id, false);
+  assert.equal(game.snapshot().phase, 'QUESTION_CLOSED');
+  command({ type: 'startReview' });
   assert.equal(game.snapshot().phase, 'REVIEW_GROUP');
   advance(REVIEW_GROUP_MS); game.tick();
   assert.deepEqual(game.snapshot().reviewGroup?.playerIds, [bob.id, carol.id]);
@@ -234,19 +271,20 @@ test('fast approval enforces phase, roster and missing-answer rules and complete
   assert.throws(() => judge(alice.id, true), /before starting review/);
 });
 
-test('live fast approval keeps submissions open and skips judged answers when review starts', () => {
+test('closed fast approval skips judged answers when review starts', () => {
   const { game, alice, bob, carol, command, advance } = setup();
   command({ type: 'start' });
   const instance = game.snapshot().questionInstanceId!;
   game.submitAnswer(alice.id, instance, 'Private correct');
-  command({ type: 'judgeSubmission', playerId: alice.id, correct: true });
   advance(500);
   assert.equal(game.snapshot().phase, 'QUESTION_OPEN');
   assert.equal(game.snapshot().clockRunning, true);
   assert.equal(game.snapshot().clueElapsedMs, 500);
   game.submitAnswer(bob.id, instance, 'Private wrong');
-  command({ type: 'judgeSubmission', playerId: bob.id, correct: false });
   game.submitAnswer(carol.id, instance, 'Remaining answer');
+  command({ type: 'close' });
+  command({ type: 'judgeSubmission', playerId: alice.id, correct: true });
+  command({ type: 'judgeSubmission', playerId: bob.id, correct: false });
   assert.equal(alice.score, 250);
   assert.equal(bob.score, 0);
   assert.equal(JSON.stringify(game.snapshot(false, alice.id)).includes('Private'), false);
@@ -258,21 +296,21 @@ test('live fast approval keeps submissions open and skips judged answers when re
   assert.deepEqual(game.snapshot(true).hostSubmissions?.map((entry) => entry.correct), [true, false, null]);
 });
 
-test('undo of live approval restores judgments and preserves later submissions across close and review', () => {
+test('undo of closed fast approval restores judgments and preserves the frozen roster', () => {
   for (const correct of [true, false]) {
     for (const startReview of [true, false]) {
       const { game, alice, bob, carol, command, advance } = setup();
       command({ type: 'start' });
       const instance = game.snapshot().questionInstanceId!;
       game.submitAnswer(alice.id, instance, 'First');
-      command({ type: 'judgeSubmission', playerId: alice.id, correct: false });
       game.submitAnswer(bob.id, instance, 'Second');
-      command({ type: 'judgeSubmission', playerId: bob.id, correct });
       game.submitAnswer(carol.id, instance, 'Later submission');
       command({ type: 'close' });
+      command({ type: 'judgeSubmission', playerId: alice.id, correct: false });
+      command({ type: 'judgeSubmission', playerId: bob.id, correct });
       if (startReview) command({ type: 'startReview' });
       command({ type: 'undo' });
-      assert.equal(game.snapshot().phase, 'QUESTION_OPEN');
+      assert.equal(game.snapshot().phase, 'QUESTION_CLOSED');
       assert.equal(game.snapshot().submissionCount, 3);
       assert.equal(bob.score, 0);
       assert.deepEqual(game.snapshot(true).hostSubmissions?.map((entry) => entry.correct), [false, null, null]);
@@ -296,6 +334,8 @@ test('undo restores private correct, wrong and missing rulings even after review
     assert.equal(alice.score, outcome === 'correct' ? 250 : 0);
     assert.equal(game.snapshot(true).hostSubmissions?.[0].correct, outcome === 'correct');
     assert.equal(game.snapshot(true).scoreEvents.length, 1);
+    assert.equal(game.snapshot().phase, 'QUESTION_CLOSED');
+    command({ type: 'startReview' });
     advance(REVIEW_GROUP_MS); game.tick();
     assert.equal(game.snapshot().phase, 'NEXT_ROUND');
     command({ type: 'undo' });
@@ -345,6 +385,8 @@ test('paused submissions, reconnect, reset, undo and empty reviews preserve thei
   emptyTime += START_COUNTDOWN_MS;
   empty.tick();
   send({ type: 'close' });
+  assert.equal(empty.snapshot().phase, 'QUESTION_CLOSED');
+  send({ type: 'startReview' });
   assert.equal(empty.snapshot().phase, 'NEXT_ROUND');
   emptyTime += NEXT_ROUND_MS;
   empty.tick();

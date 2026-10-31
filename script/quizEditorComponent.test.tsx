@@ -326,7 +326,7 @@ test('media picker and library search, page, preview, upload and protect referen
 test('preview timeline matches typed deadlines, image reveal, media offsets and buzzer points', () => {
   const game = new GameEngine({ id: 42, title: 'Quiz', questions: [{
     id: 'one', type: 'text', mode: 'buzzer', question: 'Live', answer: 'LIVE SECRET',
-  }] }, undefined, serverSettingsSchema.parse({ typedAnswerGraceSeconds: 2 }));
+  }] }, undefined, serverSettingsSchema.parse({}));
   game.settings.pointDecayDelaySeconds = 0;
   const base = game.snapshot(true);
   const image = { id: 'c1283d6f-bdd5-4d28-99c1-f2b344406394', type: 'image' as const,
@@ -344,8 +344,8 @@ test('preview timeline matches typed deadlines, image reveal, media offsets and 
   assert.equal(atHalf.privateAnswer, undefined);
   assert.equal(JSON.stringify(atHalf).includes('LIVE SECRET'), false);
   const finished = previewSnapshot(base, preview, 15000);
-  assert.equal(finished.clueElapsedMs, 10000);
-  assert.equal(finished.revealProgress, 0.5);
+  assert.equal(finished.clueElapsedMs, 8000);
+  assert.equal(finished.revealProgress, 0.4);
   assert.equal(finished.clockRunning, false);
   assert.equal(finished.phase, 'QUESTION_CLOSED');
   const video = { ...image, type: 'video' as const, mode: 'buzzer' as const, media: 'media/video.mp4',

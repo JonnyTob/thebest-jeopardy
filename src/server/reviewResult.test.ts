@@ -30,6 +30,7 @@ function setup(last = false) {
   game.submitAnswer(bob.id, instance, 'Bob private');
   game.submitAnswer(carol.id, instance, 'Carol private');
   time += 1234;
+  send({ type: 'close' });
   return { game, alice, bob, carol, send, advance: (ms: number) => { time += ms; } };
 }
 
