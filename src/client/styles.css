@@ -133,14 +133,14 @@ code { color: var(--gold); overflow-wrap: anywhere; }
 .ruling-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .ruling-buttons button { padding: 18px 10px; }
 .action-divider { border-top: 1px solid #50316d; margin-top: 5px; }
-.point-bar { display: grid; gap: 8px; margin-top: auto; }
-.point-label { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
-.point-label > span { font-size: .65rem; font-weight: 650; letter-spacing: .08em; color: #c5aedb; }
-.point-label strong { font-size: 1.65rem; color: var(--gold); font-variant-numeric: tabular-nums; }
-.point-label strong small { font-size: .48em; }
-.point-track { height: 12px; background: #4e3069; border-radius: 100px; overflow: hidden; }
-.point-track > div { height: 100%; background: linear-gradient(90deg, #edbe58, #ffea8e); border-radius: inherit; transition: width .08s linear; }
-.point-meta { display: flex; justify-content: space-between; gap: 8px; font-size: .68rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.point-bar, .question-timer { display: grid; gap: 8px; margin-top: auto; }
+.point-label, .timer-label { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.point-label > span, .timer-label > span { font-size: .65rem; font-weight: 650; letter-spacing: .08em; color: #c5aedb; }
+.point-label strong, .timer-label strong { font-size: 1.65rem; color: var(--gold); font-variant-numeric: tabular-nums; }
+.point-label strong small, .timer-label strong small { font-size: .48em; }
+.point-track, .timer-track { height: 12px; background: #4e3069; border-radius: 100px; overflow: hidden; }
+.point-track > div, .timer-track > div { height: 100%; background: linear-gradient(90deg, #edbe58, #ffea8e); border-radius: inherit; transition: width .08s linear; }
+.point-meta, .timer-meta { display: flex; justify-content: space-between; gap: 8px; font-size: .68rem; color: var(--muted); font-variant-numeric: tabular-nums; }
 .submission-countdown strong { color: var(--gold); font-size: 1.45rem; font-variant-numeric: tabular-nums; }
 .admin-bottom-grid { display: grid; grid-template-columns: minmax(0, 2.4fr) minmax(240px, 1fr); gap: 22px; align-items: start; }
 .table-heading { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; }
@@ -315,6 +315,10 @@ td:last-child, th:last-child { padding-right: 0; }
 .buzzer-orb { width: clamp(16px, 2.6vw, 38px); height: clamp(16px, 2.6vw, 38px); border-radius: 50%; border: 2px solid currentColor; background: currentColor; box-shadow: inset 0 0 0 5px #241339; }
 .is-open .buzzer-status { color: var(--green); }
 .is-answering .buzzer-status { color: var(--gold); }
+.tv-question-points { flex: none; display: grid; gap: 3px; width: 100%; padding: clamp(5px, .7vh, 10px); border: 1px solid #806142; border-radius: 10px; background: #140c2477; }
+.tv-question-points span { color: #d7c2a5; font-size: clamp(.6rem, .8vw, .9rem); font-weight: 650; letter-spacing: .08em; }
+.tv-question-points strong { color: var(--gold); font-size: clamp(1.3rem, 2.4vw, 2.8rem); line-height: 1.1; font-variant-numeric: tabular-nums; }
+.tv-question-points small { font-size: .48em; }
 .answering-player { display: flex; flex: 1; min-height: 0; flex-direction: column; align-items: center; justify-content: center; gap: 10px; width: 100%; }
 .answering-player .avatar { width: clamp(60px, 8.5vw, 150px); height: auto; max-height: 40%; }
 .answering-player h2 { font-size: clamp(1rem, 2vw, 2.5rem); overflow-wrap: anywhere; }
@@ -411,11 +415,16 @@ td:last-child, th:last-child { padding-right: 0; }
   .tv-header .brand-mark { width: 26px; height: 26px; font-size: 1rem; }
   .clue-panel { gap: 6px; padding: 10px; }
   .clue-heading .eyebrow, .buzzer-footer, .tv-welcome > p { display: none; }
-  .point-label strong { font-size: 1.2rem; }
-  .point-bar { gap: 4px; }
-  .point-track { height: 8px; }
-  .buzzer-status { padding: 12px 0; gap: 8px; }
+  .point-label strong, .timer-label strong { font-size: 1.2rem; }
+  .point-bar, .question-timer { gap: 4px; }
+  .point-track, .timer-track { height: 8px; }
+  .buzzer-status { padding: 6px 0; gap: 4px; }
   .buzzer-orb { width: 20px; height: 20px; }
+  .tv-question-points strong { font-size: clamp(1.1rem, 4vh, 1.8rem); }
+  .buzzer-idle { gap: 6px; }
+  .giant-q { display: none; }
+  .answering-player { gap: 3px; }
+  .answering-player .avatar, .answering-player p { display: none; }
   .tv-leaderboard { grid-template-rows: 14px minmax(0, 1fr); gap: 4px; }
   .leader-card { flex-direction: row; gap: 8px; }
   .leader-card .avatar { max-height: 80%; }

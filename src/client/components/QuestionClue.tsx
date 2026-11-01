@@ -1,11 +1,10 @@
 import type { Player, ReviewGroup, Snapshot } from '../../shared/protocol';
 import { useRef, type CSSProperties } from 'react';
 import { REVIEW_GROUP_MS, REVIEW_RESULT_MS, BUZZ_CORRECT_ANSWER_MS } from '../../shared/game';
-import { Avatar, PointBar, countdownSeconds, questionTimerMs } from './Common';
+import { Avatar, countdownSeconds, questionTimerMs } from './Common';
 import { Media } from './Media';
 
 export function QuestionClue({ state }: { state: Snapshot }) {
-  const typed = state.question?.mode === 'typed';
   const reviewedPlayer = state.players.find((player) => player.id === state.review?.playerId);
   const answeringPlayer = state.phase === 'ANSWERING' ? state.players.find((player) => player.id === state.activePlayerId) : undefined;
   const buzzResult = state.phase === 'BUZZ_RESULT' ? state.buzzResult : null;
@@ -35,7 +34,6 @@ export function QuestionClue({ state }: { state: Snapshot }) {
       {answeringPlayer && <section className="review-overlay" aria-label="Player answering" aria-live="polite" aria-atomic="true">
         <span className="eyebrow">FIRST TO BUZZ</span>
         <div className="review-player"><Avatar id={answeringPlayer.avatarId} /><h2>{answeringPlayer.name}</h2></div>
-        <strong className="review-answer">{state.pointsAtBuzz} points</strong>
       </section>}
       {buzzResult && <section className="review-overlay" aria-label="Buzzer answer result" aria-live="polite" aria-atomic="true">
         <span className="eyebrow">BUZZER ANSWER</span>
@@ -45,16 +43,15 @@ export function QuestionClue({ state }: { state: Snapshot }) {
         {buzzResult.correct && state.revealedAnswer && <strong className="review-answer">Answer: {state.revealedAnswer}</strong>}
       </section>}
     </div>
-    {typed ? <div className="point-bar">
-      <div className="point-label"><span>TIME REMAINING</span><strong>{remainingSeconds} <small>s</small></strong></div>
-      <div className="point-track" role="progressbar" aria-label="Time remaining"
+    <div className="question-timer">
+      <div className="timer-label"><span>TIME REMAINING</span><strong>{remainingSeconds} <small>s</small></strong></div>
+      <div className="timer-track" role="progressbar" aria-label="Time remaining"
         aria-valuenow={Math.round(remainingPercent)} aria-valuemin={0} aria-valuemax={100}
         aria-valuetext={`${remainingSeconds} seconds remaining`}>
         <div style={{ width: `${remainingPercent}%` }} />
       </div>
-      <div className="point-meta"><strong>{state.question?.fixedPoints} fixed points</strong>
-        <span>{state.clockRunning ? 'Clock running' : 'Clock frozen'}</span></div>
-    </div> : <PointBar state={state} />}
+      <div className="timer-meta">{state.clockRunning ? 'Clock running' : 'Clock frozen'}</div>
+    </div>
   </>;
 }
 

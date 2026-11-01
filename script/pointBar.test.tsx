@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { GameEngine } from '../src/server/engine.js';
 
-test('buzzer shows one point decay bar and a separate numeric submission countdown', async () => {
+test('host point bar shows point decay and a separate numeric submission countdown', async () => {
   globalThis.document = { getElementById: () => ({ textContent: '{}' }) } as unknown as Document;
   const { PointBar } = await import('../src/client/components/Common.js');
   let time = 0;

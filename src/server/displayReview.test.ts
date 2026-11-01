@@ -87,7 +87,8 @@ test('TV review overlays the current player without replacing text or media clue
     assert.match(html, /Player answering/);
     assert.match(html, /FIRST TO BUZZ/);
     assert.match(html, /Alice/);
-    assert.match(html, /500 points/);
+    assert.doesNotMatch(html, /500 points/);
+    assert.match(html, /aria-label="Time remaining"/);
     assert.doesNotMatch(html, /SECRET|Buzzer answer result/);
     send({ type: 'judge', correct });
     html = renderToStaticMarkup(createElement(QuestionClue, { state: game.snapshot() }));

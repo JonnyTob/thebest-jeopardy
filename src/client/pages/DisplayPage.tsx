@@ -60,12 +60,15 @@ export function DisplayScreen({ state, connected, receivedAt, preview = false }:
       <aside className={`panel tv-buzzer ${lobby ? 'lobby-buzzer' : open ? 'is-open' : active ? 'is-answering' : ''}`}>
         <span className="eyebrow">{typed ? 'ANSWER STATUS' : 'BUZZER STATUS'}</span>
         <div className="buzzer-status"><span className="buzzer-orb" /><h2>{connected ? buzzerLabel(state) : 'RECONNECTING'}</h2></div>
+        {!preGame && !finished && state.question && <section className="tv-question-points" aria-label="Question points">
+          <span>{typed ? 'FIXED POINTS' : 'TIMED POINTS'}</span><strong>{state.currentPoints.toLocaleString()} <small>pts</small></strong>
+        </section>}
         {lobby ? <div className="lobby-join"><JoinLink compact /></div>
           : active ? <div className="answering-player"><Avatar id={active.avatarId} /><h2>{active.name}</h2>
           {state.buzzResult ? <><strong className={state.buzzResult.correct ? 'positive' : 'negative'}>
             {state.buzzResult.delta > 0 ? '+' : ''}{state.buzzResult.delta} points</strong>
             <p>{state.buzzResult.correct ? 'Next question coming up.' : 'Buzzers reopen after the result.'}</p></>
-            : <><strong>{state.pointsAtBuzz} points</strong><p>The floor is yours.</p></>}</div>
+            : <p>The floor is yours.</p>}</div>
           : <div className="buzzer-idle"><span className="giant-q">?</span><p>{group
             ? 'Fast approval results are being shown on the clue.' : typed
               ? `${state.submissionCount} of ${state.players.length} submitted` : state.phase === 'MEDIA_FINISH' ? 'Watch the rest of the clue. Buzzing is closed.' : open ? 'Know the answer? Make your move.' : 'Eyes on the next clue.'}</p></div>}

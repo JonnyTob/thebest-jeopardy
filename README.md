@@ -237,8 +237,10 @@ sharing the QR code.
   Minimum value and media ending do not close a question; its countdown does.
   Buzzer questions close at
   zero, while typed questions close submissions and begin review as appropriate.
-  Buzzer clues show one bar for point reduction and a numeric countdown until
-  buzzing closes. Video continues to its clip end even if buzzing closes first.
+  The TV's clue panel shows the remaining countdown and a decreasing time bar
+  for both modes; the right-hand panel labels the current question points
+  **Fixed points** for typed questions or **Timed points** for buzzer questions.
+  Video continues to its clip end even if buzzing closes first.
   Points may reach their minimum before the question closes, or remain above it
   when time runs out.
 - Pause/resume, close/skip, reveal, next, question reset, media restart, manual
@@ -391,7 +393,7 @@ Editor APIs require the host passcode when enabled; as with the rest of the app,
 plain HTTP on the LAN does not encrypt credentials or media.
 
 **Preview question** opens a TV-style overlay over the question editor,
-including unsaved edits, the timer or points bar, image reveal and media
+including unsaved edits, the countdown bar and question points, image reveal and media
 playback. It does not send anything to the TV or affect the game. It uses the
 running game's settings with saved quiz overrides and contains no simulated
 players. It is a snapshot: select **Refresh preview** to restart it, or
