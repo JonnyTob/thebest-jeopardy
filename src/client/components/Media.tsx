@@ -147,6 +147,7 @@ function Playback({ state, question }: { state: Snapshot; question: PublicQuesti
       }
     },
   };
+  const openEndCaption = question.mode === 'typed' ? 'Clip ended / submissions stay open' : 'Clip ended / buzzing stays open';
   return <div className="playback-clue">
     {question.type === 'video'
       ? <video {...mediaProps} playsInline ref={(element) => { mediaRef.current = element; }} />
@@ -154,7 +155,7 @@ function Playback({ state, question }: { state: Snapshot; question: PublicQuesti
         <div className="audio-clue"><span className="eyebrow">LISTEN CLOSELY</span>
           <canvas ref={canvasRef} width={600} height={220} aria-label="Audio frequency spectrum" />
           <span>{state.phase === 'MEDIA_FINISH' ? (ended ? 'Clip ended / buzzing closed' : 'Finishing the clue / buzzing closed')
-            : ended ? (state.phase === 'QUESTION_OPEN' ? 'Clip ended / buzzing stays open' : 'Clip ended')
+            : ended ? (state.phase === 'QUESTION_OPEN' ? openEndCaption : 'Clip ended')
               : state.displayClockRunning ? 'Listen. Recognize. Buzz.' : 'Playback paused'}</span>
         </div></>}
     {(needsUnlock || (question.type === 'audio' && question.visualizer?.enabled !== false && !visualizerReady)) && <button className="media-unlock primary" onClick={() => {
@@ -162,7 +163,7 @@ function Playback({ state, question }: { state: Snapshot; question: PublicQuesti
       if (state.displayClockRunning && !ended) play();
       else setNeedsUnlock(false);
     }}>Enable TV {question.type === 'audio' ? 'audio & visualizer' : 'playback'}</button>}
-    {ended && question.type === 'video' && <span className="media-caption">{state.phase === 'QUESTION_OPEN' ? 'Clip ended / buzzing stays open' : 'Clip ended'}</span>}
+    {ended && question.type === 'video' && <span className="media-caption">{state.phase === 'QUESTION_OPEN' ? openEndCaption : 'Clip ended'}</span>}
     {error && <div className="media-error" role="alert">{error}</div>}
   </div>;
 }
