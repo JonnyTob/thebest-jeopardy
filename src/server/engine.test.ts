@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { GameEngine } from './engine.js';
 import type { HostAction, Quiz } from '../shared/protocol.js';
 import { START_COUNTDOWN_MS, NEXT_ROUND_MS } from '../shared/game.js';
+import { quizArchiveSchema, toRuntimeQuiz } from '../shared/quizArchive.js';
 
 const quiz: Quiz = {
   id: 100001,
@@ -25,6 +26,41 @@ function setup() {
   };
   return { game, alice, bob, command, advance: (ms: number) => { time += ms; } };
 }
+
+test('only enabled questions play in order, and a quiz with none cannot start', () => {
+  const questions = Array.from({ length: 5 }, (_, index) => ({
+    id: randomUUID(), type: 'text', mode: 'buzzer', question: `Question ${index + 1}`,
+    answer: 'Answer', ...(index === 0 || index === 2 || index === 4 ? { enabled: false } : {}),
+  }));
+  const archive = quizArchiveSchema.parse({ schemaVersion: 1, quiz: { id: 42, title: 'Quiz' }, questions });
+  let time = 0;
+  const game = new GameEngine(toRuntimeQuiz(archive), () => time);
+  const send = (action: HostAction) => game.command({ id: randomUUID(), revision: game.revision, action });
+  assert.equal(game.snapshot().questionCount, 2);
+  send({ type: 'start' });
+  time += START_COUNTDOWN_MS;
+  game.tick();
+  assert.equal(game.snapshot().question?.id, questions[1].id);
+  assert.equal(game.snapshot().questionIndex, 0);
+  send({ type: 'reset' });
+  assert.equal(game.snapshot().question?.id, questions[1].id);
+  send({ type: 'close' });
+  send({ type: 'next' });
+  time += NEXT_ROUND_MS;
+  game.tick();
+  assert.equal(game.snapshot().question?.id, questions[3].id);
+  assert.equal(game.snapshot().questionIndex, 1);
+  send({ type: 'close' });
+  send({ type: 'next' });
+  assert.equal(game.snapshot().phase, 'GAME_FINISHED');
+
+  const disabled = quizArchiveSchema.parse({ ...archive, questions: archive.questions.map((entry) => ({ ...entry, enabled: false })) });
+  const empty = new GameEngine(toRuntimeQuiz(disabled));
+  assert.equal(empty.snapshot().questionCount, 0);
+  assert.throws(() => empty.command({ id: randomUUID(), revision: empty.revision, action: { type: 'start' } }),
+    /No questions are enabled/);
+  assert.equal(empty.snapshot().phase, 'LOBBY');
+});
 
 test('game-start countdown hides the first clue, rejects early play and opens once at the exact boundary', () => {
   for (const mode of ['buzzer', 'typed'] as const) {

@@ -32,3 +32,35 @@
 * Trainspotting
 * Pulp Fiction - clip
 * American Beauty - clip
+
+## Rebus
+
+* **U2** - Guinness + Dublin's Spire with Irish flag + four musician silhouettes.
+  Tagline: "An Edge helped them conquer the world stage."
+  Question: "Navn på vokalist" Answer: Bono.
+* **a-ha** - Norwegian flag + pencil sketch + motorcycle.
+  Tagline: "Three Norwegians stepped out of the sketchbook and into pop history."
+  Question: "Name the band." Answer: a-ha.
+* **Queen** - crown + planet Mercury + microphone.
+  Tagline: "Their frontman shared his name with a planet."
+  Question: "Name the band." Answer: Queen.
+* **Guns N' Roses** - revolver + roses + black top hat.
+  Tagline: "A top hat and a guitar helped define their look."
+  Question: "Name the band." Answer: Guns N' Roses.
+* **Nirvana** - baby swimming underwater + dollar bill on a hook + guitar.
+  Tagline: "A Seattle trio changed the sound of the 90s."
+  Question: "Name the band." Answer: Nirvana.
+* **Red Hot Chili Peppers** - red chili peppers + socks + California palm trees.
+  Tagline: "Four Californians turned up the heat."
+  Question: "Name the band." Answer: Red Hot Chili Peppers.
+  Alternative: replace the socks with four musician silhouettes for a clearer clue.
+* **The Prodigy** - ant + burning match + headphones.
+  Tagline: "An Essex act brought a new kind of fire to the dance floor."
+  Question: "Name the group." Answer: The Prodigy.
+  The ant refers to their symbol and the cover of *The Fat of the Land*.
+* **The Matrix** - red pill + falling green code + sunglasses.
+  Tagline: "One choice reveals a very different reality."
+  Question: "Name the movie." Answer: The Matrix.
+* **Cast Away** - deserted island + parcel + volleyball with a face.
+  Tagline: "His most loyal companion never said a word."
+  Question: "Name the movie." Answer: Cast Away.

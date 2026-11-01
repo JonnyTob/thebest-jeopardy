@@ -74,6 +74,11 @@ test('editor authorizes archive and media, detects stale writes, and protects lo
     assert.deepEqual(currentMedia.loadedReferences, [
       { file: 'media/old.png', kind: 'cover' }, { file: 'media/old.png', kind: 'question', questionIndex: 0 },
     ]);
+    application.engine.reloadQuiz(await storage.load(), application.engine.settings, {});
+    const reloadedMedia = await (await fetch(`${base}/media`, { headers })).json() as { loadedReferences: unknown };
+    assert.deepEqual(reloadedMedia.loadedReferences, [
+      { file: 'media/old.png', kind: 'cover' }, { file: uploaded.file, kind: 'question', questionIndex: 0 },
+    ]);
     assert.equal(JSON.parse(await readFile(storage.file, 'utf8')).quiz.title, 'Edited');
     assert.throws(() => setup.save(42, application.engine.settings), ArchiveConflictError);
     const deleteFile = (file: string) => fetch(`${base}/media`, { method: 'DELETE', headers: { ...headers,
@@ -84,6 +89,8 @@ test('editor authorizes archive and media, detects stale writes, and protects lo
     const savedRevision = (await saved.json() as { revision: string }).revision;
     changed.questions[0].media = 'media/old.png';
     assert.equal((await save(changed, savedRevision)).status, 200);
+    assert.equal((await deleteFile(uploaded.file)).status, 409);
+    application.engine.reloadQuiz(await storage.load(), application.engine.settings, {});
     assert.equal((await deleteFile(uploaded.file)).status, 200);
     const current = storage.readArchive();
     await writeFile(storage.file, JSON.stringify({ ...current.archive, quiz: { ...current.archive.quiz, title: 'External edit' } }));
@@ -93,6 +100,16 @@ test('editor authorizes archive and media, detects stale writes, and protects lo
     const beforeSetup = storage.readArchive();
     refreshedSetup.save(42, { ...application.engine.settings, title: 'Setup edit' });
     assert.throws(() => storage.saveArchive(beforeSetup.archive, beforeSetup.revision), ArchiveConflictError);
+    const beforeOptOut = storage.readArchive();
+    const disabled = { ...beforeOptOut.archive, questions: beforeOptOut.archive.questions.map((question) => ({ ...question, enabled: false })) };
+    assert.equal((await save(disabled, beforeOptOut.revision)).status, 200);
+    assert.equal(storage.readArchive().archive.questions[0].enabled, false);
+    assert.equal((await storage.load()).questions.length, 0);
+    assert.equal(application.engine.quiz.questions.length, 1, 'saving does not change the loaded game');
+    const beforeOptIn = storage.readArchive();
+    const enabled = { ...beforeOptIn.archive, questions: beforeOptIn.archive.questions.map((question) => ({ ...question, enabled: true })) };
+    assert.equal((await save(enabled, beforeOptIn.revision)).status, 200);
+    assert.equal((await storage.load()).questions.length, 1);
   } finally {
     await application.close();
     await rm(root, { recursive: true, force: true });

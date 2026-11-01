@@ -91,9 +91,10 @@ test('restart loads quiz and setup edits saved after server startup', async () =
   const root = await mkdtemp(path.join(os.tmpdir(), 'quiz-restart-'));
   const directory = path.join(root, '42');
   await mkdir(path.join(directory, 'media'), { recursive: true });
-  const archive: QuizArchive = { schemaVersion: 1, quiz: { id: 42, title: 'Original' }, questions: [{
-    id: randomUUID(), type: 'text', mode: 'buzzer', question: 'Old clue', answer: 'Old answer',
-  }] };
+  const archive: QuizArchive = { schemaVersion: 1, quiz: { id: 42, title: 'Original' }, questions: [
+    { id: randomUUID(), type: 'text', mode: 'buzzer', question: 'Old clue', answer: 'Old answer' },
+    { id: randomUUID(), type: 'text', mode: 'buzzer', question: 'Second clue', answer: 'Second answer' },
+  ] };
   await writeFile(path.join(directory, 'quiz.json'), JSON.stringify(archive));
   const storage = new ArchiveQuizStorage(root, 42);
   const application = await createApp({ storage, settingsStorage: new ArchiveQuizSettingsStorage(storage),
@@ -111,15 +112,31 @@ test('restart loads quiz and setup edits saved after server startup', async () =
     await connected;
     const { revision } = storage.readArchive();
     storage.saveArchive({ ...archive, quiz: { ...archive.quiz, title: 'Updated' },
-      questions: [{ ...archive.questions[0], question: 'New clue' }],
+      questions: [{ ...archive.questions[0], question: 'New clue' }, { ...archive.questions[1], enabled: false }],
       gameSetup: { startPoints: 700 } }, revision);
+    assert.equal(application.engine.quiz.questions.length, 2, 'saving does not change the loaded game');
     const result = await host.timeout(5000).emitWithAck('host:command', {
       id: randomUUID(), revision: application.engine.revision, action: { type: 'restartQuiz' },
     });
     assert.equal(result.ok, true);
     assert.equal(application.engine.quiz.questions[0].question, 'New clue');
+    assert.equal(application.engine.quiz.questions.length, 1);
+    assert.equal(storage.readArchive().archive.questions[1].enabled, false);
     assert.equal(application.engine.snapshot().settings.title, 'Updated');
     assert.equal(application.engine.snapshot().settings.startPoints, 700);
+    const saved = storage.readArchive();
+    storage.saveArchive({ ...saved.archive, questions: saved.archive.questions.map((question) => ({ ...question, enabled: false })) }, saved.revision);
+    const restarted = await host.timeout(5000).emitWithAck('host:command', {
+      id: randomUUID(), revision: application.engine.revision, action: { type: 'restartQuiz' },
+    });
+    assert.equal(restarted.ok, true);
+    assert.equal(application.engine.snapshot().questionCount, 0);
+    const start = await host.timeout(5000).emitWithAck('host:command', {
+      id: randomUUID(), revision: application.engine.revision, action: { type: 'start' },
+    });
+    assert.equal(start.ok, false);
+    if (!start.ok) assert.match(start.error, /No questions are enabled/);
+    assert.equal(application.engine.snapshot().phase, 'LOBBY');
   } finally {
     for (const socket of sockets) socket.disconnect();
     await application.close();

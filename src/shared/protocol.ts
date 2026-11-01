@@ -82,7 +82,7 @@ export const quizSchema = z.object({
   id: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
   title: z.string().trim().min(1).max(100),
   coverImage: localMedia.optional(),
-  questions: z.array(questionSchema).min(1).max(500),
+  questions: z.array(questionSchema).max(500),
 }).refine((quiz) => new Set(quiz.questions.map((q) => q.id)).size === quiz.questions.length,
   'Question IDs must be unique');
 export type Quiz = z.infer<typeof quizSchema>;

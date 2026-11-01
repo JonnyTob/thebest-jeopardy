@@ -360,7 +360,12 @@ awarded points, so use undo first if the scores should be reversed.
 Use **Quiz editor** in the host console to edit the currently configured quiz, or edit [quizzes/100001/quiz.json](./quizzes/100001/quiz.json) directly. Set `server.startupQuizId` in `settings.json` to select the quiz; `QUIZ_ID` overrides it. Set `QUIZ_DATA_DIR` to the archive directory (default `quizzes`). Each quiz lives in `<data directory>/<id>/quiz.json`, with its own files in `<id>/media/`. The ID in the JSON must match the folder name.
 
 The editor adds, duplicates, removes and reorders questions and manages quiz-local
-media. The question list labels each question as **Buzzer** or **Typed**. It saves
+media. The question list labels each question as **Buzzer** or **Typed**. Clear
+**Include question in quiz** to opt a question out without deleting it; opted-out
+questions are marked in the list and remain editable and previewable. Questions
+are included by default. As with other edits, the saved selection takes effect
+after the quiz is reloaded. You can save with every question opted out, but
+starting the quiz requires at least one enabled question. It saves
 only complete, valid quizzes; unfinished edits remain in the
 browser and are lost if discarded. Save writes to disk, but the running game
 continues using the quiz loaded at startup. **Restart the server to apply quiz
@@ -493,8 +498,13 @@ needed for the bundled quiz.
 Every question must explicitly set `"mode": "buzzer"` for the first-buzz flow, or
 `"mode": "typed"` for everyone to answer privately. There is no default mode:
 missing or invalid values stop quiz loading with a validation error. Existing
-quiz files with omitted modes must add `"mode": "buzzer"` to those questions. A typed
-question requires its own fixed point value. It may override the inherited
+quiz files with omitted modes must add `"mode": "buzzer"` to those questions.
+
+The optional `"enabled": false` excludes a question from play while retaining it
+in the archive; omit it or set it to `true` to include the question. Disabled
+questions must still satisfy the normal validation and media requirements.
+
+A typed question requires its own fixed point value. It may override the inherited
 countdown in seconds:
 
 ```json

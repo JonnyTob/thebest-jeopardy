@@ -60,7 +60,7 @@ export async function createApp(options: AppOptions) {
   app.disable('x-powered-by');
   app.use((_req, res, next) => { res.set('X-Content-Type-Options', 'nosniff'); next(); });
   if (options.storage instanceof ArchiveQuizStorage) {
-    app.use('/api/editor', editorRoutes(options.storage, quiz, options.passcode, serverSettings.requireAdminPasscode));
+    app.use('/api/editor', editorRoutes(options.storage, () => engine.quiz, options.passcode, serverSettings.requireAdminPasscode));
   }
   if (options.quizMediaRoot) {
     const mediaRoot = await realpath(options.quizMediaRoot);

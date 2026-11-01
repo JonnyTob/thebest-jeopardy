@@ -22,6 +22,7 @@ export const archiveGameSetupSchema = gameSetupOverridesSchema.omit({ title: tru
 export const archiveQuestionSchema = questionDefinitionSchema.safeExtend({
   id: z.uuid(),
   media: archiveMediaSchema.optional(),
+  enabled: z.boolean().optional(),
 });
 
 export const quizArchiveSchema = z.strictObject({
@@ -48,8 +49,9 @@ export type QuizArchive = z.infer<typeof quizArchiveSchema>;
 export type ArchiveQuestion = z.infer<typeof archiveQuestionSchema>;
 
 export function toRuntimeQuestion(question: ArchiveQuestion): Question {
+  const { enabled: _enabled, ...definition } = question;
   return questionSchema.parse({
-    ...question,
+    ...definition,
     id: question.id.toLowerCase(),
     ...(question.media !== undefined ? { media: '/media/quiz/' + question.media.slice('media/'.length) } : {}),
   });
@@ -60,6 +62,6 @@ export function toRuntimeQuiz(archive: QuizArchive): Quiz {
   return quizSchema.parse({
     ...archive.quiz,
     ...(archive.quiz.coverImage !== undefined ? { coverImage: mediaUrl(archive.quiz.coverImage) } : {}),
-    questions: archive.questions.map(toRuntimeQuestion),
+    questions: archive.questions.filter((question) => question.enabled !== false).map(toRuntimeQuestion),
   });
 }

@@ -120,6 +120,23 @@ test('canonical parsing preserves omitted defaults and relative paths; runtime n
   assert.equal('gameSetup' in runtime, false);
 });
 
+test('enabled defaults to included and opted-out questions remain in the archive but not the runtime quiz', () => {
+  const entries = [
+    { ...question(), id: '01283d6f-bdd5-4d28-99c1-f2b344406394', enabled: false },
+    { ...question(), id: '11283d6f-bdd5-4d28-99c1-f2b344406394' },
+    { ...question(), id: '21283d6f-bdd5-4d28-99c1-f2b344406394', enabled: false },
+    { ...question(), id: '31283d6f-bdd5-4d28-99c1-f2b344406394', enabled: true },
+    { ...question(), id: '41283d6f-bdd5-4d28-99c1-f2b344406394', enabled: false },
+  ];
+  const parsed = quizArchiveSchema.parse({ ...archive(), questions: entries });
+  assert.deepEqual(parsed.questions, entries);
+  const runtime = toRuntimeQuiz(parsed);
+  assert.deepEqual(runtime.questions.map((entry) => entry.id), [entries[1].id, entries[3].id]);
+  assert.ok(runtime.questions.every((entry) => !('enabled' in entry)));
+  assert.equal(archiveQuestionSchema.safeParse({ ...question(), enabled: 'false' }).success, false);
+  assert.deepEqual(toRuntimeQuiz(quizArchiveSchema.parse({ ...archive(), questions: [entries[0]] })).questions, []);
+});
+
 test('archive validates IDs, metadata, question counts, settings ranges and playback boundaries', () => {
   const repeated = [question(), { ...question(), id: question().id.toUpperCase() }];
   const duplicate = quizArchiveSchema.safeParse({ ...archive(), questions: repeated });

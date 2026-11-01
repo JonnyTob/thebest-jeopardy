@@ -216,6 +216,7 @@ export function QuizEditor({ passcode, onDirtyChange, gameState }: { passcode: s
           <button className={index === selected ? 'active' : ''} onClick={() => setSelected(index)}>
             <span className="editor-question-title">{q.keyword || q.question || 'Untitled question'}</span>
             <span className={`editor-question-mode ${q.mode}`}>{q.mode === 'typed' ? 'Typed' : 'Buzzer'}</span>
+            {q.enabled === false && <span className="editor-question-disabled">✕ Opted out</span>}
           </button></li>)}</ol>
         <div className="editor-actions"><button disabled={archive.questions.length >= 500} onClick={() => addQuestion(false)}>Add question</button>
           <button disabled={archive.questions.length >= 500} onClick={() => addQuestion(true)}>Duplicate</button>
@@ -228,6 +229,8 @@ export function QuizEditor({ passcode, onDirtyChange, gameState }: { passcode: s
           }}>Delete question</button></div>
       </div><div className="editor-fields"><div className="editor-question-heading"><h2>Question {selected + 1}</h2>
         <button className="small primary" ref={previewButton} type="button" onClick={openPreview}>Preview question</button></div>
+        <label className="editor-question-enabled"><input type="checkbox" checked={question.enabled !== false}
+          onChange={(event) => updateQuestion({ enabled: event.target.checked })} /> Include question in quiz</label>
         <label>Keyword (optional)<input value={question.keyword ?? ''} onChange={(event) => updateQuestion({ keyword: event.target.value || undefined })} /></label>
         <label>Question<textarea rows={1} value={question.question} onChange={(event) => updateQuestion({ question: event.target.value })} /></label>
         <label>Answer<textarea rows={1} value={question.answer} onChange={(event) => updateQuestion({ answer: event.target.value })} /></label>

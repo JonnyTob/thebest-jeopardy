@@ -389,6 +389,7 @@ export class GameEngine {
         break;
       case 'start':
         this.require(this.clue.phase === 'LOBBY', 'The game has already started.');
+        this.require(this.quiz.questions.length > 0, 'No questions are enabled. Enable at least one question in the quiz editor and reload the quiz.');
         this.clue.phase = 'STARTING';
         this.startCountdownAt = this.now();
         this.countdownId = randomUUID();

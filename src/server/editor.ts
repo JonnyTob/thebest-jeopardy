@@ -25,15 +25,13 @@ function referenced(quiz: { quiz: { coverImage?: string }; questions: { media?: 
   return quiz.quiz.coverImage === file || quiz.questions.some((question) => question.media === file);
 }
 
-export function editorRoutes(storage: ArchiveQuizStorage, quiz: Quiz, passcode: string, requirePasscode: boolean) {
+export function editorRoutes(storage: ArchiveQuizStorage, loadedQuiz: () => Quiz, passcode: string, requirePasscode: boolean) {
   const router = express.Router();
-  const runtime = { quiz: { coverImage: quiz.coverImage?.replace('/media/quiz/', 'media/') },
-    questions: quiz.questions.map((q) => ({ media: q.media?.replace('/media/quiz/', 'media/') })) };
-  const loadedReferences: LoadedMediaReference[] = [];
-  if (runtime.quiz.coverImage) loadedReferences.push({ file: runtime.quiz.coverImage, kind: 'cover' });
-  runtime.questions.forEach((question, questionIndex) => {
-    if (question.media) loadedReferences.push({ file: question.media, kind: 'question', questionIndex });
-  });
+  function runtimeReferences() {
+    const quiz = loadedQuiz();
+    return { quiz: { coverImage: quiz.coverImage?.replace('/media/quiz/', 'media/') },
+      questions: quiz.questions.map((q) => ({ media: q.media?.replace('/media/quiz/', 'media/') })) };
+  }
   const failures = new Map<string, { count: number; since: number }>();
   const expected = Buffer.from(passcode);
   router.use((req, res, next) => {
@@ -81,7 +79,15 @@ export function editorRoutes(storage: ArchiveQuizStorage, quiz: Quiz, passcode: 
     } catch (error) { fail(res, error); }
   });
   router.get('/media', (_req, res) => {
-    try { res.json({ files: mediaFiles(storage.mediaRoot), loadedReferences }); } catch (error) { fail(res, error); }
+    try {
+      const runtime = runtimeReferences();
+      const loadedReferences: LoadedMediaReference[] = [];
+      if (runtime.quiz.coverImage) loadedReferences.push({ file: runtime.quiz.coverImage, kind: 'cover' });
+      runtime.questions.forEach((question, questionIndex) => {
+        if (question.media) loadedReferences.push({ file: question.media, kind: 'question', questionIndex });
+      });
+      res.json({ files: mediaFiles(storage.mediaRoot), loadedReferences });
+    } catch (error) { fail(res, error); }
   });
   router.post('/media', express.raw({ type: 'application/octet-stream', limit: maxUpload }), (req, res) => {
     try {
@@ -112,7 +118,7 @@ export function editorRoutes(storage: ArchiveQuizStorage, quiz: Quiz, passcode: 
       if (typeof file !== 'string' || !mediaFiles(storage.mediaRoot).includes(file)) {
         res.status(404).json({ error: 'Media file not found.' }); return;
       }
-      if (referenced(storage.readArchive().archive, file) || referenced(runtime, file)) {
+      if (referenced(storage.readArchive().archive, file) || referenced(runtimeReferences(), file)) {
         res.status(409).json({ error: 'This file is referenced by the saved or currently loaded quiz and cannot be deleted.' }); return;
       }
       const full = path.join(storage.mediaRoot, file.slice('media/'.length));
