@@ -216,7 +216,7 @@ export function QuizEditor({ passcode, onDirtyChange, gameState }: { passcode: s
           <button className={index === selected ? 'active' : ''} onClick={() => setSelected(index)}>
             <span className="editor-question-title">{q.keyword || q.question || 'Untitled question'}</span>
             <span className={`editor-question-mode ${q.mode}`}>{q.mode === 'typed' ? 'Typed' : 'Buzzer'}</span>
-            {q.enabled === false && <span className="editor-question-disabled">✕ Opted out</span>}
+            {q.enabled === false && <span className="editor-question-disabled">✕ Out</span>}
           </button></li>)}</ol>
         <div className="editor-actions"><button disabled={archive.questions.length >= 500} onClick={() => addQuestion(false)}>Add question</button>
           <button disabled={archive.questions.length >= 500} onClick={() => addQuestion(true)}>Duplicate</button>

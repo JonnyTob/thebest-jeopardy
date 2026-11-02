@@ -23,7 +23,8 @@
       "fixedPoints": 250,
       "timerSeconds": 10,
       "text": "Which planet in our solar system is known as the Red Planet?",
-      "answer": "Mars"
+      "answer": "Mars",
+      "enabled": false
     },
     {
       "id": "5552d069-9906-4e98-9804-92bf81f033e7",

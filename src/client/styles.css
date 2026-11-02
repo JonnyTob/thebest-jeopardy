@@ -176,9 +176,9 @@ td:last-child, th:last-child { padding-right: 0; }
 .editor-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .editor-question-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; }
 .editor-list { padding-left: 1.5rem; display: grid; gap: 5px; }
-.editor-list button { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; text-align: left; }
+.editor-list button { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; }
 .editor-list button.active { background: #59308a; border-color: #b287d6; }
-.editor-question-title { min-width: 0; overflow-wrap: anywhere; }
+.editor-question-title { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .editor-question-mode { flex: none; padding: 2px 6px; border-radius: 6px; font-size: .65rem; white-space: nowrap; }
 .editor-question-mode.buzzer { color: #ffe39a; background: #674a0f; }
 .editor-question-mode.typed { color: #bde9d9; background: #144536; }
