@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
-import { pointsAt, rankPlayers, START_COUNTDOWN_MS, NEXT_ROUND_MS, REVIEW_RESULT_MS, REVIEW_GROUP_MS, BUZZ_RESULT_MS, BUZZ_CORRECT_ANSWER_MS } from '../shared/game.js';
+import { pointsAt, wrongBuzzPenalty, rankPlayers, START_COUNTDOWN_MS, NEXT_ROUND_MS, REVIEW_RESULT_MS, REVIEW_GROUP_MS, BUZZ_RESULT_MS, BUZZ_CORRECT_ANSWER_MS } from '../shared/game.js';
 import { serverSettingsSchema, type HostCommand, type JoinRequest, type Phase, type Player, type Quiz, type ScoreEvent, type Settings, type Snapshot, type ServerSettings, type TypedReview } from '../shared/protocol.js';
 
 export class GameError extends Error {}
@@ -19,6 +19,7 @@ interface ClueState {
   mediaVersion: number;
   questionInstanceId: string | null;
   submissions: TypedReview[];
+  submissionsClosed: boolean;
   reviewQueue: TypedReview[];
   reviewIndex: number;
 }
@@ -33,7 +34,7 @@ function emptyClue(): ClueState {
     phase: 'LOBBY', questionIndex: -1, elapsedMs: 0, startedAt: null,
     paused: false, lockedOutIds: [], lockedOutUntil: {}, activePlayerId: null, pointsAtBuzz: null,
     mediaOffsetSeconds: 0, mediaVersion: 0,
-    questionInstanceId: null, submissions: [], reviewQueue: [], reviewIndex: 0,
+    questionInstanceId: null, submissions: [], submissionsClosed: false, reviewQueue: [], reviewIndex: 0,
   };
 }
 
@@ -48,6 +49,7 @@ export class GameEngine {
   private processed = new Set<string>();
   private startCountdownAt: number | null = null;
   private nextRoundAt: number | null = null;
+  private typeBuzzIntroAt: number | null = null;
   private countdownId: string | null = null;
   private reviewResultAt: number | null = null;
   private reviewResultId: string | null = null;
@@ -79,7 +81,19 @@ export class GameEngine {
   }
 
   tick() {
-    if (this.clue.phase === 'STARTING' && this.startCountdownAt !== null
+    if (this.clue.phase === 'TYPE_BUZZ_INTRO' && this.typeBuzzIntroAt !== null
+      && this.now() - this.typeBuzzIntroAt >= this.serverSettings.typeBuzzAnnouncementSeconds * 1000) {
+      this.typeBuzzIntroAt = null;
+      if (this.clue.questionIndex < 0) {
+        this.clue.phase = 'STARTING';
+        this.startCountdownAt = this.now();
+      } else {
+        this.clue.phase = 'NEXT_ROUND';
+        this.nextRoundAt = this.now();
+      }
+      this.countdownId = randomUUID();
+      this.revision++;
+    } else if (this.clue.phase === 'STARTING' && this.startCountdownAt !== null
       && this.now() - this.startCountdownAt >= START_COUNTDOWN_MS) {
       this.startCountdownAt = null;
       this.open(0);
@@ -115,7 +129,7 @@ export class GameEngine {
           this.mediaFinishAt = this.now();
           this.mediaFinishDurationMs = remaining;
           this.mediaFinishElapsedMs = 0;
-        } else this.beginNextRound();
+        } else if (this.quiz.questions[this.clue.questionIndex]?.mode !== 'type-and-buzz') this.beginNextRound();
       } else {
         this.clue.activePlayerId = null;
         this.clue.pointsAtBuzz = null;
@@ -145,7 +159,8 @@ export class GameEngine {
 
   private submissionDeadline(): number {
     const question = this.quiz.questions[this.clue.questionIndex];
-    return question ? (question.timerSeconds ?? this.settings.questionTimerSeconds) * 1000 : Infinity;
+    return question ? ((question.timerSeconds ?? this.settings.questionTimerSeconds)
+      + (question.mode === 'type-and-buzz' ? question.typingSeconds ?? 0 : 0)) * 1000 : Infinity;
   }
 
   private beginNextRound() {
@@ -163,9 +178,15 @@ export class GameEngine {
       this.nextRoundAt = null;
       this.countdownId = null;
     } else {
-      this.clue.phase = 'NEXT_ROUND';
-      this.nextRoundAt = this.now();
-      this.countdownId = randomUUID();
+      if (this.quiz.questions[this.clue.questionIndex + 1]?.mode === 'type-and-buzz') {
+        this.clue.phase = 'TYPE_BUZZ_INTRO';
+        this.typeBuzzIntroAt = this.now();
+        this.countdownId = null;
+      } else {
+        this.clue.phase = 'NEXT_ROUND';
+        this.nextRoundAt = this.now();
+        this.countdownId = randomUUID();
+      }
     }
   }
 
@@ -198,7 +219,8 @@ export class GameEngine {
     this.mediaFinishElapsedMs = this.visualFinishElapsed();
     this.mediaFinishAt = null;
     this.mediaFinishDurationMs = null;
-    this.beginNextRound();
+    if (this.quiz.questions[this.clue.questionIndex]?.mode === 'type-and-buzz') this.clue.phase = 'QUESTION_CLOSED';
+    else this.beginNextRound();
   }
 
   private clearMediaFinish() {
@@ -256,11 +278,16 @@ export class GameEngine {
     this.require(this.clue.phase === 'QUESTION_OPEN' && !this.clue.paused, 'Buzzers are not open.');
     this.require(this.elapsed() < this.submissionDeadline(), 'Buzzers are closed. The timer has ended.');
     this.require(this.quiz.questions[this.clue.questionIndex]?.mode !== 'typed', 'This question requires a typed answer.');
+    const question = this.quiz.questions[this.clue.questionIndex];
+    this.require(question?.mode !== 'type-and-buzz' || this.clue.submissionsClosed || this.elapsed() >= (question.typingSeconds ?? 0) * 1000
+      || this.clue.submissions.some((entry) => entry.playerId === playerId),
+      'Buzzing opens after the typing window.');
     this.require(!this.isLockedOut(playerId), this.settings.lockoutSeconds > 0
       ? 'You are locked out until your countdown ends.' : 'You are locked out for this question.');
+    if (question?.mode === 'type-and-buzz') this.closeSubmissions();
     this.freeze();
     this.clue.activePlayerId = playerId;
-    this.clue.pointsAtBuzz = pointsAt(this.clue.elapsedMs, this.settings);
+    this.clue.pointsAtBuzz = question?.mode === 'type-and-buzz' ? question.buzzPoints! : pointsAt(this.clue.elapsedMs, this.settings);
     this.clue.phase = 'ANSWERING';
     this.revision++;
   }
@@ -269,7 +296,8 @@ export class GameEngine {
     this.require(this.players.get(playerId)?.connected, 'Join the game before answering.');
     this.require(this.clue.phase === 'QUESTION_OPEN' && !this.clue.paused, 'Submissions are not open.');
     this.require(this.elapsed() < this.submissionDeadline(), 'Submissions are not open. The timer has ended.');
-    this.require(this.quiz.questions[this.clue.questionIndex]?.mode === 'typed', 'This question does not accept typed answers.');
+    this.require(this.quiz.questions[this.clue.questionIndex]?.mode !== 'buzzer', 'This question does not accept typed answers.');
+    this.require(!this.clue.submissionsClosed, 'Submissions are closed.');
     this.require(instanceId === this.clue.questionInstanceId, 'This question has changed. Check the current question.');
     const answer = value.trim();
     this.require(answer.length > 0 && answer.length <= this.settings.maxAnswerLength,
@@ -292,8 +320,9 @@ export class GameEngine {
       phase: 'QUESTION_OPEN', questionIndex: index, elapsedMs: 0, startedAt: this.now(),
       paused: false, lockedOutIds: [], lockedOutUntil: {}, activePlayerId: null, pointsAtBuzz: null,
       mediaOffsetSeconds: 0, mediaVersion: this.clue.mediaVersion + 1,
-      questionInstanceId: randomUUID(), submissions: [], reviewQueue: [], reviewIndex: 0,
+      questionInstanceId: randomUUID(), submissions: [], submissionsClosed: false, reviewQueue: [], reviewIndex: 0,
     };
+    this.typeBuzzIntroAt = null;
   }
 
   private close() {
@@ -311,14 +340,19 @@ export class GameEngine {
         this.mediaFinishElapsedMs = 0;
       }
     }
-    if (this.quiz.questions[this.clue.questionIndex]?.mode === 'typed') {
+    if (this.quiz.questions[this.clue.questionIndex]?.mode !== 'buzzer') this.closeSubmissions();
+    this.rank();
+  }
+
+  private closeSubmissions() {
+    if (!this.clue.submissionsClosed) {
+      this.clue.submissionsClosed = true;
       const submitted = new Set(this.clue.submissions.map((entry) => entry.playerId));
       this.clue.reviewQueue = [...structuredClone(this.clue.submissions),
         ...[...this.players.values()].filter((player) => !submitted.has(player.id))
           .sort((a, b) => a.joinedOrder - b.joinedOrder)
           .map((player) => ({ playerId: player.id, answer: null, correct: null }))];
     }
-    this.rank();
   }
 
   private saveScore(player: Player, delta: number, description: string) {
@@ -374,6 +408,8 @@ export class GameEngine {
     this.require(command.revision === this.revision, 'Game state changed. Review the latest state and try again.');
     this.require(this.clue.phase !== 'STARTING' || command.action.type === 'restartQuiz', 'Wait for the game-start countdown to finish.');
     this.require(this.clue.phase !== 'NEXT_ROUND' || command.action.type === 'undo' || command.action.type === 'restartQuiz', 'Wait for the next-round transition to finish.');
+    this.require(this.clue.phase !== 'TYPE_BUZZ_INTRO' || command.action.type === 'restartQuiz'
+      || (command.action.type === 'undo' && this.clue.questionIndex >= 0), 'Wait for the rules introduction to finish.');
     this.require(this.clue.phase !== 'BUZZ_RESULT' || ['undo', 'reset', 'restartQuiz'].includes(command.action.type),
       'Wait for the buzzer result before taking that action.');
     this.require(this.clue.phase !== 'MEDIA_FINISH' || ['undo', 'reset', 'restartQuiz', 'restartMedia', 'skipMedia'].includes(command.action.type),
@@ -390,13 +426,18 @@ export class GameEngine {
       case 'start':
         this.require(this.clue.phase === 'LOBBY', 'The game has already started.');
         this.require(this.quiz.questions.length > 0, 'No questions are enabled. Enable at least one question in the quiz editor and reload the quiz.');
-        this.clue.phase = 'STARTING';
-        this.startCountdownAt = this.now();
-        this.countdownId = randomUUID();
+        if (this.quiz.questions[0].mode === 'type-and-buzz') {
+          this.clue.phase = 'TYPE_BUZZ_INTRO';
+          this.typeBuzzIntroAt = this.now();
+        } else {
+          this.clue.phase = 'STARTING';
+          this.startCountdownAt = this.now();
+          this.countdownId = randomUUID();
+        }
         break;
       case 'next':
         this.require(['QUESTION_CLOSED', 'REVIEW_COMPLETE', 'ANSWER_REVEALED'].includes(this.clue.phase), 'Close the current question before advancing.');
-        this.require(this.quiz.questions[this.clue.questionIndex]?.mode !== 'typed' || this.clue.phase !== 'QUESTION_CLOSED',
+        this.require(this.quiz.questions[this.clue.questionIndex]?.mode === 'buzzer' || this.clue.phase !== 'QUESTION_CLOSED',
           'Review all answers before advancing.');
         this.beginNextRound();
         break;
@@ -416,17 +457,17 @@ export class GameEngine {
         break;
       case 'reveal':
         this.require(this.clue.phase === 'QUESTION_CLOSED' || this.clue.phase === 'REVIEW_COMPLETE', 'Close the question before revealing its answer.');
-        this.require(this.quiz.questions[this.clue.questionIndex]?.mode !== 'typed' || this.clue.phase === 'REVIEW_COMPLETE',
+        this.require(this.quiz.questions[this.clue.questionIndex]?.mode === 'buzzer' || this.clue.phase === 'REVIEW_COMPLETE',
           'Review all answers before revealing the answer.');
         this.clue.phase = 'ANSWER_REVEALED';
         break;
       case 'startReview':
-        this.require(this.clue.phase === 'QUESTION_CLOSED' && this.quiz.questions[this.clue.questionIndex]?.mode === 'typed',
+        this.require(this.clue.phase === 'QUESTION_CLOSED' && this.quiz.questions[this.clue.questionIndex]?.mode !== 'buzzer',
           'Close typed-answer submissions before starting review.');
         this.beginReview();
         break;
       case 'judgeSubmission': {
-        this.require(this.clue.phase === 'QUESTION_CLOSED' && this.quiz.questions[this.clue.questionIndex]?.mode === 'typed',
+        this.require(this.clue.phase === 'QUESTION_CLOSED' && this.quiz.questions[this.clue.questionIndex]?.mode !== 'buzzer',
           'Fast approval requires closed typed-answer submissions before starting review.');
         this.judgeTypedAnswer(this.clue.reviewQueue.find((entry) => entry.playerId === action.playerId), action.correct);
         break;
@@ -455,6 +496,7 @@ export class GameEngine {
         this.scoreEvents = [];
         this.startCountdownAt = null;
         this.nextRoundAt = null;
+        this.typeBuzzIntroAt = null;
         this.countdownId = null;
         this.clearReviewResult();
         this.reviewGroup = null;
@@ -481,7 +523,7 @@ export class GameEngine {
           'No player is currently answering.');
         const player = this.players.get(this.clue.activePlayerId);
         this.require(player, 'Answering player not found.');
-        const delta = action.correct ? this.clue.pointsAtBuzz : -this.clue.pointsAtBuzz;
+        const delta = action.correct ? this.clue.pointsAtBuzz : -wrongBuzzPenalty(this.clue.pointsAtBuzz);
         this.saveScore(player, delta,
           `${player.name}: ${action.correct ? 'correct' : 'wrong'}`);
         const at = this.now();
@@ -506,6 +548,7 @@ export class GameEngine {
         const entry = this.history.pop();
         this.require(entry, 'There is no score change to undo for this question.');
         this.nextRoundAt = null;
+        this.typeBuzzIntroAt = null;
         this.countdownId = null;
         this.clearReviewResult();
         this.reviewGroup = null;
@@ -514,7 +557,7 @@ export class GameEngine {
         const submissions = this.clue.submissions;
         this.clue = { ...entry.clue, startedAt: entry.clue.startedAt === null ? null : this.now(),
           mediaVersion: this.clue.mediaVersion + 1 };
-        if (this.clue.phase === 'QUESTION_OPEN' && this.quiz.questions[this.clue.questionIndex]?.mode === 'typed') {
+        if (this.clue.phase === 'QUESTION_OPEN' && this.quiz.questions[this.clue.questionIndex]?.mode !== 'buzzer') {
           const previous = new Map(this.clue.submissions.map((submission) => [submission.playerId, submission]));
           // Retain answers received since the score operation, but restore the
           // saved judgments so undo cannot leave a reverted award marked correct.
@@ -533,7 +576,7 @@ export class GameEngine {
       case 'removePlayer':
         this.require(!this.isActive(), 'Remove players between questions.');
         this.require(this.clue.phase !== 'REVIEW' && !(this.clue.phase === 'QUESTION_CLOSED'
-          && this.quiz.questions[this.clue.questionIndex]?.mode === 'typed'), 'Remove players after answer review.');
+          && this.quiz.questions[this.clue.questionIndex]?.mode !== 'buzzer'), 'Remove players after answer review.');
         this.require(this.players.has(action.playerId), 'Player not found.');
         this.players.delete(action.playerId);
         this.history = [];
@@ -546,7 +589,8 @@ export class GameEngine {
   }
 
   snapshot(host = false, playerId?: string): Snapshot {
-    const question = this.quiz.questions[this.clue.questionIndex];
+    const questionIndex = this.clue.phase === 'TYPE_BUZZ_INTRO' ? this.clue.questionIndex + 1 : this.clue.questionIndex;
+    const question = this.quiz.questions[questionIndex];
     const elapsed = this.elapsed();
     const now = this.now();
     const displayElapsed = elapsed + this.visualFinishElapsed();
@@ -554,7 +598,8 @@ export class GameEngine {
       : Math.max(0, this.mediaFinishDurationMs - (now - this.mediaFinishAt));
     const publicQuestion = question ? {
       id: question.id, type: question.type, question: question.question, text: question.text,
-      mode: question.mode, fixedPoints: question.fixedPoints, timerSeconds: question.timerSeconds,
+      mode: question.mode, fixedPoints: question.fixedPoints, buzzPoints: question.buzzPoints,
+      typingSeconds: question.typingSeconds, timerSeconds: question.timerSeconds,
       media: question.media, reveal: question.reveal, playback: question.playback, visualizer: question.visualizer,
     } : null;
     return {
@@ -563,13 +608,15 @@ export class GameEngine {
         : Math.max(0, START_COUNTDOWN_MS - (now - this.startCountdownAt)),
       nextRoundCountdownMs: this.nextRoundAt === null ? null
         : Math.max(0, NEXT_ROUND_MS - (now - this.nextRoundAt)),
+      typeBuzzIntroMs: this.typeBuzzIntroAt === null ? null
+        : Math.max(0, this.serverSettings.typeBuzzAnnouncementSeconds * 1000 - (now - this.typeBuzzIntroAt)),
       countdownId: this.countdownId,
       serverSettings: { ...this.serverSettings },
       coverImage: this.quiz.coverImage ?? null,
-      questionIndex: this.clue.questionIndex, questionCount: this.quiz.questions.length,
+      questionIndex, questionCount: this.quiz.questions.length,
       question: publicQuestion,
       revealedAnswer: this.clue.phase === 'ANSWER_REVEALED' || (this.clue.phase === 'BUZZ_RESULT' && this.buzzResult?.correct)
-        || (this.clue.phase === 'QUESTION_CLOSED' && question?.mode === 'typed') ? question.answer : null,
+        || (this.clue.phase === 'QUESTION_CLOSED' && question?.mode !== 'buzzer') ? question?.answer ?? null : null,
       ...(host && question ? { privateAnswer: question.answer } : {}),
       players: [...this.players.values()].map((p) => ({ ...p })),
       leaderboardIds: [...this.leaderboardIds],
@@ -579,7 +626,8 @@ export class GameEngine {
           (this.buzzResult?.playerId === id && !this.buzzResult.correct
             ? Math.max(0, this.buzzResult.at + BUZZ_RESULT_MS - now) : 0)])),
       activePlayerId: this.clue.activePlayerId, pointsAtBuzz: this.clue.pointsAtBuzz,
-      currentPoints: question?.mode === 'typed' ? question.fixedPoints ?? 0 : this.clue.pointsAtBuzz ?? pointsAt(elapsed, this.settings),
+      currentPoints: question?.mode === 'typed' ? question.fixedPoints ?? 0 : question?.mode === 'type-and-buzz'
+        ? question.buzzPoints ?? 0 : this.clue.pointsAtBuzz ?? pointsAt(elapsed, this.settings),
       clueElapsedMs: elapsed, clockRunning: this.clue.startedAt !== null, paused: this.clue.paused,
       displayElapsedMs: displayElapsed,
       displayClockRunning: this.clue.startedAt !== null || (this.mediaFinishAt !== null && (finishRemaining === null || finishRemaining > 0)),
@@ -592,6 +640,7 @@ export class GameEngine {
       scoreEvents: host ? structuredClone(this.scoreEvents) : [],
       questionInstanceId: this.clue.questionInstanceId,
       submissionCount: this.clue.submissions.length,
+      submissionsClosed: this.clue.submissionsClosed,
       mySubmitted: !!playerId && this.clue.submissions.some((entry) => entry.playerId === playerId),
       buzzResult: this.buzzResult === null ? null : {
         id: this.buzzResult.id, playerId: this.buzzResult.playerId, correct: this.buzzResult.correct,

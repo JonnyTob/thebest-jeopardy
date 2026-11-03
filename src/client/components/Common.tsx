@@ -53,6 +53,7 @@ export function buzzerLabel(state: Snapshot): string {
   if (state.phase === 'LOBBY') return 'WAITING TO START';
   if (state.phase === 'STARTING') return 'GET READY';
   if (state.phase === 'NEXT_ROUND') return 'NEXT ROUND';
+  if (state.phase === 'TYPE_BUZZ_INTRO') return 'TYPE + BUZZ';
   if (state.phase === 'GAME_FINISHED') return 'FINAL SCORES';
   if (state.phase === 'ANSWERING') return 'PLAYER ANSWERING';
   if (state.phase === 'BUZZ_RESULT') return state.buzzResult?.correct ? 'CORRECT ANSWER' : 'WRONG ANSWER';
@@ -61,7 +62,14 @@ export function buzzerLabel(state: Snapshot): string {
   if (state.phase === 'REVIEW') return 'REVIEWING ANSWERS';
   if (state.phase === 'REVIEW_COMPLETE') return 'REVIEW COMPLETE';
   if (state.paused) return 'HOST PAUSED';
-  if (state.phase === 'QUESTION_OPEN') return state.question?.mode === 'typed' ? 'ANSWERS OPEN' : 'BUZZ NOW';
+  if (state.phase === 'QUESTION_OPEN') {
+    if (state.question?.mode === 'typed') return 'ANSWERS OPEN';
+    if (state.question?.mode === 'type-and-buzz') {
+      if (!state.submissionsClosed && state.clueElapsedMs < (state.question.typingSeconds ?? 0) * 1000) return 'TYPE, THEN BUZZ';
+      return state.submissionsClosed ? 'BUZZ NOW' : 'TYPE OR BUZZ';
+    }
+    return 'BUZZ NOW';
+  }
   return 'QUESTION CLOSED';
 }
 
@@ -70,7 +78,8 @@ export function nextRoundCountdownText(remainingMs: number | null): string {
 }
 
 export function questionTimerMs(state: Snapshot): number {
-  return Math.max(0, state.question?.timerSeconds ?? state.settings.questionTimerSeconds) * 1000;
+  return Math.max(0, (state.question?.timerSeconds ?? state.settings.questionTimerSeconds)
+    + (state.question?.mode === 'type-and-buzz' ? state.question.typingSeconds ?? 0 : 0)) * 1000;
 }
 
 export function countdownSeconds(remainingMs: number): string {

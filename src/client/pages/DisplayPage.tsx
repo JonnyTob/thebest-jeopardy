@@ -4,7 +4,7 @@ import { QuestionClue } from '../components/QuestionClue';
 import { QuizCover } from '../components/QuizCover';
 import { CountdownSound } from '../components/CountdownSound';
 import { branding } from '../branding';
-import { REVIEW_GROUP_MS, REVIEW_RESULT_MS, startCountdownText } from '../../shared/game';
+import { REVIEW_GROUP_MS, REVIEW_RESULT_MS, startCountdownText, wrongBuzzPenalty } from '../../shared/game';
 import type { Snapshot } from '../../shared/protocol';
 
 export function DisplayPage() {
@@ -30,6 +30,8 @@ export function DisplayScreen({ state, connected, receivedAt, preview = false }:
   const open = state.phase === 'QUESTION_OPEN' && !state.paused && connected;
   const winner = finished ? players[0] : null;
   const typed = state.question?.mode === 'typed';
+  const combined = state.question?.mode === 'type-and-buzz';
+  const intro = state.phase === 'TYPE_BUZZ_INTRO';
   const group = state.phase === 'REVIEW_GROUP' ? state.reviewGroup : null;
 
   return <main className="tv-shell">
@@ -55,23 +57,24 @@ export function DisplayScreen({ state, connected, receivedAt, preview = false }:
           : finished ? <div className="tv-welcome"><span className="eyebrow">OUR {branding.name.toUpperCase()} CHAMPION</span>
             {winner ? <><Avatar id={winner.avatarId} /><h1>{winner.name}</h1><strong className="winner-score">{winner.score.toLocaleString()} points</strong></>
               : <h1>Thanks for playing!</h1>}<p>Same time next quiz?</p></div>
-            : <QuestionClue state={state} />}
+            : intro || (preview && nextRound) ? <div className="tv-welcome"><h1>Get ready to play</h1></div> : <QuestionClue state={state} />}
       </div>
       <aside className={`panel tv-buzzer ${lobby ? 'lobby-buzzer' : open ? 'is-open' : active ? 'is-answering' : ''}`}>
         <span className="eyebrow">{typed ? 'ANSWER STATUS' : 'BUZZER STATUS'}</span>
         <div className="buzzer-status"><span className="buzzer-orb" /><h2>{connected ? buzzerLabel(state) : 'RECONNECTING'}</h2></div>
         {!preGame && !finished && state.question && <section className="tv-question-points" aria-label="Question points">
-          <span>{typed ? 'FIXED POINTS' : 'TIMED POINTS'}</span><strong>{state.currentPoints.toLocaleString()} <small>pts</small></strong>
+          <span>{combined ? 'BUZZER POINTS' : typed ? 'FIXED POINTS' : 'TIMED POINTS'}</span><strong>{state.currentPoints.toLocaleString()} <small>pts</small></strong>
+          {combined && <span>TYPE FOR {state.question.fixedPoints} POINTS</span>}
         </section>}
         {lobby ? <div className="lobby-join"><JoinLink compact /></div>
           : active ? <div className="answering-player"><Avatar id={active.avatarId} /><h2>{active.name}</h2>
           {state.buzzResult ? <><strong className={state.buzzResult.correct ? 'positive' : 'negative'}>
             {state.buzzResult.delta > 0 ? '+' : ''}{state.buzzResult.delta} points</strong>
-            <p>{state.buzzResult.correct ? 'Next question coming up.' : 'Buzzers reopen after the result.'}</p></>
+            <p>{state.buzzResult.correct ? combined ? 'Typed answer review follows.' : 'Next question coming up.' : 'Buzzers reopen after the result.'}</p></>
             : <p>The floor is yours.</p>}</div>
           : <div className="buzzer-idle"><span className="giant-q">?</span><p>{group
             ? 'Fast approval results are being shown on the clue.' : typed
-              ? `${state.submissionCount} of ${state.players.length} submitted` : state.phase === 'MEDIA_FINISH' ? 'Watch the rest of the clue. Buzzing is closed.' : open ? 'Know the answer? Make your move.' : 'Eyes on the next clue.'}</p></div>}
+              ? `${state.submissionCount} of ${state.players.length} submitted` : combined && open ? `${state.submissionCount} submitted. ${state.submissionsClosed ? 'Typing closed.' : 'Typing closes on the first buzz.'}` : state.phase === 'MEDIA_FINISH' ? 'Watch the rest of the clue. Buzzing is closed.' : open ? 'Know the answer? Make your move.' : 'Eyes on the next clue.'}</p></div>}
         {!preGame && <div className="buzzer-footer"><span>{state.phase === 'MEDIA_FINISH' ? 'FINISHING CLUE / SCORE FROZEN' : state.clockRunning ? 'CLUE PLAYING' : 'CLUE PAUSED'}</span>
           <small>{state.phase === 'MEDIA_FINISH' ? 'Buzzing is closed' : group ? 'Watch the group results' : typed && state.phase !== 'QUESTION_OPEN' ? 'Submissions closed / watch the TV' : typed ? 'Type your answer on your phone' : active ? 'No rush. Answer out loud.' : open ? 'First buzz takes the floor' : 'The gamemaster has control'}</small></div>}
       </aside>
@@ -98,6 +101,14 @@ export function DisplayScreen({ state, connected, receivedAt, preview = false }:
           </strong>
         </div>
         <p>{connected ? 'Eyes on the screen. Get ready to play.' : 'Connection lost. Waiting to reconnect...'}</p>
+      </div>
+    </div>}
+    {intro && <div className="game-start-overlay" role="status" aria-live="polite">
+      <div className="game-start-ring" aria-hidden="true" /><div className="game-start-content">
+        <span className="eyebrow">TYPE + BUZZ</span><h1>BIGGER STAKES. BIGGER REWARDS.</h1>
+        <p>Type before the first buzz for {state.question?.fixedPoints} points.</p>
+        <p>Buzz for {state.question?.buzzPoints} points. Wrong buzz loses {wrongBuzzPenalty(state.question?.buzzPoints ?? 0)}.</p>
+        <strong>{Math.ceil((state.typeBuzzIntroMs ?? 0) / 1000)}</strong>
       </div>
     </div>}
   </main>;

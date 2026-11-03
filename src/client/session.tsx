@@ -140,7 +140,7 @@ export function useAnimatedState(): Snapshot | null {
 export function useAnimatedSnapshot(state: Snapshot | null, receivedAt: number, connected: boolean): Snapshot | null {
   const [now, setNow] = useState(() => performance.now());
   useEffect(() => {
-    if ((!state?.clockRunning && !state?.displayClockRunning && state?.phase !== 'STARTING' && state?.phase !== 'NEXT_ROUND') || !connected) return;
+    if ((!state?.clockRunning && !state?.displayClockRunning && state?.phase !== 'STARTING' && state?.phase !== 'NEXT_ROUND' && state?.phase !== 'TYPE_BUZZ_INTRO') || !connected) return;
     const timer = setInterval(() => setNow(performance.now()), 50);
     return () => clearInterval(timer);
   }, [state?.clockRunning, state?.displayClockRunning, state?.phase, connected]);
@@ -160,7 +160,8 @@ export function useAnimatedSnapshot(state: Snapshot | null, receivedAt: number, 
       : Math.max(0, state.startCountdownMs - (state.phase === 'STARTING' ? extra : 0)),
     nextRoundCountdownMs: state.nextRoundCountdownMs === null ? null
       : Math.max(0, state.nextRoundCountdownMs - (state.phase === 'NEXT_ROUND' ? extra : 0)),
-    clueElapsedMs: elapsed, currentPoints: state.question?.mode === 'typed'
+    typeBuzzIntroMs: state.typeBuzzIntroMs == null ? null : Math.max(0, state.typeBuzzIntroMs - (state.phase === 'TYPE_BUZZ_INTRO' ? extra : 0)),
+    clueElapsedMs: elapsed, currentPoints: state.question?.mode === 'type-and-buzz' ? state.question.buzzPoints ?? state.currentPoints : state.question?.mode === 'typed'
       ? state.question.fixedPoints ?? state.currentPoints : state.pointsAtBuzz ?? pointsAt(elapsed, state.settings),
     revealProgress: Math.min(1, state.revealProgress + displayExtra / ((state.question?.reveal?.durationSeconds ?? 20) * 1000)),
     mediaPositionSeconds: state.mediaPositionSeconds + displayExtra / 1000 };

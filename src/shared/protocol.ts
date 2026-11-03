@@ -31,8 +31,10 @@ export const questionDefinitionSchema = z.strictObject({
   keyword: z.string().trim().min(1).max(80).optional(),
   type: z.enum(['text', 'image', 'video', 'audio']),
   question: z.string().trim().min(1).max(500),
-  mode: z.enum(['buzzer', 'typed'], { error: 'Question mode is required and must be "buzzer" or "typed".' }),
+  mode: z.enum(['buzzer', 'typed', 'type-and-buzz'], { error: 'Question mode is required and must be "buzzer", "typed" or "type-and-buzz".' }),
   fixedPoints: z.number().int().min(1).max(10000).optional(),
+  buzzPoints: z.number().int().min(1).max(10000).optional(),
+  typingSeconds: z.number().int().min(1).max(3600).optional(),
   timerSeconds: z.number().int().min(1).max(3600).optional(),
   text: z.string().max(2000).optional(),
   media: localMedia.optional(),
@@ -48,12 +50,23 @@ export const questionDefinitionSchema = z.strictObject({
     context.addIssue({ code: 'custom', path: ['media'], message: 'Media clues require a local media path' });
   }
   for (const field of ['fixedPoints'] as const) {
-    if (question.mode === 'typed' && question[field] === undefined) {
-      context.addIssue({ code: 'custom', path: [field], message: `Typed questions require ${field}` });
+    if (question.mode !== 'buzzer' && question[field] === undefined) {
+      context.addIssue({ code: 'custom', path: [field], message: `Questions with typed answers require ${field}` });
     }
     if (question.mode === 'buzzer' && question[field] !== undefined) {
       context.addIssue({ code: 'custom', path: [field], message: `${field} is only allowed for typed questions` });
     }
+  }
+  for (const field of ['buzzPoints', 'typingSeconds'] as const) {
+    if (question.mode === 'type-and-buzz' && question[field] === undefined) {
+      context.addIssue({ code: 'custom', path: [field], message: `Type + buzz questions require ${field}` });
+    }
+    if (question.mode !== 'type-and-buzz' && question[field] !== undefined) {
+      context.addIssue({ code: 'custom', path: [field], message: `${field} is only allowed for type-and-buzz questions` });
+    }
+  }
+  if (question.mode === 'type-and-buzz' && question.fixedPoints !== undefined && question.buzzPoints !== undefined && question.buzzPoints <= question.fixedPoints) {
+    context.addIssue({ code: 'custom', path: ['buzzPoints'], message: 'Buzz points must exceed typed points' });
   }
   if (question.type !== 'text' && question.text !== undefined) {
     context.addIssue({ code: 'custom', path: ['text'], message: 'text is only allowed for text questions' });
@@ -111,6 +124,7 @@ export const serverSettingsSchema = z.object({
   maxPlayerNameLength: z.number().int().min(1).max(100).default(24),
   requireAdminPasscode: z.boolean().default(true),
   maxPlayers: z.number().int().min(1).max(1000).default(12),
+  typeBuzzAnnouncementSeconds: z.number().int().min(1).max(60).default(3),
   countdownSound: localMedia.refine((value) => /\.wav$/i.test(value), 'Countdown sound must be a WAV file')
     .nullable().default('/media/sounds/countdown-beep.wav'),
   reviewCorrectSound: localMedia.refine((value) => /\.wav$/i.test(value), 'Review correct sound must be a WAV file')
@@ -119,7 +133,7 @@ export const serverSettingsSchema = z.object({
     .nullable().default('/media/sounds/countdown-beep.wav'),
 }).strict();
 export type ServerSettings = z.infer<typeof serverSettingsSchema>;
-export type Phase = 'LOBBY' | 'STARTING' | 'NEXT_ROUND' | 'QUESTION_OPEN' | 'ANSWERING' | 'BUZZ_RESULT' | 'MEDIA_FINISH' | 'QUESTION_CLOSED' | 'REVIEW_GROUP' | 'REVIEW' | 'REVIEW_COMPLETE' | 'ANSWER_REVEALED' | 'GAME_FINISHED';
+export type Phase = 'LOBBY' | 'STARTING' | 'NEXT_ROUND' | 'TYPE_BUZZ_INTRO' | 'QUESTION_OPEN' | 'ANSWERING' | 'BUZZ_RESULT' | 'MEDIA_FINISH' | 'QUESTION_CLOSED' | 'REVIEW_GROUP' | 'REVIEW' | 'REVIEW_COMPLETE' | 'ANSWER_REVEALED' | 'GAME_FINISHED';
 export interface BuzzResult {
   id: string;
   playerId: string;
@@ -165,6 +179,7 @@ export interface Snapshot {
   phase: Phase;
   startCountdownMs: number | null;
   nextRoundCountdownMs: number | null;
+  typeBuzzIntroMs?: number | null;
   countdownId: string | null;
   questionIndex: number;
   questionCount: number;
@@ -194,6 +209,8 @@ export interface Snapshot {
   scoreEvents: ScoreEvent[];
   questionInstanceId: string | null;
   submissionCount: number;
+  /** True after the typed-answer roster is frozen. */
+  submissionsClosed?: boolean;
   mySubmitted: boolean;
   /** Public buzzer ruling, present only during BUZZ_RESULT. */
   buzzResult: BuzzResult | null;

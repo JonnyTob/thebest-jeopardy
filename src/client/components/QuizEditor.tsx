@@ -215,7 +215,7 @@ export function QuizEditor({ passcode, onDirtyChange, gameState }: { passcode: s
         <ol className="editor-list">{archive.questions.map((q, index) => <li key={q.id}>
           <button className={index === selected ? 'active' : ''} onClick={() => setSelected(index)}>
             <span className="editor-question-title">{q.keyword || q.question || 'Untitled question'}</span>
-            <span className={`editor-question-mode ${q.mode}`}>{q.mode === 'typed' ? 'Typed' : 'Buzzer'}</span>
+            <span className={`editor-question-mode ${q.mode}`}>{q.mode === 'typed' ? 'Typed' : q.mode === 'type-and-buzz' ? 'Type + buzz' : 'Buzz'}</span>
             {q.enabled === false && <span className="editor-question-disabled">✕ Disabled</span>}
           </button></li>)}</ol>
         <div className="editor-actions"><button disabled={archive.questions.length >= 500} onClick={() => addQuestion(false)}>Add question</button>
@@ -235,12 +235,15 @@ export function QuizEditor({ passcode, onDirtyChange, gameState }: { passcode: s
         <label>Question<textarea rows={1} value={question.question} onChange={(event) => updateQuestion({ question: event.target.value })} /></label>
         <label>Answer<textarea rows={1} value={question.answer} onChange={(event) => updateQuestion({ answer: event.target.value })} /></label>
         <label>Mode<select value={question.mode} onChange={(event) => {
-          const mode = event.target.value === 'typed' ? 'typed' : 'buzzer';
-          if (mode === 'buzzer' && question.mode === 'typed' && !window.confirm('Changing to buzzer removes typed points and timer. Continue?')) return;
-          updateQuestion({ mode, fixedPoints: mode === 'typed' ? 250 : undefined });
-        }}><option value="buzzer">Buzzer</option><option value="typed">Typed</option></select></label>
-        {question.mode === 'typed' && <label>Fixed points<input type="number" value={question.fixedPoints ?? ''} onChange={(event) => updateQuestion({ fixedPoints: Number(event.target.value) })} /></label>}
-        <label>Timer countdown (seconds)<input type="number" min={1} max={3600} placeholder={`Inherit global (${archive.gameSetup?.questionTimerSeconds ?? gameState.settings.questionTimerSeconds}s)`}
+          const mode = event.target.value as ArchiveQuestion['mode'];
+          if (question.mode !== mode && question.mode !== 'buzzer' && !window.confirm('Changing mode may replace the current point settings. Continue?')) return;
+          updateQuestion({ mode, fixedPoints: mode === 'typed' ? 250 : mode === 'type-and-buzz' ? 100 : undefined,
+            buzzPoints: mode === 'type-and-buzz' ? 500 : undefined, typingSeconds: mode === 'type-and-buzz' ? 10 : undefined });
+        }}><option value="buzzer">Buzzer</option><option value="typed">Typed</option><option value="type-and-buzz">Type + buzz</option></select></label>
+        {question.mode !== 'buzzer' && <label>{question.mode === 'type-and-buzz' ? 'Typed answer points' : 'Fixed points'}<input type="number" min={1} max={10000} value={question.fixedPoints ?? ''} onChange={(event) => updateQuestion({ fixedPoints: Number(event.target.value) })} /></label>}
+        {question.mode === 'type-and-buzz' && <><label>Buzzer points for a correct answer<input type="number" min={1} max={10000} value={question.buzzPoints ?? ''} onChange={(event) => updateQuestion({ buzzPoints: Number(event.target.value) })} /></label>
+          <label>Initial typing window (seconds)<input type="number" min={1} max={3600} value={question.typingSeconds ?? ''} onChange={(event) => updateQuestion({ typingSeconds: Number(event.target.value) })} /></label></>}
+        <label>{question.mode === 'type-and-buzz' ? 'Buzzer countdown (seconds)' : 'Timer countdown (seconds)'}<input type="number" min={1} max={3600} placeholder={`Inherit global (${archive.gameSetup?.questionTimerSeconds ?? gameState.settings.questionTimerSeconds}s)`}
           value={question.timerSeconds ?? ''} onChange={(event) => updateQuestion({ timerSeconds: event.target.value === '' ? undefined : Number(event.target.value) })} /></label>
         <label>Clue type<select value={question.type} onChange={(event) => changeType(event.target.value as ArchiveQuestion['type'])}>
           <option value="text">Text</option><option value="image">Image</option><option value="audio">Audio</option><option value="video">Video</option></select></label>

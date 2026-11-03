@@ -10,8 +10,11 @@
     "startPoints": 500,
     "minimumPoints": 100,
     "dropPoints": 20,
-    "dropEverySeconds": 1,
-    "lockoutSeconds": 2
+    "dropEverySeconds": 4,
+    "pointDecayDelaySeconds": 5,
+    "questionTimerSeconds": 30,
+    "lockoutSeconds": 2,
+    "maxAnswerLength": 20
   },
   "questions": [
     {
@@ -24,15 +27,18 @@
       "timerSeconds": 10,
       "text": "Which planet in our solar system is known as the Red Planet?",
       "answer": "Mars",
-      "enabled": false
+      "enabled": true
     },
     {
       "id": "5552d069-9906-4e98-9804-92bf81f033e7",
       "keyword": "Guitar cover",
       "type": "video",
       "question": "Navn på låt",
-      "mode": "buzzer",
-      "timerSeconds": 10,
+      "mode": "type-and-buzz",
+      "fixedPoints": 100,
+      "buzzPoints": 500,
+      "typingSeconds": 15,
+      "timerSeconds": 15,
       "media": "media/sabotageII-cb1d.mp4",
       "answer": "Sabotage"
     },

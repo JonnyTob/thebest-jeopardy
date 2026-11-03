@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { avatars, type AvatarId, type Snapshot } from '../../shared/protocol';
-import { rankPlayers } from '../../shared/game';
+import { rankPlayers, wrongBuzzPenalty } from '../../shared/game';
 import { useAnimatedState, useSession } from '../session';
 import { Avatar, Brand, Connection, QuizName, SessionError, countdownSeconds, nextRoundCountdownText, questionTimerMs } from '../components/Common';
 import { branding } from '../branding';
@@ -18,14 +18,17 @@ export function PlayPage() {
   const lockoutRemaining = playerId ? state?.lockoutRemainingMs[playerId] : undefined;
   const answering = !!playerId && state?.phase === 'ANSWERING' && state.activePlayerId === playerId;
   const open = state?.phase === 'QUESTION_OPEN' && !state.paused;
-  const buzzerQuestion = state?.question?.mode === 'buzzer'
-    && !['LOBBY', 'STARTING', 'NEXT_ROUND', 'GAME_FINISHED'].includes(state.phase);
-  const canBuzz = buzzerQuestion && connected && open && !lockedOut && !!player && !pending;
+  const combined = state?.question?.mode === 'type-and-buzz';
+  const typingOnly = combined && !state?.mySubmitted && !state?.submissionsClosed && (state?.clueElapsedMs ?? 0) < (state?.question?.typingSeconds ?? 0) * 1000;
+  const buzzerQuestion = (state?.question?.mode === 'buzzer' || combined)
+    && !['LOBBY', 'STARTING', 'NEXT_ROUND', 'TYPE_BUZZ_INTRO', 'GAME_FINISHED', 'REVIEW', 'REVIEW_GROUP'].includes(state!.phase);
+  const canBuzz = buzzerQuestion && connected && open && !typingOnly && !lockedOut && !!player && !pending;
   let status = 'Waiting for the host';
   let detail = 'The next question is on its way.';
   if (!connected) { status = 'Reconnecting'; detail = 'Your score and place are saved on the server.'; }
   else if (state?.phase === 'STARTING') { status = 'Game starting!'; detail = 'Watch the TV countdown. Answering opens when the first question appears.'; }
   else if (state?.phase === 'NEXT_ROUND') { status = `Next round: ${nextRoundCountdownText(state.nextRoundCountdownMs)}`; detail = 'Watch the TV. Buzzing opens when the next question appears.'; }
+  else if (state?.phase === 'TYPE_BUZZ_INTRO') { status = 'Type + buzz'; detail = 'Type for smaller points. Buzz for more, but a wrong buzz loses points. Typing closes on the first buzz.'; }
   else if (state?.phase === 'MEDIA_FINISH') { status = 'Finishing the clue'; detail = 'Watch the TV. Buzzing is closed and scores are frozen.'; }
   else if (state?.phase === 'GAME_FINISHED') { status = 'That is a wrap!'; detail = 'Thanks for playing. See the TV for the final scores.'; }
   else if (state?.phase === 'BUZZ_RESULT' && state.buzzResult) {
@@ -41,7 +44,8 @@ export function PlayPage() {
   }
   else if (state?.phase === 'ANSWERING') { status = 'Someone is answering'; detail = 'Hold tight. Buzzers may reopen after the ruling.'; }
   else if (state?.paused) { status = 'Host paused'; detail = 'Take a breath. We will be right back.'; }
-  else if (open) { status = 'Buzz open'; detail = 'Know it? Buzz, then answer out loud.'; }
+  else if (open && typingOnly) { status = 'Type first'; detail = `Buzzing opens in ${countdownSeconds((state?.question?.typingSeconds ?? 0) * 1000 - (state?.clueElapsedMs ?? 0))}s.`; }
+  else if (open) { status = 'Buzz open'; detail = combined && !state?.submissionsClosed ? 'Type or buzz. Typing closes on the first buzz.' : 'Know it? Buzz, then answer out loud.'; }
   else if (state && ['QUESTION_CLOSED', 'ANSWER_REVEALED'].includes(state.phase)) { status = 'Question closed'; detail = 'Eyes on the TV. The next clue is coming.'; }
 
   function submit(event: FormEvent) {
@@ -70,16 +74,16 @@ export function PlayPage() {
     </form> : <>
       <section className="panel player-profile"><Avatar id={player.avatarId} /><div><span className="eyebrow">YOU'RE IN</span><h1>{player.name}</h1></div>
         <div className="personal-score"><strong>{player.score.toLocaleString()}</strong><span>RANK {rank} OF {state?.players.length}</span></div></section>
-      {state?.question?.mode === 'typed' && state.phase !== 'GAME_FINISHED'
-        ? <TypedAnswer key={state.questionInstanceId} state={state} />
-        : <><section className={`buzzer-card ${answering ? 'is-answering' : ''}`}>
+      {state?.question?.mode !== 'buzzer' && state?.question && state.phase !== 'GAME_FINISHED' && state.phase !== 'TYPE_BUZZ_INTRO'
+        && <TypedAnswer key={state.questionInstanceId} state={state} />}
+      {(state?.question?.mode !== 'typed' || state?.phase === 'GAME_FINISHED') && <><section className={`buzzer-card ${answering ? 'is-answering' : ''}`}>
         <span className="eyebrow">{state?.phase === 'LOBBY' ? 'LOBBY' : state?.phase === 'STARTING' || state?.phase === 'NEXT_ROUND' ? 'GET READY' : `QUESTION ${(state?.questionIndex ?? 0) + 1} / ${state?.questionCount}`}</span>
         <h2 role="status">{status}</h2><p>{detail}</p>
         {buzzerQuestion && <button className="buzz-button" disabled={!canBuzz} onClick={() => { void buzz(); }}>
           <span>{answering ? 'FIRST!' : lockedOut && lockoutRemaining !== undefined && (open || state?.phase === 'ANSWERING')
-            ? `${Math.ceil(lockoutRemaining / 1000)}s` : 'BUZZ'}</span><small>{canBuzz ? `${state?.currentPoints} points at stake` : 'Eyes on the big screen'}</small>
+            ? `${Math.ceil(lockoutRemaining / 1000)}s` : 'BUZZ'}</span><small>{canBuzz ? `+${state?.currentPoints} correct / −${wrongBuzzPenalty(state?.currentPoints ?? 0)} wrong` : 'Eyes on the big screen'}</small>
         </button>}
-        {answering && <p className="frozen-points">{state?.pointsAtBuzz} points at stake / no answer countdown</p>}
+        {answering && <p className="frozen-points">+{state?.pointsAtBuzz} correct / −{wrongBuzzPenalty(state?.pointsAtBuzz ?? 0)} wrong / no answer countdown</p>}
       </section>
       {buzzerQuestion && <p className="footnote">Correct +points / Wrong -points<br />{state?.settings.lockoutSeconds
         ? `Wrong answer: ${state.settings.lockoutSeconds}s lockout, then try again.`
@@ -91,7 +95,8 @@ export function PlayPage() {
 function TypedAnswer({ state }: { state: Snapshot }) {
   const { connected, pending, submitAnswer, playerId } = useSession();
   const [answer, setAnswer] = useState('');
-  const open = state.phase === 'QUESTION_OPEN' && !state.paused;
+  const combined = state.question?.mode === 'type-and-buzz';
+  const open = state.phase === 'QUESTION_OPEN' && !state.paused && !state.submissionsClosed;
   const remaining = countdownSeconds(questionTimerMs(state) - state.clueElapsedMs);
   function submit(event: FormEvent) {
     event.preventDefault();
@@ -117,10 +122,10 @@ function TypedAnswer({ state }: { state: Snapshot }) {
     <h2 role="status">{connected ? 'Reviewing answers on TV' : 'Reconnecting'}</h2>
     <p>{connected ? 'Submissions are closed. Watch the TV for the current answer.' : 'Waiting to reconnect. Your score is saved on the server.'}</p>
   </section>;
-  return <section className="panel typed-answer"><span className="eyebrow">EVERYONE ANSWERS / {state.question?.fixedPoints} POINTS</span>
+  return <section className="panel typed-answer"><span className="eyebrow">{combined ? 'TYPE BEFORE THE FIRST BUZZ' : 'EVERYONE ANSWERS'} / {state.question?.fixedPoints} POINTS</span>
     <h2>{state.mySubmitted ? 'Answer submitted' : open ? 'Your answer' : state.paused ? 'Host paused' : 'Submissions closed'}</h2>
     {(state.phase === 'QUESTION_OPEN' || state.phase === 'QUESTION_CLOSED') && <p>Time remaining: {remaining}s</p>}
-    {state.mySubmitted ? <p>Your answer is locked in. Watch the TV for review.</p>
+    {state.mySubmitted ? <p>Your answer is locked in. {combined ? 'You can buzz now.' : 'Watch the TV for review.'}</p>
       : open ? <form onSubmit={submit}><label>Type your answer
         <input value={answer} maxLength={state.settings.maxAnswerLength} required
           onChange={(event) => setAnswer(event.target.value)} autoComplete="off" /></label>

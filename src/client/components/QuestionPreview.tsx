@@ -9,9 +9,12 @@ type Preview = { question: ArchiveQuestion; settings: Settings; index: number; c
 
 export function previewSnapshot(base: Snapshot, preview: Preview, elapsedMs: number): Snapshot {
   const { answer: _answer, ...question } = toRuntimeQuestion(preview.question);
-  const deadline = (question.timerSeconds ?? preview.settings.questionTimerSeconds) * 1000;
-  const elapsed = Math.max(0, Math.min(elapsedMs, deadline));
-  const running = elapsedMs < deadline;
+  const intro = question.mode === 'type-and-buzz' ? base.serverSettings.typeBuzzAnnouncementSeconds * 1000 : 0;
+  const countdown = intro ? 3000 : 0;
+  const deadline = ((question.timerSeconds ?? preview.settings.questionTimerSeconds)
+    + (question.mode === 'type-and-buzz' ? question.typingSeconds ?? 0 : 0)) * 1000;
+  const elapsed = Math.max(0, Math.min(elapsedMs - intro - countdown, deadline));
+  const running = elapsedMs >= intro + countdown && elapsedMs - intro - countdown < deadline;
   const { privateAnswer: _privateAnswer, hostSubmissions: _hostSubmissions, ...publicBase } = base;
   return {
     ...publicBase,
@@ -19,17 +22,19 @@ export function previewSnapshot(base: Snapshot, preview: Preview, elapsedMs: num
     question,
     questionIndex: preview.index,
     questionCount: preview.count,
-    phase: running ? 'QUESTION_OPEN' : 'QUESTION_CLOSED',
+    phase: elapsedMs < intro ? 'TYPE_BUZZ_INTRO' : elapsedMs < intro + countdown ? 'NEXT_ROUND' : running ? 'QUESTION_OPEN' : 'QUESTION_CLOSED',
+    typeBuzzIntroMs: elapsedMs < intro ? intro - elapsedMs : null,
+    nextRoundCountdownMs: elapsedMs >= intro && elapsedMs < intro + countdown ? intro + countdown - elapsedMs : null,
     revealedAnswer: null,
     players: [], leaderboardIds: [], lockedOutIds: [], lockoutRemainingMs: {},
     activePlayerId: null, pointsAtBuzz: null,
-    currentPoints: question.mode === 'typed' ? question.fixedPoints ?? 0 : pointsAt(elapsed, preview.settings),
+    currentPoints: question.mode === 'type-and-buzz' ? question.buzzPoints ?? 0 : question.mode === 'typed' ? question.fixedPoints ?? 0 : pointsAt(elapsed, preview.settings),
     clueElapsedMs: elapsed, displayElapsedMs: elapsed,
     clockRunning: running, displayClockRunning: running, paused: false,
     revealProgress: Math.min(1, elapsed / ((question.reveal?.durationSeconds ?? 20) * 1000)),
     mediaPositionSeconds: (question.playback?.startSeconds ?? 0) + elapsed / 1000,
     mediaFinishRemainingMs: null, mediaFinishNeedsSkip: false, mediaVersion: 0,
-    submissionCount: 0, mySubmitted: false, buzzResult: null, reviewGroup: null,
+    submissionCount: 0, submissionsClosed: !running && elapsedMs >= intro + countdown, mySubmitted: false, buzzResult: null, reviewGroup: null,
     review: null, reviewResultId: null, reviewRemainingMs: null, reviewIndex: 0, reviewCount: 0,
     canUndo: false, scoreEvents: [],
   };

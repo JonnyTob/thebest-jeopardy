@@ -7,6 +7,11 @@ export const REVIEW_GROUP_MS = 4000;
 export const BUZZ_RESULT_MS = 2000;
 export const BUZZ_CORRECT_ANSWER_MS = 3000;
 
+/** Wrong buzzes lose half the correct value, rounded up to a whole point. */
+export function wrongBuzzPenalty(points: number): number {
+  return Math.ceil(points / 2);
+}
+
 export function startCountdownText(remainingMs: number): string {
   return remainingMs > 1000 ? String(Math.ceil(remainingMs / 1000) - 1) : "LET'S GO!";
 }

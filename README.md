@@ -66,6 +66,7 @@ npm start
     "maxPlayerNameLength": 24,
     "requireAdminPasscode": true,
     "maxPlayers": 12,
+    "typeBuzzAnnouncementSeconds": 3,
     "countdownSound": "/media/sounds/countdown-beep.wav",
     "reviewCorrectSound": "/media/sounds/countdown-beep.wav",
     "reviewWrongSound": "/media/sounds/countdown-beep.wav"
@@ -111,6 +112,9 @@ npm start
     players, including disconnected players, until the host removes them.
     Reconnecting an existing player does not use another slot. New players
     cannot join a full game; phones show the limit and the server also enforces it.
+  - `typeBuzzAnnouncementSeconds`: duration of the Type + buzz rules announcement
+    before the countdown, in seconds. Defaults to **3**; use a whole number from
+    1 to 60. This is a global setting; restart the server after changing it.
   - `countdownSound`: local WAV path for the TV countdown beep, default
     `/media/sounds/countdown-beep.wav`. Set to `null` to disable it, or use a
     different local path such as `/media/sounds/my-beep.wav`. Place a short single beep under
@@ -131,8 +135,8 @@ npm start
   `questionTimerSeconds` (1-3600; default 30) is the countdown for questions
   without their own `timerSeconds` override. It can also be changed in Game setup.
   `pointDecayDelaySeconds` (0-300; default 5) holds the starting point value
-  before reductions begin. It applies to every buzzer question type; typed
-  questions keep their fixed points. The first reduction happens after this
+  before reductions begin. It applies to standard buzzer questions; typed and
+  Type + buzz questions keep their fixed points. The first reduction happens after this
   delay plus one `dropEverySeconds` interval.
 - **quizzes/\<quiz-id\>/quiz.json**: per-quiz overrides, identified by the
   numeric quiz ID in the question file. The quiz file can contain a partial `gameSetup` section; omitted values use global defaults. You can create a
@@ -212,7 +216,7 @@ sharing the QR code.
   answer when typed submissions close or a buzzer answer is judged correct. Typed submissions are
   private to the host until each submission is displayed during review.
 - Server-arbitrated first buzz, a frozen points-at-buzz value, and no answer
-  countdown. Correct awards the frozen value; wrong deducts it and locks that
+  countdown. Correct awards the frozen value; wrong deducts half (rounded up to a whole point) and locks that
   player out. A correct ruling immediately shows the official answer and awarded
   points for three seconds, then resumes any remaining audio, video or tile reveal
   with buzzing closed. The quiz advances automatically when that finishes. A wrong ruling shows its
@@ -250,7 +254,7 @@ sharing the QR code.
   identity, and lockout. Reopening multiple tabs with the same token still counts
   as one player. An offline answering player remains active until the host rules
   or closes the clue.
-- The phone's **BUZZ** button appears only for questions with `"mode": "buzzer"`.
+- The phone's **BUZZ** button appears for buzzer and Type + buzz questions.
   It is hidden in the lobby, countdowns, typed
   questions and final standings. An enabled buzzer is green; paused, locked-out,
   disconnected and pending states remain disabled, with gold for the first buzzer.
@@ -360,7 +364,7 @@ awarded points, so use undo first if the scores should be reversed.
 Use **Quiz editor** in the host console to edit the currently configured quiz, or edit [quizzes/100001/quiz.json](./quizzes/100001/quiz.json) directly. Set `server.startupQuizId` in `settings.json` to select the quiz; `QUIZ_ID` overrides it. Set `QUIZ_DATA_DIR` to the archive directory (default `quizzes`). Each quiz lives in `<data directory>/<id>/quiz.json`, with its own files in `<id>/media/`. The ID in the JSON must match the folder name.
 
 The editor adds, duplicates, removes and reorders questions and manages quiz-local
-media. The question list labels each question as **Buzzer** or **Typed**. Clear
+media. The question list labels each question as **Buzzer**, **Typed**, or **Type + buzz**. Clear
 **Include question in quiz** to opt a question out without deleting it; opted-out
 questions are marked in the list and remain editable and previewable. Questions
 are included by default. As with other edits, the saved selection takes effect
@@ -460,6 +464,24 @@ than reusing IDs across quizzes.
 
 ### Question modes
 
+The editor offers **Buzzer**, **Typed**, and **Type + buzz**. For Type + buzz,
+set the smaller typed-answer points, the larger buzzer points, the typing-only
+window, and optionally the buzzer countdown. A configurable rules screen appears
+before the game-start or next-round countdown. Players can buzz as soon as they submit a typed answer; players
+who have not submitted can buzz after the initial window. Typing stays open until
+the first buzz or the buzzer countdown expires. The first buzz freezes the typed
+roster; after a wrong ruling all other eligible players can buzz, even if the
+initial window has not ended. A correct buzz wins the fixed buzzer points and a wrong buzz loses half,
+rounded up to a whole point. After the buzzer round and any finishing media, the host reviews the
+typed answers using the usual fast approval or TV review. Players can earn both
+awards. Point decay does not apply to this mode.
+
+In quiz JSON, use `"mode": "type-and-buzz"`, `"fixedPoints"` for the typed
+reward, `"buzzPoints"` for the larger buzzer reward, and `"typingSeconds"` for
+the initial typing window. The optional `"timerSeconds"` controls the remaining
+countdown after that window; otherwise it inherits the game setup countdown.
+The editor supplies defaults of 100 points, 500 points, and 10 seconds.
+
 The bundled quiz is also a playable examples catalog:
 
 | # | Keyword | Type / mode | Features to try |
@@ -495,8 +517,9 @@ made available under [CC0](https://creativecommons.org/publicdomain/zero/1.0/).
 No commercial music, movie clips, remote URLs, or missing placeholder files are
 needed for the bundled quiz.
 
-Every question must explicitly set `"mode": "buzzer"` for the first-buzz flow, or
-`"mode": "typed"` for everyone to answer privately. There is no default mode:
+Every question must explicitly set `"mode": "buzzer"` for the first-buzz flow,
+`"mode": "typed"` for everyone to answer privately, or `"mode": "type-and-buzz"`
+for the combined flow. There is no default mode:
 missing or invalid values stop quiz loading with a validation error. Existing
 quiz files with omitted modes must add `"mode": "buzzer"` to those questions.
 
@@ -531,7 +554,9 @@ Question fields are validated according to mode and media type:
 
 | Field | Allowed on |
 | --- | --- |
-| `fixedPoints` | Required on `typed`; forbidden on `buzzer` |
+| `fixedPoints` | Required on `typed` and `type-and-buzz`; forbidden on `buzzer` |
+| `buzzPoints` | Required on `type-and-buzz`; must exceed `fixedPoints` |
+| `typingSeconds` | Required on `type-and-buzz`; initial window before everyone can buzz |
 | `timerSeconds` | Optional countdown override on every question |
 | `text` | Text clues only; optional body below the question headline |
 | `media` | Required on image, audio and video; forbidden on text |
@@ -594,8 +619,8 @@ vectors are original to this implementation; no external avatar library is used.
 ```text
 src/
   client/       React pages, shared UI, media rendering, and styles
-  server/       HTTP/Socket.IO server, authoritative engine, storage, and tests
-  shared/       Runtime validation, typed protocol, scoring/reveal helpers and tests
+  server/       HTTP/Socket.IO server, authoritative engine, and storage
+  shared/       Runtime validation, typed protocol, scoring and reveal helpers
   public/media/ Locally served clue assets
 ```
 
@@ -606,8 +631,9 @@ implementation can replace JSON without changing the game engine.
 
 ### Populate the screens with test players
 
-The helper and its tests live in [script/](./script/), separate from the
-application source and production build.
+The helper lives in [script/](./script/). Tests are grouped under
+[tests/](./tests/) by server, shared code, and scripts; they are separate from
+the application source and production build.
 
 Start the app normally (`npm run dev` or `npm start`), then open a **second
 terminal** in the repository root:

@@ -28,7 +28,7 @@ The mode controls scoring and interaction, regardless of type:
 
 | Mode | Player action | Points | End of input |
 | --- | --- | --- | --- |
-| `buzzer` | First accepted buzz gets the floor; answer is spoken and judged by the host. | Value falls in steps from `startPoints` to `minimumPoints`; a correct ruling adds, a wrong ruling subtracts the value frozen at buzz. | Buzzing closes at `timerSeconds` (or the game default), unless the host closes earlier or a correct ruling ends the question. |
+| `buzzer` | First accepted buzz gets the floor; answer is spoken and judged by the host. | Value falls in steps from `startPoints` to `minimumPoints`; a correct ruling adds the value frozen at buzz, while a wrong ruling subtracts half, rounded up. | Buzzing closes at `timerSeconds` (or the game default), unless the host closes earlier or a correct ruling ends the question. |
 | `typed` | Each player may submit one final text answer. Host reviews it; there is no automatic answer matching. | `fixedPoints` is required; correct adds it, wrong or missing adds zero. No point reduction. | Submissions close at `timerSeconds` (or the game default), unless the host closes earlier. |
 
 `timerSeconds` is optional for **both** modes; without it, `gameSetup.questionTimerSeconds` applies. The visible typed countdown and submission deadline reach zero together. Buzzer questions show one point bar and a separate numeric countdown to buzzing close.
@@ -82,7 +82,7 @@ flowchart TD
 ```
 
 1. In `QUESTION_OPEN`, connected, eligible players may buzz. The server accepts only the first; it freezes time and points and enters `ANSWERING`. Other buzzers close. A player who disconnects while answering remains selected until the host rules or closes.
-2. The host judges **Correct** or **Wrong**. The score changes immediately by the frozen value. `BUZZ_RESULT` shows a wrong result for two seconds or the official answer and awarded points for three seconds. The clue clock and media stay frozen during the hold.
+2. The host judges **Correct** or **Wrong**. A correct answer adds the frozen value; a wrong answer deducts half, rounded up to a whole point. `BUZZ_RESULT` shows a wrong result for two seconds or the official answer and awarded points for three seconds. The clue clock and media stay frozen during the hold.
 3. **Wrong:** the player is locked out. With `lockoutSeconds = 0`, the lockout lasts for this question; with a positive value, it expires after the result hold plus that many seconds. Timed lockout continues through pauses and other players' answers. After the result hold, the question reopens and the clue clock resumes for eligible players.
 4. **Correct:** the answer appears immediately while media is paused. After three seconds, remaining audio/video playback or tile reveal resumes with buzzing closed. The quiz advances automatically when it finishes. If its endpoint is unknown, the host skips the finishing media when ready.
 5. If time runs out while the question is open, it enters `QUESTION_CLOSED`. In the proposed flow, the official answer is then displayed and the question resolves. Currently, the host may reveal the answer and/or advance. Media ending or points reaching minimum alone never closes buzzing.

@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { rankPlayers, startCountdownText } from '../../shared/game';
+import { rankPlayers, startCountdownText, wrongBuzzPenalty } from '../../shared/game';
 import { serverSettingsSchema, settingsSchema, type Player, type Settings, type Snapshot } from '../../shared/protocol';
 import { SessionProvider, useAnimatedState, useSession } from '../session';
 import { Avatar, Brand, Connection, JoinLink, PointBar, QuizName, SessionError, buzzerLabel, countdownSeconds, nextRoundCountdownText, questionTimerMs } from '../components/Common';
@@ -68,10 +68,12 @@ export function AdminConsole({ logout, requirePasscode, development, passcode = 
   const buzzResult = state?.phase === 'BUZZ_RESULT' ? state.buzzResult : null;
   const finishing = state?.phase === 'MEDIA_FINISH';
   const closed = state?.phase === 'QUESTION_CLOSED' || state?.phase === 'ANSWER_REVEALED';
-  const typed = state?.question?.mode === 'typed';
-  const readyForNext = state?.phase === 'REVIEW_COMPLETE' || (closed && (!typed || state?.phase === 'ANSWER_REVEALED'));
-  const undoDisabled = !connected || pending || state?.phase === 'STARTING';
-  const disabled = undoDisabled || state?.phase === 'NEXT_ROUND';
+  const combined = state?.question?.mode === 'type-and-buzz';
+  const hasTypedAnswers = state?.question?.mode === 'typed' || combined;
+  const typed = state?.question?.mode === 'typed' || (combined && ['QUESTION_CLOSED', 'REVIEW', 'REVIEW_GROUP', 'REVIEW_COMPLETE'].includes(state?.phase ?? ''));
+  const readyForNext = state?.phase === 'REVIEW_COMPLETE' || (closed && (!hasTypedAnswers || state?.phase === 'ANSWER_REVEALED'));
+  const undoDisabled = !connected || pending || state?.phase === 'STARTING' || (state?.phase === 'TYPE_BUZZ_INTRO' && state.questionIndex === 0);
+  const disabled = undoDisabled || state?.phase === 'NEXT_ROUND' || state?.phase === 'TYPE_BUZZ_INTRO';
   return <main className="admin-shell">
     <header className="admin-header"><Brand subtitle="Private host console" />
       <nav aria-label="Host sections"><button className={tab === 'live' ? 'active' : ''} onClick={() => navigate('live')}>Live game</button>
@@ -113,12 +115,15 @@ export function AdminConsole({ logout, requirePasscode, development, passcode = 
             <h2>{nextRoundCountdownText(state.nextRoundCountdownMs)}</h2>
             <p>{connected ? 'The next question opens automatically after this three-second countdown.' : 'Connection lost. Waiting to reconnect...'}</p>
           </section>
+          : state.phase === 'TYPE_BUZZ_INTRO' ? <section className="panel" role="status"><h2>Type + buzz</h2>
+            <p>Rules on TV. The countdown starts in {countdownSeconds(state.typeBuzzIntroMs ?? 0)}s.</p></section>
           : state.phase === 'GAME_FINISHED' ? <section className="panel"><h2>Final standings</h2><p>Scores are still adjustable below. {development ? 'Use Restart Quiz above for a new session.' : 'Restart the server for a new session.'}</p></section>
             : <div className="admin-game-grid">
-              <section className="panel admin-question"><span className="eyebrow">CURRENT QUESTION / {state.question?.type.toUpperCase()} / {typed ? 'EVERYONE ANSWERS' : 'BUZZER'}</span>
+              <section className="panel admin-question"><span className="eyebrow">CURRENT QUESTION / {state.question?.type.toUpperCase()} / {combined ? 'TYPE + BUZZ' : typed ? 'EVERYONE ANSWERS' : 'BUZZER'}</span>
                 <h2>{state.question?.question}</h2><div className="admin-media"><Media state={state} preview /></div>
                 <div className="private-answer"><span className="eyebrow">PRIVATE ANSWER / HOST ONLY</span><strong>{state.privateAnswer}</strong></div>
-                {typed ? <p>{state.question?.fixedPoints} fixed points / time remaining: {countdownSeconds(questionTimerMs(state) - state.clueElapsedMs)}s</p> : <PointBar state={state} />}</section>
+                {combined ? <p>Type: +{state.question?.fixedPoints} / Buzz: +{state.question?.buzzPoints} or −{wrongBuzzPenalty(state.question?.buzzPoints ?? 0)} / Time remaining: {countdownSeconds(questionTimerMs(state) - state.clueElapsedMs)}s</p>
+                  : typed ? <p>{state.question?.fixedPoints} fixed points / time remaining: {countdownSeconds(questionTimerMs(state) - state.clueElapsedMs)}s</p> : <PointBar state={state} />}</section>
               <section className="panel game-actions"><span className="eyebrow">GAME ACTIONS</span>
                 {finishing && <div className="notice" role="status"><strong>Finishing the clue / score frozen</strong>
                   <p>{!connected ? 'Connection lost. Waiting to reconnect...' : state.mediaFinishNeedsSkip
@@ -148,12 +153,12 @@ export function AdminConsole({ logout, requirePasscode, development, passcode = 
                 </> : <>
                 {active && (answering || buzzResult) ? <div className="host-answering"><Avatar id={active.avatarId} /><div><h2>{active.name}</h2>
                   {buzzResult ? <p role="status" className={buzzResult.correct ? 'positive' : 'negative'}>
-                    {buzzResult.correct ? 'Correct' : 'Wrong'} {buzzResult.delta > 0 ? '+' : ''}{buzzResult.delta} / {buzzResult.correct ? 'Advancing automatically' : 'Buzzers reopen automatically'}</p>
+                    {buzzResult.correct ? 'Correct' : 'Wrong'} {buzzResult.delta > 0 ? '+' : ''}{buzzResult.delta} / {buzzResult.correct ? combined ? 'Typed review follows' : 'Advancing automatically' : 'Buzzers reopen automatically'}</p>
                     : <p>{state.pointsAtBuzz} frozen points / answering aloud</p>}</div></div> : <h2>{buzzerLabel(state)}</h2>}
                 <div className="ruling-buttons"><button className="success" disabled={disabled || !answering}
                   onClick={() => { void command({ type: 'judge', correct: true }); }}>Correct +{state.pointsAtBuzz ?? state.currentPoints}</button>
                   <button className="danger" disabled={disabled || !answering}
-                    onClick={() => { void command({ type: 'judge', correct: false }); }}>Wrong -{state.pointsAtBuzz ?? state.currentPoints}</button></div>
+                    onClick={() => { void command({ type: 'judge', correct: false }); }}>Wrong -{wrongBuzzPenalty(state.pointsAtBuzz ?? state.currentPoints)}</button></div>
                 </>}
                 <button disabled={disabled || !isOpen} onClick={() => { void command({ type: state.paused ? 'resume' : 'pause' }); }}>
                   {state.paused ? 'Resume clue' : 'Pause clue'} {typed ? '& submissions' : '& buzzers'}</button>
@@ -161,7 +166,7 @@ export function AdminConsole({ logout, requirePasscode, development, passcode = 
                 {finishing && <button className="primary" disabled={disabled} onClick={() => { void command({ type: 'skipMedia' }); }}>Skip finishing media</button>}
                 <button disabled={disabled || !(isOpen || answering)} onClick={() => { void command({ type: 'close' }); }}>
                   {typed ? 'Close submissions' : 'Close / skip question'}</button>
-                <button disabled={disabled || (typed ? state.phase !== 'REVIEW_COMPLETE' : state.phase !== 'QUESTION_CLOSED')} onClick={() => { void command({ type: 'reveal' }); }}>Reveal answer on TV</button>
+                <button disabled={disabled || (hasTypedAnswers ? state.phase !== 'REVIEW_COMPLETE' : state.phase !== 'QUESTION_CLOSED')} onClick={() => { void command({ type: 'reveal' }); }}>Reveal answer on TV</button>
                 <button className="primary" disabled={disabled || !readyForNext} onClick={() => { void command({ type: 'next' }); }}>
                   {state.questionIndex === state.questionCount - 1 ? 'Finish quiz' : 'Next question'} &rarr;</button>
                 <div className="action-divider" />
@@ -172,7 +177,7 @@ export function AdminConsole({ logout, requirePasscode, development, passcode = 
                   : <button className="quiet" disabled={disabled} onClick={() => setConfirm(true)}>Reset this question...</button>}
               </section>
             </div>}
-        {typed && state.phase !== 'GAME_FINISHED' && <section className="panel">
+        {hasTypedAnswers && state.phase !== 'GAME_FINISHED' && state.phase !== 'TYPE_BUZZ_INTRO' && <section className="panel">
           <div className="typed-answers-heading"><h2>Typed answers ({state.submissionCount} submitted)</h2></div>
           <p className="muted">After submissions close, optionally mark answers here privately or leave them for individual TV review. The official answer stays on TV until you start review. The TV then shows previously judged players in groups: correct first, then wrong or missing, each for four seconds without their answers. Unjudged answers follow individually.</p>
           {state.phase === 'QUESTION_CLOSED' && <p>{state.hostSubmissions?.filter((entry) => entry.correct === null).length ?? 0} awaiting review.
@@ -212,7 +217,7 @@ function PlayerTable({ state }: { state: Snapshot }) {
     return 0;
   });
   const activeClue = state.phase === 'STARTING' || state.phase === 'NEXT_ROUND' || state.phase === 'QUESTION_OPEN' || state.phase === 'ANSWERING' || state.phase === 'BUZZ_RESULT' || state.phase === 'MEDIA_FINISH' || state.phase === 'REVIEW' || state.phase === 'REVIEW_GROUP'
-    || (state.phase === 'QUESTION_CLOSED' && state.question?.mode === 'typed');
+    || state.phase === 'TYPE_BUZZ_INTRO' || (state.phase === 'QUESTION_CLOSED' && state.question?.mode !== 'buzzer');
   return <section className="panel players-panel"><div className="table-heading"><h2>Players <span className="count-badge">{state.players.length}</span></h2>
     <input aria-label="Search players" placeholder="Search players" value={search} onChange={(event) => setSearch(event.target.value)} />
     <select aria-label="Sort players" value={sort} onChange={(event) => setSort(event.target.value)}>
@@ -238,7 +243,7 @@ function PlayerTable({ state }: { state: Snapshot }) {
 function ScoreAdjustment({ player }: { player: Player }) {
   const { command, pending, connected, state } = useSession();
   const [delta, setDelta] = useState('');
-  const disabled = pending || !connected || state?.phase === 'STARTING' || state?.phase === 'NEXT_ROUND' || state?.phase === 'BUZZ_RESULT' || state?.phase === 'MEDIA_FINISH' || state?.phase === 'REVIEW_GROUP' || state?.reviewResultId != null;
+  const disabled = pending || !connected || state?.phase === 'STARTING' || state?.phase === 'NEXT_ROUND' || state?.phase === 'TYPE_BUZZ_INTRO' || state?.phase === 'BUZZ_RESULT' || state?.phase === 'MEDIA_FINISH' || state?.phase === 'REVIEW_GROUP' || state?.reviewResultId != null;
   return <form className="score-adjust" onSubmit={(event) => {
     event.preventDefault();
     if (disabled) return;
@@ -282,7 +287,7 @@ function Setup({ state }: { state: Snapshot }) {
         value={settings[key]} onChange={(event) => setSettings({ ...settings, [key]: Number(event.target.value) })} /></label>)}</div>
       <button className="primary" type="submit">Save setup</button></fieldset>
     {message && <p role="status">{message}</p>}
-    <p className="muted">Wrong answers always lose the frozen point value. The minimum value is not a deadline.</p>
+    <p className="muted">Wrong buzzes lose half the frozen point value, rounded up. The minimum value is not a deadline.</p>
     <p className="muted">Global defaults load from settings.json. Save setup writes this quiz's settings to its quiz.json file for future sessions. Server options are file-only.</p>
     <p className="muted">Timed lockouts start after the wrong-answer result and keep counting down during pauses and other players' answers. Players can buzz again when the timer ends and buzzers are open.</p>
   </form><section className="panel setup-guide"><h2>Before you start</h2><ol><li>Connect the TV and choose <strong>Extend</strong>, not Duplicate.</li>
