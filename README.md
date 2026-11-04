@@ -4,6 +4,8 @@ A locally hosted, sequential multiplayer buzzer quiz. The gamemaster runs the
 show on a laptop, a separate TV displays clues, and players buzz from their
 phones. Answers are spoken aloud and scored only by the gamemaster.
 
+Promotional website: [kaboot-quiz.pages.dev](https://kaboot-quiz.pages.dev/).
+
 The application source lives under [src/](./src/), with standalone development
 helpers in [script/](./script/). It is separate from the archived
 Jeopardy project; there is no category/tile board.
