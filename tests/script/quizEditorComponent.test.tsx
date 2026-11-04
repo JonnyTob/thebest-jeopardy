@@ -51,12 +51,38 @@ test('editor handles drafts, validation, question IDs, reordering and conflict f
     const modes = () => view.root.findByProps({ className: 'editor-list' }).findAllByType('button')
       .map((item) => item.findAllByType('span')[1].children.join(''));
     assert.deepEqual(modes(), ['Buzz']);
+    assert.equal(dirty, false);
+    assert.equal(field('Starting points', 'input').props.value, gameState.settings.startPoints);
+    assert.equal(field('Minimum points', 'input').props.value, gameState.settings.minimumPoints);
+    assert.doesNotMatch(JSON.stringify(view.toJSON()), /Set points for this question/);
+    await act(async () => { button('Preview question').props.onClick(); });
+    assert.equal(view.root.findByType(QuestionPreview).props.preview.question.pointDecay, undefined);
+    await act(async () => { button('Close preview').props.onClick(); });
+    await act(async () => { field('Starting points', 'input').props.onChange({ target: { value: '850' } }); });
+    await act(async () => { button('Preview question').props.onClick(); });
+    assert.deepEqual(view.root.findByType(QuestionPreview).props.preview.question.pointDecay, {
+      startPoints: 850, minimumPoints: gameState.settings.minimumPoints, dropPoints: gameState.settings.dropPoints,
+      dropEverySeconds: gameState.settings.dropEverySeconds, pointDecayDelaySeconds: gameState.settings.pointDecayDelaySeconds,
+    });
+    await act(async () => { button('Close preview').props.onClick(); });
     await act(async () => { field('Mode', 'select').props.onChange({ target: { value: 'type-and-buzz' } }); });
     assert.deepEqual(modes(), ['Type + buzz']);
     assert.equal(field('Typed answer points', 'input').props.value, 100);
     assert.equal(field('Buzzer points for a correct answer', 'input').props.value, 500);
     assert.equal(field('Initial typing window (seconds)', 'input').props.value, 10);
+    await act(async () => { field('Point type', 'select').props.onChange({ target: { value: 'decay' } }); });
+    assert.equal(field('Starting points', 'input').props.value, gameState.settings.startPoints);
+    await act(async () => { field('Starting points', 'input').props.onChange({ target: { value: '900' } }); });
+    await act(async () => { button('Preview question').props.onClick(); });
+    assert.equal(view.root.findByType(QuestionPreview).props.preview.question.pointDecay.startPoints, 900);
+    await act(async () => { button('Close preview').props.onClick(); });
+    await act(async () => { field('Point type', 'select').props.onChange({ target: { value: 'fixed' } }); });
+    assert.equal(field('Buzzer points for a correct answer', 'input').props.value, 500);
     await act(async () => { field('Mode', 'select').props.onChange({ target: { value: 'buzzer' } }); });
+    await act(async () => { field('Point type', 'select').props.onChange({ target: { value: 'fixed' } }); });
+    assert.equal(field('Buzzer points for a correct answer', 'input').props.value, 500);
+    await act(async () => { field('Point type', 'select').props.onChange({ target: { value: 'decay' } }); });
+    assert.equal(field('Starting points', 'input').props.value, gameState.settings.startPoints);
     assert.equal(field('Question', 'textarea').props.rows, 1);
     assert.equal(field('Answer', 'textarea').props.rows, 1);
     assert.equal(field('Clue text (optional)', 'textarea').props.rows, 1);

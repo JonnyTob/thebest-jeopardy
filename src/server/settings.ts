@@ -69,7 +69,10 @@ export class JsonQuizSettingsStorage implements QuizSettingsStorage {
 
   save(quizId: number, settings: Settings): void {
     const file = this.file(quizId);
-    const content = JSON.stringify({ gameSetup: settingsSchema.parse(settings) }, null, 2) + '\n';
+    const existing = this.load(quizId);
+    const { startPoints: _startPoints, minimumPoints: _minimumPoints, dropPoints: _dropPoints,
+      dropEverySeconds: _dropEverySeconds, pointDecayDelaySeconds: _pointDecayDelaySeconds, ...gameSetup } = settingsSchema.parse(settings);
+    const content = JSON.stringify({ gameSetup: { ...existing, ...gameSetup } }, null, 2) + '\n';
     mkdirSync(this.directory, { recursive: true });
     const temporary = `${file}.${randomUUID()}.tmp`;
     try {

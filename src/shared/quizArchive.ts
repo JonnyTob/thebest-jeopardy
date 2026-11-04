@@ -33,7 +33,7 @@ export const quizArchiveSchema = z.strictObject({
     coverImage: archiveMediaSchema.optional(),
   }),
   gameSetup: archiveGameSetupSchema.optional(),
-  questions: z.array(archiveQuestionSchema).min(1).max(500),
+  questions: z.array(archiveQuestionSchema).max(500),
 }).superRefine((archive, context) => {
   const ids = new Set<string>();
   archive.questions.forEach((question, index) => {

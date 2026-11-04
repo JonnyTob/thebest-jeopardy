@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "quiz": {
+    "id": 100002,
+    "title": "Saturday Night Kaboot"
+  },
+  "questions": [
+    {
+      "id": "0e3befe1-07b0-46f9-8fcf-b1ce5cf45a78",
+      "keyword": "Starter Question",
+      "type": "text",
+      "question": "What day is it",
+      "mode": "typed",
+      "fixedPoints": 250,
+      "timerSeconds": 20,
+      "text": "calender",
+      "answer": "Monday"
+    },
+    {
+      "id": "34a7a3cc-616a-463f-9e3d-f926e18cf9b0",
+      "type": "text",
+      "question": "what is time",
+      "mode": "buzzer",
+      "answer": "09:40"
+    }
+  ]
+}

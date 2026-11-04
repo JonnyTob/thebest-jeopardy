@@ -15,7 +15,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <AppErrorBoundary>
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<HomePage />} />
+        <Route path="/" element={<SessionProvider role="display"><HomePage /></SessionProvider>} />
         <Route path="/admin" element={<AdminPage />} />
         <Route path="/display" element={<SessionProvider role="display"><DisplayPage /></SessionProvider>} />
         <Route path="/play" element={<SessionProvider role="player"><PlayPage /></SessionProvider>} />

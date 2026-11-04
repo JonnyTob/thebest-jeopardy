@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useContext, useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 import { Link } from 'react-router-dom';
-import { valueWindowMs } from '../../shared/game';
+import { pointSettingsFor, valueWindowMs } from '../../shared/game';
 import type { AvatarId, Snapshot } from '../../shared/protocol';
-import { useSession } from '../session';
+import { SessionContext, useSession } from '../session';
 import { branding } from '../branding';
 
 const animalColors: Record<AvatarId, string> = {
@@ -87,8 +87,9 @@ export function countdownSeconds(remainingMs: number): string {
 }
 
 export function PointBar({ state }: { state: Snapshot }) {
-  const pointWindowMs = valueWindowMs(state.settings);
-  const delayMs = state.settings.pointDecayDelaySeconds * 1000;
+  const points = pointSettingsFor(state.question, state.settings);
+  const pointWindowMs = valueWindowMs(points);
+  const delayMs = points.pointDecayDelaySeconds * 1000;
   const pointElapsedMs = Math.min(Math.max(0, state.clueElapsedMs - delayMs), pointWindowMs);
   const pointRemaining = pointWindowMs === 0 ? 0 : Math.max(0, 1 - pointElapsedMs / pointWindowMs);
   const countdown = countdownSeconds(questionTimerMs(state) - state.clueElapsedMs);
@@ -96,34 +97,37 @@ export function PointBar({ state }: { state: Snapshot }) {
     <div className="point-label"><span>POINT VALUE</span><strong>{state.currentPoints.toLocaleString()} <small>pts</small></strong></div>
     <div className="point-track" role="progressbar" aria-label="Point reduction progress" aria-valuenow={Math.round(pointRemaining * 100)}
       aria-valuemin={0} aria-valuemax={100}><div style={{ width: `${pointRemaining * 100}%` }} /></div>
-    <div className="point-meta"><span>{state.currentPoints === state.settings.minimumPoints ? 'Minimum value'
+    <div className="point-meta"><span>{state.currentPoints === points.minimumPoints ? 'Minimum value'
       : state.clockRunning && state.clueElapsedMs < delayMs ? `Points held: ${countdownSeconds(delayMs - state.clueElapsedMs)}s`
         : state.clockRunning ? 'Points decreasing' : 'Points frozen'}</span>
       <span className="submission-countdown">{state.phase === 'QUESTION_OPEN' ? 'Buzzing closes in' : 'Buzzing closed'}: <strong>{countdown}s</strong></span></div>
   </div>;
 }
 
-export function JoinLink({ compact = false }: { compact?: boolean }) {
+export function JoinLink({ compact = false, editable = false }: { compact?: boolean; editable?: boolean }) {
+  const session = useContext(SessionContext);
   const [urls, setUrls] = useState<string[]>([]);
-  const [url, setUrl] = useState('');
+  const [fallbackUrl, setFallbackUrl] = useState('');
+  const url = session?.joinUrl ?? fallbackUrl;
   const [qr, setQr] = useState('');
   const [error, setError] = useState('');
   useEffect(() => {
     const controller = new AbortController();
     void fetch('/api/info', { signal: controller.signal }).then(async (response) => {
       if (!response.ok) throw new Error('Unable to load LAN join addresses.');
-      const info: { joinUrls: string[]; preferredJoinUrl?: string } = await response.json();
+      const info: { joinUrls: string[]; preferredJoinUrl?: string; selectedJoinUrl?: string | null } = await response.json();
       const current = `${location.origin}/play`;
       const choices = [...new Set([...info.joinUrls, current])];
       setUrls(choices);
       const local = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
-      setUrl(info.preferredJoinUrl ?? (local ? choices[0] : current));
+      setFallbackUrl(info.selectedJoinUrl ?? info.preferredJoinUrl ?? (local ? choices[0] : current) ?? '');
     }).catch((cause: unknown) => {
       if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : 'Unable to load join link.');
     });
     return () => controller.abort();
   }, []);
   useEffect(() => {
+    setQr('');
     if (!url) return;
     let active = true;
     void QRCode.toDataURL(url, { width: 512, margin: 4, color: { dark: '#211035', light: '#ffffff' } })
@@ -135,8 +139,8 @@ export function JoinLink({ compact = false }: { compact?: boolean }) {
     {qr && <img src={qr} alt={`QR code to join at ${url}`} />}
     <div><span className="eyebrow">EVERYONE'S INVITED</span><h3>Join from your phone</h3>
       <p>Same Wi-Fi. Pick an avatar. Get ready to buzz.</p>
-      {urls.length > 1 && !compact && <label>LAN address<select value={url} onChange={(event) => setUrl(event.target.value)}>
-        {urls.map((address) => <option key={address}>{address}</option>)}
+      {urls.length > 1 && !compact && editable && <label>LAN address<select value={url} disabled={!session?.connected || session.pending} onChange={(event) => { void session?.selectJoinUrl?.(event.target.value); }}>
+        {[...new Set([...urls, ...(url ? [url] : [])])].map((address) => <option key={address}>{address}</option>)}
       </select></label>}
       <a className="join-url" href={url || '/play'}>{url || 'Loading join address...'}</a>
       {error && <p className="error-text" role="alert">{error}</p>}

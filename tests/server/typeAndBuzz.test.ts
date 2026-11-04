@@ -99,6 +99,44 @@ test('odd buzzer rewards deduct half rounded up to a whole point', () => {
   assert.equal(game.snapshot().buzzResult?.delta, -251);
 });
 
+test('combined decaying buzzer points start after the typing window and freeze at the buzz', () => {
+  let time = 0;
+  const question = { ...quiz.questions[0], pointMode: 'decay' as const, buzzPoints: undefined,
+    pointDecay: { startPoints: 800, minimumPoints: 200, dropPoints: 150, dropEverySeconds: 3, pointDecayDelaySeconds: 2 } };
+  const game = new GameEngine({ ...quiz, questions: [question] }, () => time);
+  const player = game.join({ name: 'Alice', avatarId: 'fox' });
+  game.command({ id: randomUUID(), revision: game.revision, action: { type: 'start' } });
+  time += 3000; game.tick(); time += START_COUNTDOWN_MS; game.tick();
+  time += 10000;
+  assert.equal(game.snapshot().currentPoints, 800);
+  time += 5000;
+  assert.equal(game.snapshot().currentPoints, 650);
+  game.buzz(player.id);
+  assert.equal(game.snapshot().pointsAtBuzz, 650);
+  game.command({ id: randomUUID(), revision: game.revision, action: { type: 'judge', correct: false } });
+  assert.equal(player.score, -325);
+});
+
+test('an early buzz starts decay for later buzzes after the wrong-answer hold', () => {
+  let time = 0;
+  const question = { ...quiz.questions[0], pointMode: 'decay' as const, buzzPoints: undefined,
+    pointDecay: { startPoints: 800, minimumPoints: 200, dropPoints: 100, dropEverySeconds: 2, pointDecayDelaySeconds: 0 } };
+  const game = new GameEngine({ ...quiz, questions: [question] }, () => time);
+  const alice = game.join({ name: 'Alice', avatarId: 'fox' });
+  const bob = game.join({ name: 'Bob', avatarId: 'cat' });
+  game.command({ id: randomUUID(), revision: game.revision, action: { type: 'start' } });
+  time += 3000; game.tick(); time += START_COUNTDOWN_MS; game.tick();
+  time += 1000;
+  game.submitAnswer(alice.id, game.snapshot().questionInstanceId!, 'Answer');
+  game.buzz(alice.id);
+  assert.equal(game.snapshot().pointsAtBuzz, 800);
+  game.command({ id: randomUUID(), revision: game.revision, action: { type: 'judge', correct: false } });
+  time += BUZZ_RESULT_MS; game.tick(); time += 2000;
+  assert.equal(game.snapshot().currentPoints, 700);
+  game.buzz(bob.id);
+  assert.equal(game.snapshot().pointsAtBuzz, 700);
+});
+
 test('pause freezes both windows; timeout closes submissions and reset clears the roster', () => {
   const { game, alice, command, advance } = setup();
   const instance = game.snapshot().questionInstanceId!;

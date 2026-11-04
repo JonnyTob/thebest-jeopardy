@@ -15,6 +15,38 @@ const quiz = quizSchema.parse({
   ],
 });
 
+test('a buzzer question uses its own decay settings for the displayed and frozen score', () => {
+  let time = 0;
+  const custom = quizSchema.parse({ id: 10, title: 'Custom', questions: [{ id: 'one', type: 'text', mode: 'buzzer',
+    question: 'Clue', answer: 'Answer', pointDecay: { startPoints: 800, minimumPoints: 200, dropPoints: 150, dropEverySeconds: 3, pointDecayDelaySeconds: 2 } }] });
+  const game = new GameEngine(custom, () => time);
+  const player = game.join({ name: 'Player', avatarId: 'fox' });
+  game.command({ id: randomUUID(), revision: game.revision, action: { type: 'start' } });
+  time += START_COUNTDOWN_MS; game.tick();
+  time += 5000;
+  assert.equal(game.snapshot().currentPoints, 650);
+  game.buzz(player.id);
+  assert.equal(game.snapshot().pointsAtBuzz, 650);
+  game.command({ id: randomUUID(), revision: game.revision, action: { type: 'judge', correct: true } });
+  assert.equal(player.score, 650);
+});
+
+test('fixed buzzer points remain fixed while the question countdown still closes it', () => {
+  let time = 0;
+  const custom = quizSchema.parse({ id: 11, title: 'Fixed', questions: [{ id: 'one', type: 'text', mode: 'buzzer',
+    question: 'Clue', answer: 'Answer', pointMode: 'fixed', buzzPoints: 750, timerSeconds: 10 }] });
+  const game = new GameEngine(custom, () => time);
+  const player = game.join({ name: 'Player', avatarId: 'fox' });
+  game.command({ id: randomUUID(), revision: game.revision, action: { type: 'start' } });
+  time += START_COUNTDOWN_MS; game.tick(); time += 9000;
+  assert.equal(game.snapshot().currentPoints, 750);
+  game.buzz(player.id);
+  assert.equal(game.snapshot().pointsAtBuzz, 750);
+  game.command({ id: randomUUID(), revision: game.revision, action: { type: 'reset' } });
+  time += 10000; game.tick();
+  assert.equal(game.snapshot().phase, 'QUESTION_CLOSED');
+});
+
 function setup({ last = false, empty = false, mode = 'typed' as 'typed' | 'buzzer' } = {}) {
   let time = 0;
   const questions = (last ? quiz.questions.slice(0, 1) : quiz.questions)

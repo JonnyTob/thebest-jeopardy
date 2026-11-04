@@ -3,7 +3,7 @@ import { readdirSync, lstatSync, unlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import express, { type Request, type Response } from 'express';
 import { ZodError } from 'zod';
-import type { Quiz } from '../shared/protocol.js';
+import type { Quiz, Settings } from '../shared/protocol.js';
 import type { LoadedMediaReference } from '../shared/mediaLibrary.js';
 import { ArchiveConflictError, ArchiveQuizStorage } from './storage.js';
 
@@ -25,14 +25,16 @@ function referenced(quiz: { quiz: { coverImage?: string }; questions: { media?: 
   return quiz.quiz.coverImage === file || quiz.questions.some((question) => question.media === file);
 }
 
-export function editorRoutes(storage: ArchiveQuizStorage, loadedQuiz: () => Quiz, passcode: string, requirePasscode: boolean) {
+export function editorRoutes(storage: ArchiveQuizStorage, loadedQuiz: () => Quiz, passcode: string, requirePasscode: boolean,
+  library?: { list: () => unknown; create: (title: string) => unknown; load: (id: number, revision: number) => Promise<void>; delete: (id: number, revision: string) => void; globalSettings: () => Settings },
+  failures = new Map<string, { count: number; since: number }>()) {
   const router = express.Router();
   function runtimeReferences() {
     const quiz = loadedQuiz();
+    if (quiz.id !== storage.quizId) return { quiz: {}, questions: [] };
     return { quiz: { coverImage: quiz.coverImage?.replace('/media/quiz/', 'media/') },
       questions: quiz.questions.map((q) => ({ media: q.media?.replace('/media/quiz/', 'media/') })) };
   }
-  const failures = new Map<string, { count: number; since: number }>();
   const expected = Buffer.from(passcode);
   router.use((req, res, next) => {
     if (req.get('x-quiz-editor') !== '1') { res.status(403).json({ error: 'Host authorization required.' }); return; }
@@ -64,8 +66,33 @@ export function editorRoutes(storage: ArchiveQuizStorage, loadedQuiz: () => Quiz
     res.status(500).json({ error: 'Quiz editor request failed. Check the server console.' });
   }
 
+  if (library) {
+    router.get('/library', (_req, res) => { try { res.json({ quizzes: library.list() }); } catch (error) { fail(res, error); } });
+    router.post('/library', express.json({ limit: '8kb' }), (req, res) => {
+      if (typeof req.body?.title !== 'string' || !req.body.title.trim() || req.body.title.trim().length > 100) {
+        res.status(400).json({ error: 'Enter a quiz title of 1–100 characters.' }); return;
+      }
+      try { res.status(201).json(library.create(req.body.title)); } catch (error) { fail(res, error); }
+    });
+    router.post('/library/load', express.json({ limit: '8kb' }), async (req, res) => {
+      if (!Number.isSafeInteger(req.body?.id) || req.body.id < 1 || !Number.isSafeInteger(req.body?.revision) || req.body.revision < 0) {
+        res.status(400).json({ error: 'Quiz ID and game revision are required.' }); return;
+      }
+      try { await library.load(req.body.id, req.body.revision); res.json({ ok: true }); }
+      catch (error) { res.status(409).json({ error: error instanceof Error ? error.message : 'Unable to load quiz.' }); }
+    });
+    router.delete('/library/:id', express.json({ limit: '8kb' }), (req, res) => {
+      const id = Number(req.params.id);
+      if (!/^[1-9]\d*$/.test(req.params.id) || !Number.isSafeInteger(id) || typeof req.body?.revision !== 'string') {
+        res.status(400).json({ error: 'Valid quiz ID and archive revision are required.' }); return;
+      }
+      try { library.delete(id, req.body.revision); res.json({ ok: true }); }
+      catch (error) { res.status(409).json({ error: error instanceof Error ? error.message : 'Unable to delete quiz.' }); }
+    });
+  }
+
   router.get('/archive', (_req, res) => {
-    try { res.json(storage.readArchive()); } catch (error) { fail(res, error); }
+    try { res.json({ ...storage.readArchive(), ...(library ? { globalSettings: library.globalSettings() } : {}) }); } catch (error) { fail(res, error); }
   });
   router.put('/archive', express.json({ limit: '12mb' }), (req, res) => {
     try {

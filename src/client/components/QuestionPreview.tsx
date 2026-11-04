@@ -1,14 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { pointsAt } from '../../shared/game';
+import { buzzerPointsAt } from '../../shared/game';
 import { toRuntimeQuestion, type ArchiveQuestion } from '../../shared/quizArchive';
 import type { Settings, Snapshot } from '../../shared/protocol';
 import { DisplayScreen } from '../pages/DisplayPage';
 
-type Preview = { question: ArchiveQuestion; settings: Settings; index: number; count: number };
+type Preview = { question: ArchiveQuestion; settings: Settings; index: number; count: number; quizId?: number };
 
 export function previewSnapshot(base: Snapshot, preview: Preview, elapsedMs: number): Snapshot {
-  const { answer: _answer, ...question } = toRuntimeQuestion(preview.question);
+  const { answer: _answer, ...rawQuestion } = toRuntimeQuestion(preview.question);
+  const question = { ...rawQuestion, ...(preview.quizId !== undefined && rawQuestion.media
+    ? { media: rawQuestion.media.replace('/media/quiz/', `/media/archive/${preview.quizId}/`) } : {}) };
   const intro = question.mode === 'type-and-buzz' ? base.serverSettings.typeBuzzAnnouncementSeconds * 1000 : 0;
   const countdown = intro ? 3000 : 0;
   const deadline = ((question.timerSeconds ?? preview.settings.questionTimerSeconds)
@@ -28,7 +30,7 @@ export function previewSnapshot(base: Snapshot, preview: Preview, elapsedMs: num
     revealedAnswer: null,
     players: [], leaderboardIds: [], lockedOutIds: [], lockoutRemainingMs: {},
     activePlayerId: null, pointsAtBuzz: null,
-    currentPoints: question.mode === 'type-and-buzz' ? question.buzzPoints ?? 0 : question.mode === 'typed' ? question.fixedPoints ?? 0 : pointsAt(elapsed, preview.settings),
+    currentPoints: question.mode === 'typed' ? question.fixedPoints ?? 0 : buzzerPointsAt(question, elapsed, preview.settings),
     clueElapsedMs: elapsed, displayElapsedMs: elapsed,
     clockRunning: running, displayClockRunning: running, paused: false,
     revealProgress: Math.min(1, elapsed / ((question.reveal?.durationSeconds ?? 20) * 1000)),
@@ -40,8 +42,8 @@ export function previewSnapshot(base: Snapshot, preview: Preview, elapsedMs: num
   };
 }
 
-export function QuestionPreview({ preview, generation, gameState, onClose, onRefresh, error }: {
-  preview: Preview; generation: number; gameState: Snapshot; onClose: () => void; onRefresh: () => void; error: string;
+export function QuestionPreview({ preview, generation, gameState, onClose, onRefresh, error, quizId }: {
+  preview: Preview; generation: number; gameState: Snapshot; onClose: () => void; onRefresh: () => void; error: string; quizId?: number;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
@@ -63,7 +65,7 @@ export function QuestionPreview({ preview, generation, gameState, onClose, onRef
         <button type="button" className="primary" onClick={close}>Close preview</button></div>
     </div>
     {error && <p role="alert">{error}</p>}
-    <PreviewScreen key={generation} preview={preview} gameState={gameState} onClose={close} />
+    <PreviewScreen key={generation} preview={{ ...preview, quizId }} gameState={gameState} onClose={close} />
   </dialog>;
 }
 

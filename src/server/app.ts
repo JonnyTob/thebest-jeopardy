@@ -7,7 +7,7 @@ import express from 'express';
 import { Server } from 'socket.io';
 import { brandingSchema, createJoinSchema, hostCommandSchema, serverSettingsSchema, settingsSchema, type Branding, type ClientEvents, type ServerEvents, type Settings, type ServerSettings } from '../shared/protocol.js';
 import { GameEngine, GameError } from './engine.js';
-import { ArchiveConflictError, ArchiveQuizStorage, type QuizStorage } from './storage.js';
+import { ArchiveConflictError, ArchiveQuizSettingsStorage, ArchiveQuizStorage, QuizLibrary, type QuizStorage } from './storage.js';
 import type { QuizSettingsStorage } from './settings.js';
 import { renderBrandingHtml } from './branding.js';
 import { probeMediaDurations } from './mediaDurations.js';
@@ -44,7 +44,9 @@ export async function createApp(options: AppOptions) {
     joinOrigin = parsed.origin;
   }
   const quiz = await options.storage.load();
-  const settingsStorage = options.settingsStorage;
+  let settingsStorage = options.settingsStorage;
+  let activeStorage = options.storage;
+  const library = options.storage instanceof ArchiveQuizStorage ? new QuizLibrary(path.dirname(path.dirname(options.storage.file))) : null;
   const serverSettings = serverSettingsSchema.parse(options.serverSettings ?? {});
   const joinSchema = createJoinSchema(serverSettings.maxPlayerNameLength);
   const mediaDurations = await probeMediaDurations(quiz,
@@ -59,23 +61,80 @@ export async function createApp(options: AppOptions) {
   const app = express();
   app.disable('x-powered-by');
   app.use((_req, res, next) => { res.set('X-Content-Type-Options', 'nosniff'); next(); });
-  if (options.storage instanceof ArchiveQuizStorage) {
-    app.use('/api/editor', editorRoutes(options.storage, () => engine.quiz, options.passcode, serverSettings.requireAdminPasscode));
+  if (library && options.storage instanceof ArchiveQuizStorage) {
+    const editorFailures = new Map<string, { count: number; since: number }>();
+    const actions = {
+      list: () => library.list(),
+      create: (title: string) => library.create(title),
+      delete: (id: number, revision: string) => {
+        if (id === engine.quiz.id) throw new GameError('The loaded quiz cannot be deleted. Load another quiz first.');
+        if (id === (options.storage as ArchiveQuizStorage).quizId) throw new GameError('The startup quiz cannot be deleted. Change startupQuizId and restart first.');
+        library.delete(id, revision);
+      },
+      globalSettings: () => settingsSchema.parse({ ...new GameEngine(engine.quiz).settings, ...options.gameSetup, title: engine.quiz.title }),
+      load: async (id: number, revision: number) => {
+        if (engine.snapshot().phase !== 'LOBBY' || engine.revision !== revision) throw new GameError('The game changed. Load quizzes only in the lobby.');
+        const target = library.storage(id);
+        const archiveRevision = target.readArchive().revision;
+        const updatedQuiz = await target.load();
+        if (!updatedQuiz.questions.length) throw new GameError('Add and enable at least one question before loading this quiz.');
+        const root = await realpath(target.mediaRoot);
+        for (const media of [updatedQuiz.coverImage, ...updatedQuiz.questions.map((question) => question.media)]) {
+          if (!media?.startsWith('/media/quiz/')) continue;
+          const file = await realpath(path.resolve(root, media.slice('/media/quiz/'.length)));
+          const relative = path.relative(root, file);
+          if (!relative || relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) throw new GameError('A quiz media file is outside the quiz folder.');
+        }
+        const targetSettings = new ArchiveQuizSettingsStorage(target);
+        const settings = settingsSchema.parse({ ...new GameEngine(updatedQuiz).settings, title: updatedQuiz.title,
+          ...options.gameSetup, ...targetSettings.load(id) });
+        const durations = await probeMediaDurations(updatedQuiz, root, '/media/quiz/');
+        if (target.readArchive().revision !== archiveRevision) throw new GameError('The quiz changed while loading. Try again.');
+        engine.loadLobbyQuiz(updatedQuiz, settings, durations, revision);
+        activeStorage = target;
+        settingsStorage = targetSettings;
+        broadcast();
+      },
+    };
+    app.use('/api/editor', (req, res, next) => {
+      const selected = req.query.quizId;
+      if (selected !== undefined && (typeof selected !== 'string' || !/^[1-9]\d*$/.test(selected) || !Number.isSafeInteger(Number(selected)))) {
+        res.status(400).json({ error: 'Invalid quiz ID.' }); return;
+      }
+      const id = selected === undefined ? (activeStorage as ArchiveQuizStorage).quizId : Number(selected);
+      editorRoutes(library.storage(id), () => engine.quiz, options.passcode, serverSettings.requireAdminPasscode, actions, editorFailures)(req, res, next);
+    });
   }
   if (options.quizMediaRoot) {
-    const mediaRoot = await realpath(options.quizMediaRoot);
-    app.use('/media/quiz', async (req, res, next) => {
+    const initialMediaRoot = await realpath(options.quizMediaRoot);
+    const serveMedia = (getRoot: (req: express.Request) => string | null): express.RequestHandler => async (req, res, next) => {
       try {
+        const requestedRoot = getRoot(req);
+        if (!requestedRoot) { res.sendStatus(404); return; }
+        const mediaRoot = await realpath(requestedRoot);
         const file = await realpath(path.resolve(mediaRoot, '.' + decodeURIComponent(req.path)));
         const relative = path.relative(mediaRoot, file);
         if (!relative || relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
           res.sendStatus(404); return;
         }
-        next();
+        express.static(mediaRoot, { dotfiles: 'deny', fallthrough: false, etag: false, lastModified: false,
+          setHeaders: (response) => response.setHeader('Cache-Control', 'no-store') })(req, res, next);
       } catch { res.sendStatus(404); }
-    }, express.static(mediaRoot, { dotfiles: 'deny', fallthrough: false }));
+    };
+    app.use('/media/quiz', serveMedia(() => activeStorage instanceof ArchiveQuizStorage ? activeStorage.mediaRoot : initialMediaRoot));
+    if (library) app.use('/media/archive/:id', serveMedia((req) => /^[1-9]\d*$/.test(req.params.id) && Number.isSafeInteger(Number(req.params.id))
+      ? library.storage(Number(req.params.id)).mediaRoot : null));
   }
   const httpServer = createServer(app);
+  let selectedJoinUrl: string | null = null;
+  function joinUrls(): string[] {
+    if (joinOrigin) return [`${joinOrigin}/play`];
+    const address = httpServer.address();
+    const port = address && typeof address !== 'string' ? address.port : 3000;
+    return [...new Set(Object.values(networkInterfaces()).flatMap((entries) =>
+      (entries ?? []).filter((entry) => entry.family === 'IPv4' && !entry.internal).map((entry) => `http://${entry.address}:${port}/play`)))];
+  }
+  function currentJoinUrl() { return selectedJoinUrl ?? joinUrls()[0] ?? null; }
   const io = new Server<ClientEvents, ServerEvents, Record<string, never>, SocketData>(httpServer, {
     maxHttpBufferSize: 16384,
   });
@@ -133,7 +192,27 @@ export async function createApp(options: AppOptions) {
   io.on('connection', (socket) => {
     if (socket.data.playerId) engine.setConnected(socket.data.playerId, true);
     socket.emit('player:identity', { playerId: socket.data.playerId ?? null });
+    socket.emit('session:joinUrl', currentJoinUrl());
     broadcast();
+
+    socket.on('host:selectJoinUrl', (url, ack) => {
+      if (typeof ack !== 'function') return;
+      if (!socket.data.host) return ack({ ok: false, error: 'Host authorization required.' });
+      const origin = socket.handshake.headers.origin;
+      let browserUrl: string | null = null;
+      try {
+        if (origin) {
+          const parsed = new URL(origin);
+          if ((parsed.protocol === 'http:' || parsed.protocol === 'https:') && parsed.origin === origin) browserUrl = `${origin}/play`;
+        }
+      } catch { /* Ignore malformed browser origins. */ }
+      if (typeof url !== 'string' || (!joinUrls().includes(url) && url !== browserUrl)) {
+        return ack({ ok: false, error: 'Choose an available join address.' });
+      }
+      selectedJoinUrl = url;
+      io.emit('session:joinUrl', url);
+      ack({ ok: true, data: undefined });
+    });
 
     socket.on('player:join', (input, ack) => {
       if (typeof ack !== 'function') {
@@ -208,7 +287,7 @@ export async function createApp(options: AppOptions) {
         let updatedSettings;
         let updatedDurations;
         if (parsed.data.action.type === 'restartQuiz') {
-          updatedQuiz = await options.storage.load();
+          updatedQuiz = await activeStorage.load();
           updatedSettings = settingsSchema.parse({
             ...new GameEngine(updatedQuiz).settings,
             title: updatedQuiz.title,
@@ -216,13 +295,13 @@ export async function createApp(options: AppOptions) {
             ...settingsStorage?.load(updatedQuiz.id),
           });
           updatedDurations = await probeMediaDurations(updatedQuiz,
-            options.quizMediaRoot ?? path.resolve(options.production ? 'dist/client/media' : 'src/public/media'),
+            activeStorage instanceof ArchiveQuizStorage ? activeStorage.mediaRoot : options.quizMediaRoot ?? path.resolve(options.production ? 'dist/client/media' : 'src/public/media'),
             options.quizMediaRoot ? '/media/quiz/' : '/media/');
         }
         const previousRevision = engine.revision;
         engine.command(parsed.data, settingsStorage ? (settings) => {
           try {
-            settingsStorage.save(quiz.id, settings);
+            settingsStorage!.save(engine.quiz.id, settings);
           } catch (cause) {
             if (cause instanceof ArchiveConflictError) throw new GameError('The quiz file changed. Restart the server before saving game setup.');
             console.error('Unable to save quiz settings:', cause);
@@ -283,11 +362,7 @@ export async function createApp(options: AppOptions) {
 
   app.get('/api/health', (_req, res) => res.json({ ok: true }));
   app.get('/api/info', (_req, res) => {
-    const address = httpServer.address();
-    const port = address && typeof address !== 'string' ? address.port : 3000;
-    const hosts = Object.values(networkInterfaces()).flatMap((entries) =>
-      (entries ?? []).filter((entry) => entry.family === 'IPv4' && !entry.internal).map((entry) => entry.address));
-    res.json({ joinUrls: joinOrigin ? [`${joinOrigin}/play`] : hosts.map((host) => `http://${host}:${port}/play`),
+    res.json({ joinUrls: joinUrls(), selectedJoinUrl: currentJoinUrl(),
       preferredJoinUrl: joinOrigin ? `${joinOrigin}/play` : undefined, source: 'quiz archive',
       serverSettings, branding, development: !options.production });
   });

@@ -26,6 +26,15 @@ const playbackDefinitionSchema = z.strictObject({
 }).refine((p) => p.endSeconds === undefined || p.endSeconds > (p.startSeconds ?? 0),
   { message: 'Playback end must be after start', path: ['endSeconds'] });
 
+export const questionPointDecaySchema = z.strictObject({
+  startPoints: z.number().int().min(1).max(10000),
+  minimumPoints: z.number().int().min(1).max(10000),
+  dropPoints: z.number().int().min(1).max(10000),
+  dropEverySeconds: z.number().min(1).max(120),
+  pointDecayDelaySeconds: z.number().int().min(0).max(300),
+}).refine((value) => value.minimumPoints <= value.startPoints,
+  { message: 'Minimum points cannot exceed starting points', path: ['minimumPoints'] });
+
 export const questionDefinitionSchema = z.strictObject({
   id: z.string().min(1).max(80),
   keyword: z.string().trim().min(1).max(80).optional(),
@@ -33,6 +42,8 @@ export const questionDefinitionSchema = z.strictObject({
   question: z.string().trim().min(1).max(500),
   mode: z.enum(['buzzer', 'typed', 'type-and-buzz'], { error: 'Question mode is required and must be "buzzer", "typed" or "type-and-buzz".' }),
   fixedPoints: z.number().int().min(1).max(10000).optional(),
+  pointMode: z.enum(['fixed', 'decay']).optional(),
+  pointDecay: questionPointDecaySchema.optional(),
   buzzPoints: z.number().int().min(1).max(10000).optional(),
   typingSeconds: z.number().int().min(1).max(3600).optional(),
   timerSeconds: z.number().int().min(1).max(3600).optional(),
@@ -46,6 +57,16 @@ export const questionDefinitionSchema = z.strictObject({
   }).optional(),
   playback: playbackDefinitionSchema.optional(),
 }).superRefine((question, context) => {
+  if (question.mode === 'typed' && (question.pointDecay !== undefined || question.pointMode !== undefined)) {
+    context.addIssue({ code: 'custom', path: ['pointMode'], message: 'Typed questions always use fixed points' });
+  }
+  const scoring = question.pointMode ?? (question.mode === 'type-and-buzz' ? 'fixed' : 'decay');
+  if (question.pointDecay !== undefined && scoring !== 'decay') {
+    context.addIssue({ code: 'custom', path: ['pointDecay'], message: 'Point decay settings require decaying points' });
+  }
+  if (question.mode === 'type-and-buzz' && scoring === 'decay' && question.pointDecay === undefined) {
+    context.addIssue({ code: 'custom', path: ['pointDecay'], message: 'Type + buzz questions with decaying points require decay settings' });
+  }
   if (question.type !== 'text' && !question.media) {
     context.addIssue({ code: 'custom', path: ['media'], message: 'Media clues require a local media path' });
   }
@@ -57,16 +78,21 @@ export const questionDefinitionSchema = z.strictObject({
       context.addIssue({ code: 'custom', path: [field], message: `${field} is only allowed for typed questions` });
     }
   }
-  for (const field of ['buzzPoints', 'typingSeconds'] as const) {
-    if (question.mode === 'type-and-buzz' && question[field] === undefined) {
-      context.addIssue({ code: 'custom', path: [field], message: `Type + buzz questions require ${field}` });
-    }
-    if (question.mode !== 'type-and-buzz' && question[field] !== undefined) {
-      context.addIssue({ code: 'custom', path: [field], message: `${field} is only allowed for type-and-buzz questions` });
-    }
+  if (question.mode === 'type-and-buzz' && question.typingSeconds === undefined) {
+    context.addIssue({ code: 'custom', path: ['typingSeconds'], message: 'Type + buzz questions require typingSeconds' });
   }
-  if (question.mode === 'type-and-buzz' && question.fixedPoints !== undefined && question.buzzPoints !== undefined && question.buzzPoints <= question.fixedPoints) {
-    context.addIssue({ code: 'custom', path: ['buzzPoints'], message: 'Buzz points must exceed typed points' });
+  if (question.mode !== 'type-and-buzz' && question.typingSeconds !== undefined) {
+    context.addIssue({ code: 'custom', path: ['typingSeconds'], message: 'typingSeconds is only allowed for type-and-buzz questions' });
+  }
+  if (question.mode !== 'typed' && scoring === 'fixed' && question.buzzPoints === undefined) {
+    context.addIssue({ code: 'custom', path: ['buzzPoints'], message: 'Fixed buzzer points are required' });
+  }
+  if ((question.mode === 'typed' || scoring === 'decay') && question.buzzPoints !== undefined) {
+    context.addIssue({ code: 'custom', path: ['buzzPoints'], message: 'buzzPoints is only allowed for fixed buzzer scoring' });
+  }
+  const startingBuzzPoints = scoring === 'fixed' ? question.buzzPoints : question.pointDecay?.startPoints;
+  if (question.mode === 'type-and-buzz' && question.fixedPoints !== undefined && startingBuzzPoints !== undefined && startingBuzzPoints <= question.fixedPoints) {
+    context.addIssue({ code: 'custom', path: [scoring === 'fixed' ? 'buzzPoints' : 'pointDecay', ...(scoring === 'decay' ? ['startPoints'] : [])], message: 'Starting buzz points must exceed typed points' });
   }
   if (question.type !== 'text' && question.text !== undefined) {
     context.addIssue({ code: 'custom', path: ['text'], message: 'text is only allowed for text questions' });
@@ -209,6 +235,8 @@ export interface Snapshot {
   scoreEvents: ScoreEvent[];
   questionInstanceId: string | null;
   submissionCount: number;
+  /** Elapsed clue time at which combined-mode buzzer point decay begins. */
+  buzzDecayStartMs?: number | null;
   /** True after the typed-answer roster is frozen. */
   submissionsClosed?: boolean;
   mySubmitted: boolean;
@@ -256,9 +284,11 @@ export interface ClientEvents {
   'player:buzz': (ack: Ack) => void;
   'player:submitAnswer': (request: { questionInstanceId: string; answer: string }, ack: Ack) => void;
   'host:command': (command: HostCommand, ack: Ack) => void;
+  'host:selectJoinUrl': (url: string, ack: Ack) => void;
 }
 export interface ServerEvents {
   'session:snapshot': (snapshot: Snapshot) => void;
   'player:identity': (identity: { playerId: string | null }) => void;
   'session:error': (message: string) => void;
+  'session:joinUrl': (url: string | null) => void;
 }

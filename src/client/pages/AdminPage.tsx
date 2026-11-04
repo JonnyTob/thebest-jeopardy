@@ -1,10 +1,11 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { rankPlayers, startCountdownText, wrongBuzzPenalty } from '../../shared/game';
+import { buzzerPointMode, rankPlayers, startCountdownText, wrongBuzzPenalty } from '../../shared/game';
 import { serverSettingsSchema, settingsSchema, type Player, type Settings, type Snapshot } from '../../shared/protocol';
 import { SessionProvider, useAnimatedState, useSession } from '../session';
 import { Avatar, Brand, Connection, JoinLink, PointBar, QuizName, SessionError, buzzerLabel, countdownSeconds, nextRoundCountdownText, questionTimerMs } from '../components/Common';
 import { Media } from '../components/Media';
 import { QuizEditor } from '../components/QuizEditor';
+import { QuizLibrary } from '../components/QuizLibrary';
 
 const passcodeKey = 'quiz-night-host-passcode';
 
@@ -52,9 +53,10 @@ export function AdminPage() {
 export function AdminConsole({ logout, requirePasscode, development, passcode = '' }: { logout: () => void; requirePasscode: boolean; development: boolean; passcode?: string }) {
   const { connected, command, pending } = useSession();
   const state = useAnimatedState();
-  const [tab, setTab] = useState<'live' | 'setup' | 'editor'>('live');
+  const [tab, setTab] = useState<'live' | 'setup' | 'editor' | 'library'>('live');
+  const [editorQuizId, setEditorQuizId] = useState<number | undefined>();
   const [editorDirty, setEditorDirty] = useState(false);
-  function navigate(next: 'live' | 'setup' | 'editor') {
+  function navigate(next: 'live' | 'setup' | 'editor' | 'library') {
     if (next === tab) return;
     if (tab === 'editor' && next !== 'editor' && editorDirty && !window.confirm('Discard unsaved quiz changes?')) return;
     setEditorDirty(false);
@@ -78,7 +80,8 @@ export function AdminConsole({ logout, requirePasscode, development, passcode = 
     <header className="admin-header"><Brand subtitle="Private host console" />
       <nav aria-label="Host sections"><button className={tab === 'live' ? 'active' : ''} onClick={() => navigate('live')}>Live game</button>
         <button className={tab === 'setup' ? 'active' : ''} onClick={() => navigate('setup')}>Game setup</button>
-        <button className={tab === 'editor' ? 'active' : ''} onClick={() => navigate('editor')}>Quiz editor</button></nav>
+        <button className={tab === 'library' ? 'active' : ''} onClick={() => navigate('library')}>Quiz library</button>
+        <button className={tab === 'editor' ? 'active' : ''} onClick={() => { if (tab !== 'editor') setEditorQuizId(state?.quizId); navigate('editor'); }}>Quiz editor</button></nav>
       <div className="header-actions"><Connection connected={connected} /><a href="/display" target="_blank" rel="noreferrer">Open TV &nearr;</a>
         {requirePasscode && <button className="quiet" onClick={() => { if (!editorDirty || window.confirm('Discard unsaved quiz changes?')) logout(); }}>Lock console</button>}</div></header>
     <SessionError />
@@ -94,7 +97,9 @@ export function AdminConsole({ logout, requirePasscode, development, passcode = 
     {state?.serverSettings.requireAdminPasscode === false && <div className="notice" role="status">Admin passcode protection is disabled. Anyone who can reach this server can control the quiz.</div>}
     {!connected && <div className="notice" role="status">Host controls are disabled until connected. If the passcode was rejected, lock the console and try again.</div>}
     {!state ? <section className="panel"><h1>Connecting to the game...</h1></section>
-      : tab === 'editor' ? <QuizEditor passcode={passcode} onDirtyChange={setEditorDirty} gameState={state} />
+      : tab === 'library' ? <QuizLibrary passcode={passcode} state={state} connected={connected} onLive={() => navigate('live')}
+        onEdit={(id) => { setEditorQuizId(id); navigate('editor'); }} />
+      : tab === 'editor' ? <QuizEditor key={editorQuizId ?? state.quizId} quizId={editorQuizId ?? state.quizId} passcode={passcode} onDirtyChange={setEditorDirty} gameState={state} />
       : tab === 'setup' ? <Setup state={state} /> : <>
         <section className="panel game-heading"><div><span className="eyebrow">{state.phase === 'LOBBY' ? "LET'S GET EVERYONE IN" : 'YOU CALL THE SHOTS'}</span>
           <h1><QuizName title={state.settings.title} id={state.quizId} /></h1><p>{state.phase === 'LOBBY' ? 'Lobby open / waiting for players' :
@@ -102,8 +107,8 @@ export function AdminConsole({ logout, requirePasscode, development, passcode = 
             state.phase === 'NEXT_ROUND' ? 'Next round / answering opens after the countdown' :
             state.phase === 'GAME_FINISHED' ? 'Game finished / final standings' :
               `Question ${state.questionIndex + 1} of ${state.questionCount} / ${buzzerLabel(state).toLowerCase()}`}</p></div>
-          <div className={`phase-pill ${answering ? 'amber' : ''}`}>{state.phase.replaceAll('_', ' ')}</div></section>
-        {state.phase === 'LOBBY' ? <section className="panel lobby-controls"><JoinLink />
+          <div className={`phase-pill ${answering ? 'amber' : ''}`}>{state.phase === 'LOBBY' ? 'WAITING FOR PLAYERS' : state.phase.replaceAll('_', ' ')}</div></section>
+        {state.phase === 'LOBBY' ? <section className="panel lobby-controls"><JoinLink editable />
           <div><h2>Ready when you are.</h2><p>Open the TV display, get everyone on the same Wi-Fi, then start the first clue.</p>
             <button className="primary wide" disabled={disabled} onClick={() => { void command({ type: 'start' }); }}>Start quiz</button></div></section>
           : state.phase === 'STARTING' ? <section className="panel" role="status">
@@ -122,8 +127,9 @@ export function AdminConsole({ logout, requirePasscode, development, passcode = 
               <section className="panel admin-question"><span className="eyebrow">CURRENT QUESTION / {state.question?.type.toUpperCase()} / {combined ? 'TYPE + BUZZ' : typed ? 'EVERYONE ANSWERS' : 'BUZZER'}</span>
                 <h2>{state.question?.question}</h2><div className="admin-media"><Media state={state} preview /></div>
                 <div className="private-answer"><span className="eyebrow">PRIVATE ANSWER / HOST ONLY</span><strong>{state.privateAnswer}</strong></div>
-                {combined ? <p>Type: +{state.question?.fixedPoints} / Buzz: +{state.question?.buzzPoints} or −{wrongBuzzPenalty(state.question?.buzzPoints ?? 0)} / Time remaining: {countdownSeconds(questionTimerMs(state) - state.clueElapsedMs)}s</p>
-                  : typed ? <p>{state.question?.fixedPoints} fixed points / time remaining: {countdownSeconds(questionTimerMs(state) - state.clueElapsedMs)}s</p> : <PointBar state={state} />}</section>
+                {combined ? <p>Type: +{state.question?.fixedPoints} / Buzz: +{state.currentPoints} or −{wrongBuzzPenalty(state.currentPoints)} / Time remaining: {countdownSeconds(questionTimerMs(state) - state.clueElapsedMs)}s</p>
+                  : typed ? <p>{state.question?.fixedPoints} fixed points / time remaining: {countdownSeconds(questionTimerMs(state) - state.clueElapsedMs)}s</p>
+                    : buzzerPointMode(state.question) === 'fixed' ? <p>Fixed buzzer points: {state.currentPoints} / Time remaining: {countdownSeconds(questionTimerMs(state) - state.clueElapsedMs)}s</p> : <PointBar state={state} />}</section>
               <section className="panel game-actions"><span className="eyebrow">GAME ACTIONS</span>
                 {finishing && <div className="notice" role="status"><strong>Finishing the clue / score frozen</strong>
                   <p>{!connected ? 'Connection lost. Waiting to reconnect...' : state.mediaFinishNeedsSkip
@@ -275,11 +281,6 @@ function Setup({ state }: { state: Snapshot }) {
       <label>Quiz title<input required maxLength={100} value={settings.title} onChange={(event) => setSettings({ ...settings, title: event.target.value })} /></label>
       <div className="settings-fields">{([
         ['leaderboardCount', 'TV leaderboard cards', 1, 12],
-        ['startPoints', 'Starting points', 1, 10000],
-        ['minimumPoints', 'Minimum points', 1, 10000],
-        ['dropPoints', 'Points dropped per step', 1, 10000],
-        ['dropEverySeconds', 'Seconds between drops', 1, 120],
-        ['pointDecayDelaySeconds', 'Wait before points start dropping (seconds)', 0, 300],
         ['questionTimerSeconds', 'Default question countdown seconds', 1, 3600],
         ['lockoutSeconds', 'Wrong-answer lockout seconds (0 = entire question)', 0, 300],
         ['maxAnswerLength', 'Maximum typed answer characters', 1, 500],
@@ -287,12 +288,12 @@ function Setup({ state }: { state: Snapshot }) {
         value={settings[key]} onChange={(event) => setSettings({ ...settings, [key]: Number(event.target.value) })} /></label>)}</div>
       <button className="primary" type="submit">Save setup</button></fieldset>
     {message && <p role="status">{message}</p>}
-    <p className="muted">Wrong buzzes lose half the frozen point value, rounded up. The minimum value is not a deadline.</p>
-    <p className="muted">Global defaults load from settings.json. Save setup writes this quiz's settings to its quiz.json file for future sessions. Server options are file-only.</p>
+    <p className="muted">Configure points for each question in the quiz editor. Default point values come from settings.json.</p>
+    <p className="muted">Save setup writes this quiz's game settings to its quiz.json file for future sessions. Server options are file-only.</p>
     <p className="muted">Timed lockouts start after the wrong-answer result and keep counting down during pauses and other players' answers. Players can buzz again when the timer ends and buzzers are open.</p>
   </form><section className="panel setup-guide"><h2>Before you start</h2><ol><li>Connect the TV and choose <strong>Extend</strong>, not Duplicate.</li>
     <li>Open <a href="/display" target="_blank" rel="noreferrer">the TV display</a> there and press F11.</li><li>Keep this private console on the laptop.</li>
     <li>Join phones on the same Wi-Fi. Allow the server port through the firewall.</li><li>For audio/video clues, enable playback in the TV browser.</li></ol>
-    <h3>Question source</h3><code>Quiz archive</code><p>{state.questionCount} questions loaded. Save changes in Quiz editor, then restart the server to load them. Restarting clears players and scores.</p>
+    <h3>Question source</h3><code>Quiz archive</code><p>{state.questionCount} questions loaded. Save changes in Quiz editor, then load or reload the quiz from the library in the lobby.</p>
     <h3>Avatars & theme</h3><p>Six original, bundled SVG characters. Purple, gold, and magenta game-show theme.</p><JoinLink compact /></section></div>;
 }

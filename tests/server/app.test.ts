@@ -592,7 +592,9 @@ test('global defaults and per-quiz overrides reach the host, save through socket
       assert.ok(result.ok);
       assert.equal(application.engine.snapshot().serverSettings.maxPlayers, 20);
       assert.deepEqual(application.engine.settings, saved);
-      assert.deepEqual(JSON.parse(readFileSync(path.join(directory, '100001.json'), 'utf8')), { gameSetup: saved });
+      const { startPoints: _start, minimumPoints: _minimum, dropPoints: _drop, dropEverySeconds: _interval,
+        pointDecayDelaySeconds: _delay, ...savedGameSetup } = saved;
+      assert.deepEqual(JSON.parse(readFileSync(path.join(directory, '100001.json'), 'utf8')), { gameSetup: savedGameSetup });
       assert.deepEqual(settingsStorage.load(100002), {});
     } finally {
       host?.disconnect();

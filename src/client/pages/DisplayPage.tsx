@@ -4,7 +4,7 @@ import { QuestionClue } from '../components/QuestionClue';
 import { QuizCover } from '../components/QuizCover';
 import { CountdownSound } from '../components/CountdownSound';
 import { branding } from '../branding';
-import { REVIEW_GROUP_MS, REVIEW_RESULT_MS, startCountdownText, wrongBuzzPenalty } from '../../shared/game';
+import { buzzerPointMode, REVIEW_GROUP_MS, REVIEW_RESULT_MS, startCountdownText } from '../../shared/game';
 import type { Snapshot } from '../../shared/protocol';
 
 export function DisplayPage() {
@@ -63,7 +63,7 @@ export function DisplayScreen({ state, connected, receivedAt, preview = false }:
         <span className="eyebrow">{typed ? 'ANSWER STATUS' : 'BUZZER STATUS'}</span>
         <div className="buzzer-status"><span className="buzzer-orb" /><h2>{connected ? buzzerLabel(state) : 'RECONNECTING'}</h2></div>
         {!preGame && !finished && state.question && <section className="tv-question-points" aria-label="Question points">
-          <span>{combined ? 'BUZZER POINTS' : typed ? 'FIXED POINTS' : 'TIMED POINTS'}</span><strong>{state.currentPoints.toLocaleString()} <small>pts</small></strong>
+          <span>{combined ? 'BUZZER POINTS' : typed || buzzerPointMode(state.question) === 'fixed' ? 'FIXED POINTS' : 'TIMED POINTS'}</span><strong>{state.currentPoints.toLocaleString()} <small>pts</small></strong>
           {combined && <span>TYPE FOR {state.question.fixedPoints} POINTS</span>}
         </section>}
         {lobby ? <div className="lobby-join"><JoinLink compact /></div>
@@ -107,7 +107,7 @@ export function DisplayScreen({ state, connected, receivedAt, preview = false }:
       <div className="game-start-ring" aria-hidden="true" /><div className="game-start-content">
         <span className="eyebrow">TYPE + BUZZ</span><h1>BIGGER STAKES. BIGGER REWARDS.</h1>
         <p>Type before the first buzz for {state.question?.fixedPoints} points.</p>
-        <p>Buzz for {state.question?.buzzPoints} points. Wrong buzz loses {wrongBuzzPenalty(state.question?.buzzPoints ?? 0)}.</p>
+        <p>Buzz for {state.currentPoints} points{buzzerPointMode(state.question) === 'decay' ? ' to start' : ''}. Wrong buzz loses half.</p>
         <strong>{Math.ceil((state.typeBuzzIntroMs ?? 0) / 1000)}</strong>
       </div>
     </div>}

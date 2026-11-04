@@ -93,7 +93,7 @@ export function MediaBrowser({ files, draft, saved, loadedReferences, busy, erro
       <div className="media-browser-details">
         {selectedFile ? <>
           <strong>{selectedFile}</strong>
-          <MediaPreview key={selectedFile} file={selectedFile} />
+          <MediaPreview key={selectedFile} file={selectedFile} quizId={draft.quiz.id} />
           <div className="media-usage">
             <p>Current edits: {draftUses.join(', ') || 'No references'}</p>
             <p>Last loaded or saved in editor: {savedUses.join(', ') || 'No references'}</p>
@@ -110,9 +110,9 @@ export function MediaBrowser({ files, draft, saved, loadedReferences, busy, erro
   </div>;
 }
 
-function MediaPreview({ file }: { file: string }) {
+function MediaPreview({ file, quizId }: { file: string; quizId: number }) {
   const [error, setError] = useState(false);
-  const url = `/media/quiz/${file.slice('media/'.length)}`;
+  const url = `/media/archive/${quizId}/${file.slice('media/'.length)}`;
   const type = mediaType(file);
   return <div className="media-browser-preview">
     {type === 'image' && <img src={url} alt="Selected media preview" onError={() => setError(true)} />}

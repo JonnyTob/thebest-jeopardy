@@ -13,6 +13,11 @@ const defaults = {
   dropEverySeconds: 5, pointDecayDelaySeconds: 5, questionTimerSeconds: 30, lockoutSeconds: 0, maxAnswerLength: 100,
 };
 const branding = { name: 'Kaboot', logoText: 'K', tagline: 'Buzz in. Get booted.' };
+function withoutPointDefaults(settings: typeof defaults & { title: string }) {
+  const { startPoints: _start, minimumPoints: _min, dropPoints: _drop, dropEverySeconds: _interval,
+    pointDecayDelaySeconds: _delay, ...rest } = settings;
+  return rest;
+}
 
 test('review sounds validate local WAV paths independently and are global-server-only', () => {
   const defaultSound = '/media/sounds/countdown-beep.wav';
@@ -67,9 +72,11 @@ test('review sounds validate local WAV paths independently and are global-server
         action: { type: 'setup', settings: { ...settings, [key]: null } } });
       if (command.action.type !== 'setup') assert.fail('Expected setup command');
       assert.deepEqual(command.action.settings, settings);
+      assert.throws(() => storage.save(100001, settings), /Invalid quiz settings/);
+      rmSync(path.join(directory, 'quizzes', '100001.json'));
       storage.save(100001, { ...settings, [key]: defaultSound });
-      assert.deepEqual(storage.load(100001), settings);
-      assert.deepEqual(JSON.parse(readFileSync(path.join(directory, 'quizzes', '100001.json'), 'utf8')), { gameSetup: settings });
+      assert.deepEqual(storage.load(100001), withoutPointDefaults(settings));
+      assert.deepEqual(JSON.parse(readFileSync(path.join(directory, 'quizzes', '100001.json'), 'utf8')), { gameSetup: withoutPointDefaults(settings) });
     }
     writeFileSync(file, JSON.stringify({ ...config, server: { ...config.server,
       countdownSound: '/media/countdown.wav', reviewCorrectSound: null, reviewWrongSound: '/media/wrong.wav' } }));
@@ -162,9 +169,11 @@ test('removed typed-answer grace setting is rejected from global and archive con
     assert.equal(command.action.type, 'setup');
     if (command.action.type !== 'setup') assert.fail('Expected setup command');
     assert.deepEqual(command.action.settings, settings, 'host setup cannot reintroduce a removed setting');
+    assert.throws(() => storage.save(100001, settings), /Invalid quiz settings/);
+    rmSync(path.join(directory, 'quizzes', '100001.json'));
     storage.save(100001, { ...settings, ...{ typedAnswerGraceSeconds: 3 } });
-    assert.deepEqual(storage.load(100001), settings);
-    assert.deepEqual(JSON.parse(readFileSync(path.join(directory, 'quizzes', '100001.json'), 'utf8')), { gameSetup: settings });
+    assert.deepEqual(storage.load(100001), withoutPointDefaults(settings));
+    assert.deepEqual(JSON.parse(readFileSync(path.join(directory, 'quizzes', '100001.json'), 'utf8')), { gameSetup: withoutPointDefaults(settings) });
   } finally {
     rmSync(directory, { recursive: true });
   }
@@ -232,8 +241,9 @@ test('quiz settings support partial overrides, persist separately and reject mal
     assert.equal(storage.load(100002).lockoutSeconds, 30);
     const settings = { ...defaults, title: 'Saved quiz', lockoutSeconds: 10 };
     storage.save(100001, settings);
-    assert.deepEqual(new JsonQuizSettingsStorage(directory).load(100001), settings);
-    assert.deepEqual(JSON.parse(readFileSync(path.join(directory, '100001.json'), 'utf8')), { gameSetup: settings });
+    const saved = { startPoints: 800, ...withoutPointDefaults(settings) };
+    assert.deepEqual(new JsonQuizSettingsStorage(directory).load(100001), saved);
+    assert.deepEqual(JSON.parse(readFileSync(path.join(directory, '100001.json'), 'utf8')), { gameSetup: saved });
     assert.equal(storage.load(100002).lockoutSeconds, 30);
     assert.deepEqual(readdirSync(directory).sort(), ['100001.json', '100002.json']);
     for (const content of ['bad json', '{"gameSetup":{"lockoutSeconds":301}}',
@@ -244,7 +254,7 @@ test('quiz settings support partial overrides, persist separately and reject mal
       assert.throws(() => storage.load(100002), /Invalid quiz settings/);
     }
     assert.throws(() => storage.save(100001, { ...settings, minimumPoints: 999 }), /Minimum points/);
-    assert.deepEqual(storage.load(100001), settings);
+    assert.deepEqual(storage.load(100001), saved);
   } finally {
     rmSync(directory, { recursive: true });
   }
@@ -275,4 +285,20 @@ test('setup saves before committing state; failed, stale, duplicate or mid-game 
   assert.throws(() => game.command({ ...command, id: randomUUID(), revision: game.revision },
     () => { writes++; }), /lobby/);
   assert.equal(writes, 1);
+});
+
+test('game setup cannot change point defaults even when a command includes different values', () => {
+  const game = new GameEngine({ id: 1, title: 'Quiz', questions: [] });
+  const before = { ...game.settings };
+  let persisted: typeof before | undefined;
+  game.command({ id: randomUUID(), revision: game.revision, action: { type: 'setup', settings: {
+    ...before, title: 'Renamed', startPoints: 900, minimumPoints: 200, dropPoints: 50,
+    dropEverySeconds: 2, pointDecayDelaySeconds: 10, lockoutSeconds: 12,
+  } } }, (settings) => { persisted = settings; });
+  for (const key of ['startPoints', 'minimumPoints', 'dropPoints', 'dropEverySeconds', 'pointDecayDelaySeconds'] as const) {
+    assert.equal(game.settings[key], before[key]);
+    assert.equal(persisted?.[key], before[key]);
+  }
+  assert.equal(game.settings.title, 'Renamed');
+  assert.equal(game.settings.lockoutSeconds, 12);
 });

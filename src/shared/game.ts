@@ -1,4 +1,4 @@
-import type { Player, Settings } from './protocol.js';
+import type { Player, PublicQuestion, Settings } from './protocol.js';
 
 export const START_COUNTDOWN_MS = 4000;
 export const NEXT_ROUND_MS = 3000;
@@ -10,6 +10,21 @@ export const BUZZ_CORRECT_ANSWER_MS = 3000;
 /** Wrong buzzes lose half the correct value, rounded up to a whole point. */
 export function wrongBuzzPenalty(points: number): number {
   return Math.ceil(points / 2);
+}
+
+export function pointSettingsFor(question: PublicQuestion | null | undefined, settings: Settings): Settings {
+  return question?.pointDecay ? { ...settings, ...question.pointDecay } : settings;
+}
+
+export function buzzerPointMode(question: PublicQuestion | null | undefined): 'fixed' | 'decay' {
+  return question?.pointMode ?? (question?.mode === 'type-and-buzz' ? 'fixed' : 'decay');
+}
+
+export function buzzerPointsAt(question: PublicQuestion | null | undefined, elapsedMs: number, settings: Settings, decayStartMs?: number | null): number {
+  if (buzzerPointMode(question) === 'fixed') return question?.buzzPoints ?? 0;
+  const scoringElapsed = question?.mode === 'type-and-buzz'
+    ? Math.max(0, elapsedMs - (decayStartMs ?? (question.typingSeconds ?? 0) * 1000)) : elapsedMs;
+  return pointsAt(scoringElapsed, pointSettingsFor(question, settings));
 }
 
 export function startCountdownText(remainingMs: number): string {

@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { readFileSync, writeFileSync, renameSync, rmSync } from 'node:fs';
+import { readFileSync, writeFileSync, renameSync, rmSync, readdirSync, mkdirSync } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
 import type { QuizSettingsStorage } from './settings.js';
 import { settingsSchema, type Settings } from '../shared/protocol.js';
@@ -58,6 +58,50 @@ export class ArchiveQuizStorage implements QuizStorage {
   }
 }
 
+export class QuizLibrary {
+  constructor(readonly directory: string) {}
+
+  storage(id: number) { return new ArchiveQuizStorage(this.directory, id); }
+
+  list() {
+    return readdirSync(this.directory, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && /^[1-9]\d*$/.test(entry.name) && Number.isSafeInteger(Number(entry.name)))
+      .flatMap((entry) => {
+        try {
+          const { archive, revision } = this.storage(Number(entry.name)).readArchive();
+          return [{ id: archive.quiz.id, title: archive.quiz.title, questionCount: archive.questions.length,
+            enabledCount: archive.questions.filter((question) => question.enabled !== false).length, revision }];
+        } catch { return []; }
+      }).sort((a, b) => a.id - b.id);
+  }
+
+  delete(id: number, revision: string) {
+    const storage = this.storage(id);
+    if (storage.readArchive().revision !== revision) throw new ArchiveConflictError();
+    rmSync(path.dirname(storage.file), { recursive: true });
+  }
+
+  create(title: string) {
+    const clean = title.trim();
+    if (!clean || clean.length > 100) throw new Error('Quiz title must contain 1–100 characters.');
+    let id = Math.max(100000, ...this.list().map((quiz) => quiz.id)) + 1;
+    while (Number.isSafeInteger(id)) {
+      const folder = path.join(this.directory, String(id));
+      try { mkdirSync(folder); } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'EEXIST') { id++; continue; }
+        throw error;
+      }
+      try {
+        mkdirSync(path.join(folder, 'media'));
+        const archive = quizArchiveSchema.parse({ schemaVersion: 1, quiz: { id, title: clean }, questions: [] });
+        writeFileSync(path.join(folder, 'quiz.json'), JSON.stringify(archive, null, 2) + '\n', { flag: 'wx' });
+        return archive;
+      } catch (error) { rmSync(folder, { recursive: true, force: true }); throw error; }
+    }
+    throw new Error('No quiz ID is available.');
+  }
+}
+
 export class ArchiveConflictError extends Error {
   constructor() { super('The quiz file changed. Reload before saving; your unsaved edits have not been saved.'); }
 }
@@ -74,9 +118,10 @@ export class ArchiveQuizSettingsStorage implements QuizSettingsStorage {
   save(quizId: number, settings: Settings): void {
     if (quizId !== this.storage.quizId) throw new Error('Quiz ID mismatch');
     const { archive: data } = this.storage.readArchive();
-    const { title, ...gameSetup } = settingsSchema.parse(settings);
+    const { title, startPoints: _startPoints, minimumPoints: _minimumPoints, dropPoints: _dropPoints,
+      dropEverySeconds: _dropEverySeconds, pointDecayDelaySeconds: _pointDecayDelaySeconds, ...gameSetup } = settingsSchema.parse(settings);
     data.quiz.title = title;
-    data.gameSetup = gameSetup;
+    data.gameSetup = { ...data.gameSetup, ...gameSetup };
     if (!this.revision) throw new Error('Quiz settings were not loaded.');
     this.revision = this.storage.saveArchive(data, this.revision);
   }

@@ -28,6 +28,8 @@ test('archive loads relative media and saves settings alongside questions', asyn
     assert.equal(saved.quiz.coverImage, original.quiz.coverImage);
     assert.equal(saved.quiz.title, 'New');
     assert.equal(saved.gameSetup.title, undefined);
+    assert.equal(saved.gameSetup.startPoints, undefined);
+    assert.equal(saved.gameSetup.pointDecayDelaySeconds, undefined);
     assert.equal((await storage.load()).title, 'New');
     assert.equal(settings.load(42).lockoutSeconds, 0);
     await writeFile(file, JSON.stringify({ ...original, quiz: { ...original.quiz, coverImage: 'media/../quiz.json' } }));
@@ -56,5 +58,26 @@ test('archive loads relative media and saves settings alongside questions', asyn
       assert.throws(() => settings.save(42, setup));
       assert.equal(await readFile(file, 'utf8'), content, 'Invalid archives must not be rewritten');
     }
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('saving game setup preserves existing quiz point defaults without creating new ones', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'quiz-points-setup-'));
+  try {
+    await mkdir(path.join(root, '42'));
+    const file = path.join(root, '42', 'quiz.json');
+    await writeFile(file, JSON.stringify({ schemaVersion: 1, quiz: { id: 42, title: 'Quiz' }, questions: [],
+      gameSetup: { startPoints: 750, dropPoints: 75 } }));
+    const storage = new ArchiveQuizSettingsStorage(new ArchiveQuizStorage(root, 42));
+    storage.load(42);
+    storage.save(42, { title: 'Quiz', leaderboardCount: 8, startPoints: 500, minimumPoints: 100,
+      dropPoints: 100, dropEverySeconds: 5, pointDecayDelaySeconds: 5, questionTimerSeconds: 30, lockoutSeconds: 5, maxAnswerLength: 100 });
+    const saved = JSON.parse(await readFile(file, 'utf8'));
+    assert.equal(saved.gameSetup.startPoints, 750);
+    assert.equal(saved.gameSetup.dropPoints, 75);
+    assert.equal(saved.gameSetup.minimumPoints, undefined);
+    assert.equal(saved.gameSetup.dropEverySeconds, undefined);
+    assert.equal(saved.gameSetup.pointDecayDelaySeconds, undefined);
+    assert.equal(saved.gameSetup.lockoutSeconds, 5);
   } finally { await rm(root, { recursive: true, force: true }); }
 });

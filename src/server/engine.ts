@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
-import { pointsAt, wrongBuzzPenalty, rankPlayers, START_COUNTDOWN_MS, NEXT_ROUND_MS, REVIEW_RESULT_MS, REVIEW_GROUP_MS, BUZZ_RESULT_MS, BUZZ_CORRECT_ANSWER_MS } from '../shared/game.js';
+import { buzzerPointsAt, wrongBuzzPenalty, rankPlayers, START_COUNTDOWN_MS, NEXT_ROUND_MS, REVIEW_RESULT_MS, REVIEW_GROUP_MS, BUZZ_RESULT_MS, BUZZ_CORRECT_ANSWER_MS } from '../shared/game.js';
 import { serverSettingsSchema, type HostCommand, type JoinRequest, type Phase, type Player, type Quiz, type ScoreEvent, type Settings, type Snapshot, type ServerSettings, type TypedReview } from '../shared/protocol.js';
 
 export class GameError extends Error {}
@@ -20,6 +20,7 @@ interface ClueState {
   questionInstanceId: string | null;
   submissions: TypedReview[];
   submissionsClosed: boolean;
+  buzzDecayStartMs: number | null;
   reviewQueue: TypedReview[];
   reviewIndex: number;
 }
@@ -34,7 +35,7 @@ function emptyClue(): ClueState {
     phase: 'LOBBY', questionIndex: -1, elapsedMs: 0, startedAt: null,
     paused: false, lockedOutIds: [], lockedOutUntil: {}, activePlayerId: null, pointsAtBuzz: null,
     mediaOffsetSeconds: 0, mediaVersion: 0,
-    questionInstanceId: null, submissions: [], submissionsClosed: false, reviewQueue: [], reviewIndex: 0,
+    questionInstanceId: null, submissions: [], submissionsClosed: false, buzzDecayStartMs: null, reviewQueue: [], reviewIndex: 0,
   };
 }
 
@@ -74,6 +75,18 @@ export class GameEngine {
     this.quiz = quiz;
     this.settings = settings;
     this.mediaDurations = mediaDurations;
+  }
+
+  loadLobbyQuiz(quiz: Quiz, settings: Settings, mediaDurations: Readonly<Record<string, number>>, revision: number) {
+    this.require(this.revision === revision && this.clue.phase === 'LOBBY', 'The game changed. Load quizzes only in the lobby.');
+    this.quiz = quiz;
+    this.settings = settings;
+    this.mediaDurations = mediaDurations;
+    for (const player of this.players.values()) player.score = 0;
+    this.history = [];
+    this.scoreEvents = [];
+    this.rank();
+    this.revision++;
   }
 
   private require(condition: unknown, message: string): asserts condition {
@@ -284,10 +297,13 @@ export class GameEngine {
       'Buzzing opens after the typing window.');
     this.require(!this.isLockedOut(playerId), this.settings.lockoutSeconds > 0
       ? 'You are locked out until your countdown ends.' : 'You are locked out for this question.');
-    if (question?.mode === 'type-and-buzz') this.closeSubmissions();
+    if (question?.mode === 'type-and-buzz') {
+      if (!this.clue.submissionsClosed) this.clue.buzzDecayStartMs = Math.min(this.elapsed(), (question.typingSeconds ?? 0) * 1000);
+      this.closeSubmissions();
+    }
     this.freeze();
     this.clue.activePlayerId = playerId;
-    this.clue.pointsAtBuzz = question?.mode === 'type-and-buzz' ? question.buzzPoints! : pointsAt(this.clue.elapsedMs, this.settings);
+    this.clue.pointsAtBuzz = buzzerPointsAt(question, this.clue.elapsedMs, this.settings, this.clue.buzzDecayStartMs);
     this.clue.phase = 'ANSWERING';
     this.revision++;
   }
@@ -320,7 +336,7 @@ export class GameEngine {
       phase: 'QUESTION_OPEN', questionIndex: index, elapsedMs: 0, startedAt: this.now(),
       paused: false, lockedOutIds: [], lockedOutUntil: {}, activePlayerId: null, pointsAtBuzz: null,
       mediaOffsetSeconds: 0, mediaVersion: this.clue.mediaVersion + 1,
-      questionInstanceId: randomUUID(), submissions: [], submissionsClosed: false, reviewQueue: [], reviewIndex: 0,
+      questionInstanceId: randomUUID(), submissions: [], submissionsClosed: false, buzzDecayStartMs: null, reviewQueue: [], reviewIndex: 0,
     };
     this.typeBuzzIntroAt = null;
   }
@@ -420,8 +436,13 @@ export class GameEngine {
     switch (action.type) {
       case 'setup':
         this.require(this.clue.phase === 'LOBBY', 'Setup can only change in the lobby.');
-        saveSettings?.(action.settings);
-        this.settings = action.settings;
+        {
+          const settings = { ...action.settings, startPoints: this.settings.startPoints, minimumPoints: this.settings.minimumPoints,
+            dropPoints: this.settings.dropPoints, dropEverySeconds: this.settings.dropEverySeconds,
+            pointDecayDelaySeconds: this.settings.pointDecayDelaySeconds };
+          saveSettings?.(settings);
+          this.settings = settings;
+        }
         break;
       case 'start':
         this.require(this.clue.phase === 'LOBBY', 'The game has already started.');
@@ -598,7 +619,7 @@ export class GameEngine {
       : Math.max(0, this.mediaFinishDurationMs - (now - this.mediaFinishAt));
     const publicQuestion = question ? {
       id: question.id, type: question.type, question: question.question, text: question.text,
-      mode: question.mode, fixedPoints: question.fixedPoints, buzzPoints: question.buzzPoints,
+      mode: question.mode, fixedPoints: question.fixedPoints, buzzPoints: question.buzzPoints, pointMode: question.pointMode, pointDecay: question.pointDecay,
       typingSeconds: question.typingSeconds, timerSeconds: question.timerSeconds,
       media: question.media, reveal: question.reveal, playback: question.playback, visualizer: question.visualizer,
     } : null;
@@ -626,8 +647,8 @@ export class GameEngine {
           (this.buzzResult?.playerId === id && !this.buzzResult.correct
             ? Math.max(0, this.buzzResult.at + BUZZ_RESULT_MS - now) : 0)])),
       activePlayerId: this.clue.activePlayerId, pointsAtBuzz: this.clue.pointsAtBuzz,
-      currentPoints: question?.mode === 'typed' ? question.fixedPoints ?? 0 : question?.mode === 'type-and-buzz'
-        ? question.buzzPoints ?? 0 : this.clue.pointsAtBuzz ?? pointsAt(elapsed, this.settings),
+      currentPoints: question?.mode === 'typed' ? question.fixedPoints ?? 0
+        : this.clue.pointsAtBuzz ?? buzzerPointsAt(question, this.clue.phase === 'TYPE_BUZZ_INTRO' ? 0 : elapsed, this.settings, this.clue.buzzDecayStartMs),
       clueElapsedMs: elapsed, clockRunning: this.clue.startedAt !== null, paused: this.clue.paused,
       displayElapsedMs: displayElapsed,
       displayClockRunning: this.clue.startedAt !== null || (this.mediaFinishAt !== null && (finishRemaining === null || finishRemaining > 0)),
@@ -640,6 +661,7 @@ export class GameEngine {
       scoreEvents: host ? structuredClone(this.scoreEvents) : [],
       questionInstanceId: this.clue.questionInstanceId,
       submissionCount: this.clue.submissions.length,
+      buzzDecayStartMs: this.clue.buzzDecayStartMs,
       submissionsClosed: this.clue.submissionsClosed,
       mySubmitted: !!playerId && this.clue.submissions.some((entry) => entry.playerId === playerId),
       buzzResult: this.buzzResult === null ? null : {

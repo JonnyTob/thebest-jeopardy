@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { io, type Socket } from 'socket.io-client';
 import type { ClientEvents, HostAction, JoinRequest, ServerEvents, Snapshot } from '../shared/protocol';
-import { pointsAt } from '../shared/game';
+import { buzzerPointsAt } from '../shared/game';
 import { clearPlayerToken, readPlayerToken, savePlayerToken } from './playerToken';
 import { branding } from './branding';
 
@@ -18,6 +18,8 @@ export interface Session {
   join: (request: JoinRequest) => Promise<boolean>;
   buzz: () => Promise<boolean>;
   submitAnswer: (answer: string, questionInstanceId: string) => Promise<boolean>;
+  joinUrl?: string | null;
+  selectJoinUrl?: (url: string) => Promise<boolean>;
 }
 export const SessionContext = createContext<Session | null>(null);
 
@@ -41,6 +43,7 @@ export function SessionProvider({ role, passcode, children }: {
   const [playerId, setPlayerId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [joinUrl, setJoinUrl] = useState<string | null>(null);
 
   useEffect(() => {
     let playerToken = role === 'player' ? readPlayerToken() : null;
@@ -69,6 +72,7 @@ export function SessionProvider({ role, passcode, children }: {
       }
     });
     socket.on('session:error', setError);
+    socket.on('session:joinUrl', setJoinUrl);
     socket.connect();
     return () => { socket.disconnect(); socketRef.current = null; };
   }, [role, passcode]);
@@ -120,8 +124,13 @@ export function SessionProvider({ role, passcode, children }: {
     if (!result.ok) setError(result.error);
     return result.ok;
   });
+  const selectJoinUrl = (url: string) => request(async (socket) => {
+    const result = await socket.timeout(5000).emitWithAck('host:selectJoinUrl', url);
+    if (!result.ok) setError(result.error);
+    return result.ok;
+  });
 
-  return <SessionContext.Provider value={{ state, receivedAt, connected, playerId, error, pending, clearError: () => setError(null), command, join, buzz, submitAnswer }}>
+  return <SessionContext.Provider value={{ state, receivedAt, connected, playerId, error, pending, clearError: () => setError(null), command, join, buzz, submitAnswer, joinUrl, selectJoinUrl }}>
     {children}
   </SessionContext.Provider>;
 }
@@ -161,8 +170,8 @@ export function useAnimatedSnapshot(state: Snapshot | null, receivedAt: number, 
     nextRoundCountdownMs: state.nextRoundCountdownMs === null ? null
       : Math.max(0, state.nextRoundCountdownMs - (state.phase === 'NEXT_ROUND' ? extra : 0)),
     typeBuzzIntroMs: state.typeBuzzIntroMs == null ? null : Math.max(0, state.typeBuzzIntroMs - (state.phase === 'TYPE_BUZZ_INTRO' ? extra : 0)),
-    clueElapsedMs: elapsed, currentPoints: state.question?.mode === 'type-and-buzz' ? state.question.buzzPoints ?? state.currentPoints : state.question?.mode === 'typed'
-      ? state.question.fixedPoints ?? state.currentPoints : state.pointsAtBuzz ?? pointsAt(elapsed, state.settings),
+    clueElapsedMs: elapsed, currentPoints: state.question?.mode === 'typed'
+      ? state.question.fixedPoints ?? state.currentPoints : state.pointsAtBuzz ?? buzzerPointsAt(state.question, state.phase === 'TYPE_BUZZ_INTRO' ? 0 : elapsed, state.settings, state.buzzDecayStartMs),
     revealProgress: Math.min(1, state.revealProgress + displayExtra / ((state.question?.reveal?.durationSeconds ?? 20) * 1000)),
     mediaPositionSeconds: state.mediaPositionSeconds + displayExtra / 1000 };
 }

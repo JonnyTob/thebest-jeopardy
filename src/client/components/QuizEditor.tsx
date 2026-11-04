@@ -8,7 +8,7 @@ import { MediaBrowser, MediaPicker, mediaType, type MediaType } from './MediaLib
 
 type Issue = { path: string; message: string };
 
-function VideoDuration({ file }: { file: string }) {
+function VideoDuration({ file, quizId }: { file: string; quizId: number }) {
   const [duration, setDuration] = useState<number | null>(null);
   const [unavailable, setUnavailable] = useState(false);
   useEffect(() => {
@@ -22,19 +22,20 @@ function VideoDuration({ file }: { file: string }) {
       else setUnavailable(true);
     };
     video.onerror = () => setUnavailable(true);
-    video.src = `/media/quiz/${file.slice('media/'.length)}`;
+    video.src = `/media/archive/${quizId}/${file.slice('media/'.length)}`;
     return () => {
       video.onloadedmetadata = null;
       video.onerror = null;
       video.removeAttribute('src');
       video.load();
     };
-  }, [file]);
+  }, [file, quizId]);
   return <span className="editor-video-duration">Duration: {duration !== null ? `${duration.toFixed(1)} s` : unavailable ? 'unavailable' : 'loading…'}</span>;
 }
 
-export function QuizEditor({ passcode, onDirtyChange, gameState }: { passcode: string; onDirtyChange: (dirty: boolean) => void; gameState: Snapshot }) {
+export function QuizEditor({ passcode, onDirtyChange, gameState, quizId }: { passcode: string; onDirtyChange: (dirty: boolean) => void; gameState: Snapshot; quizId?: number }) {
   const [archive, setArchive] = useState<QuizArchive | null>(null);
+  const [globalSettings, setGlobalSettings] = useState<Snapshot['settings'] | null>(null);
   const [savedArchive, setSavedArchive] = useState<QuizArchive | null>(null);
   const [original, setOriginal] = useState('');
   const [revision, setRevision] = useState('');
@@ -58,7 +59,7 @@ export function QuizEditor({ passcode, onDirtyChange, gameState }: { passcode: s
     const headers = new Headers(init.headers);
     headers.set('x-quiz-editor', '1');
     headers.set('x-host-passcode', encodeURIComponent(passcode));
-    const response = await fetch(`/api/editor${url}`, { ...init, headers });
+    const response = await fetch(`/api/editor${url}${quizId === undefined ? '' : `?quizId=${quizId}`}`, { ...init, headers });
     const result: unknown = await response.json();
     if (!response.ok) {
       const body = result as { error?: string; issues?: Issue[] };
@@ -66,14 +67,15 @@ export function QuizEditor({ passcode, onDirtyChange, gameState }: { passcode: s
       throw new Error(body.error ?? `Request failed (${response.status}).`);
     }
     return result;
-  }, [passcode]);
+  }, [passcode, quizId]);
 
   const load = useCallback(async () => {
     setBusy(true); setError(''); setIssues([]);
     try {
       const [data, media] = await Promise.all([request('/archive'), request('/media')]);
-      const result = data as { archive: unknown; revision: string };
+      const result = data as { archive: unknown; revision: string; globalSettings?: unknown };
       const parsed = quizArchiveSchema.parse(result.archive);
+      setGlobalSettings(result.globalSettings ? settingsSchema.parse(result.globalSettings) : null);
       setArchive(parsed); setSavedArchive(parsed); setOriginal(JSON.stringify(parsed)); setRevision(result.revision);
       const library = media as { files: string[]; loadedReferences: LoadedMediaReference[] };
       setFiles(library.files); setLoadedReferences(library.loadedReferences); setSelected(0); setMediaError('');
@@ -100,7 +102,7 @@ export function QuizEditor({ passcode, onDirtyChange, gameState }: { passcode: s
       const result = await request('/archive', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ archive: parsed.data, revision }) }) as { revision: string };
       setArchive(parsed.data); setSavedArchive(parsed.data); setOriginal(JSON.stringify(parsed.data)); setRevision(result.revision);
-      setMessage('Saved. Use Restart Quiz in development (or restart the server in production) to load changes; restarting clears players and scores.');
+      setMessage('Saved. Load or reload this quiz from the library in the lobby to apply changes.');
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Save failed.'); }
     finally { setBusy(false); }
   }
@@ -144,6 +146,12 @@ export function QuizEditor({ passcode, onDirtyChange, gameState }: { passcode: s
     <button disabled={busy} onClick={() => { void load(); }}>{busy ? 'Loading...' : 'Try again'}</button></section>;
 
   const question = archive.questions[selected];
+  const inheritedPoints = { ...(globalSettings ?? gameState.settings), ...archive.gameSetup };
+  const decayPoints = question?.pointDecay ?? {
+    startPoints: inheritedPoints.startPoints, minimumPoints: inheritedPoints.minimumPoints,
+    dropPoints: inheritedPoints.dropPoints, dropEverySeconds: inheritedPoints.dropEverySeconds,
+    pointDecayDelaySeconds: inheritedPoints.pointDecayDelaySeconds,
+  };
   function updateQuestion(patch: Partial<ArchiveQuestion>) {
     setArchive((current) => current && ({ ...current, questions: current.questions.map((q, index) => index === selected ? { ...q, ...patch } : q) }));
   }
@@ -155,7 +163,7 @@ export function QuizEditor({ passcode, onDirtyChange, gameState }: { passcode: s
       visualizer: type === 'audio' ? visualizer : undefined });
   }
   function addQuestion(copy: boolean) {
-    const next: ArchiveQuestion = copy ? { ...structuredClone(question), id: commandId() }
+    const next: ArchiveQuestion = copy && question ? { ...structuredClone(question), id: commandId() }
       : { id: commandId(), type: 'text', mode: 'buzzer', question: '', answer: '' };
     const questions = [...archive!.questions, next];
     setArchive({ ...archive!, questions }); setSelected(questions.length - 1);
@@ -169,7 +177,7 @@ export function QuizEditor({ passcode, onDirtyChange, gameState }: { passcode: s
   }
   function openPreview() {
     const parsed = archiveQuestionSchema.safeParse({ ...question, answer: 'Preview only' });
-    const settings = settingsSchema.safeParse({ ...gameState.settings, ...archive!.gameSetup, title: archive!.quiz.title });
+    const settings = settingsSchema.safeParse({ ...(globalSettings ?? gameState.settings), ...archive!.gameSetup, title: archive!.quiz.title });
     if (!parsed.success || !settings.success) {
       const errors = [
         ...(!parsed.success ? parsed.error.issues.map((issue) => ({ path: `questions.${selected}.${issue.path.join('.')}`, message: issue.message })) : []),
@@ -195,12 +203,12 @@ export function QuizEditor({ passcode, onDirtyChange, gameState }: { passcode: s
           pickerButton.current = event.currentTarget; setMediaError(''); setPicker({ type, target, initial: value });
         }}>Choose media</button>
         {value && <button type="button" aria-label={`Clear ${label.toLowerCase()}`} onClick={clear}>Clear</button>}
-        {type === 'video' && value && files.includes(value) && mediaType(value) === 'video' && <VideoDuration key={value} file={value} />}
+      {type === 'video' && value && files.includes(value) && mediaType(value) === 'video' && <VideoDuration key={value} file={value} quizId={archive!.quiz.id} />}
       </div>
     </div>;
   }
   return <section className="panel quiz-editor"><h1>Quiz editor</h1>
-    <p>Editing Quiz #{archive.quiz.id}. Saved changes apply after Restart Quiz in development or a server restart in production.</p>
+    <p>Editing Quiz #{archive.quiz.id}. Load or reload it from the library in the lobby to apply saved changes.</p>
     {error && <p role="alert">{error}</p>}
     {message && <p role="status">{message}</p>}
     {issues.length > 0 && <ul role="alert">{issues.map((issue, index) => <li key={index}>{issue.path || 'Quiz'}: {issue.message}</li>)}</ul>}
@@ -219,42 +227,71 @@ export function QuizEditor({ passcode, onDirtyChange, gameState }: { passcode: s
             {q.enabled === false && <span className="editor-question-disabled">✕ Disabled</span>}
           </button></li>)}</ol>
         <div className="editor-actions"><button disabled={archive.questions.length >= 500} onClick={() => addQuestion(false)}>Add question</button>
-          <button disabled={archive.questions.length >= 500} onClick={() => addQuestion(true)}>Duplicate</button>
+          <button disabled={!question || archive.questions.length >= 500} onClick={() => addQuestion(true)}>Duplicate</button>
           <button disabled={selected === 0} onClick={() => move(-1)}>Move up</button>
-          <button disabled={selected === archive.questions.length - 1} onClick={() => move(1)}>Move down</button>
-          <button disabled={archive.questions.length === 1} onClick={() => {
+          <button disabled={!question || selected === archive.questions.length - 1} onClick={() => move(1)}>Move down</button>
+          <button disabled={!question} onClick={() => {
             if (!window.confirm('Delete this question?')) return;
             setArchive({ ...archive, questions: archive.questions.filter((_, index) => index !== selected) });
             setSelected(Math.max(0, selected - 1));
           }}>Delete question</button></div>
-      </div><div className="editor-fields"><div className="editor-question-heading"><h2>Question {selected + 1}</h2>
+      </div>{question ? <div className="editor-fields"><div className="editor-question-heading"><h2>Question {selected + 1}</h2>
         <button className="small primary" ref={previewButton} type="button" onClick={openPreview}>Preview question</button></div>
-        <label className="editor-question-enabled"><input type="checkbox" checked={question.enabled !== false}
-          onChange={(event) => updateQuestion({ enabled: event.target.checked })} /> Include question in quiz</label>
-        <label>Keyword (optional)<input value={question.keyword ?? ''} onChange={(event) => updateQuestion({ keyword: event.target.value || undefined })} /></label>
-        <label>Question<textarea rows={1} value={question.question} onChange={(event) => updateQuestion({ question: event.target.value })} /></label>
-        <label>Answer<textarea rows={1} value={question.answer} onChange={(event) => updateQuestion({ answer: event.target.value })} /></label>
         <label>Mode<select value={question.mode} onChange={(event) => {
           const mode = event.target.value as ArchiveQuestion['mode'];
           if (question.mode !== mode && question.mode !== 'buzzer' && !window.confirm('Changing mode may replace the current point settings. Continue?')) return;
           updateQuestion({ mode, fixedPoints: mode === 'typed' ? 250 : mode === 'type-and-buzz' ? 100 : undefined,
-            buzzPoints: mode === 'type-and-buzz' ? 500 : undefined, typingSeconds: mode === 'type-and-buzz' ? 10 : undefined });
+            buzzPoints: mode === 'type-and-buzz' ? 500 : undefined, typingSeconds: mode === 'type-and-buzz' ? 10 : undefined,
+            pointMode: undefined, pointDecay: undefined });
         }}><option value="buzzer">Buzzer</option><option value="typed">Typed</option><option value="type-and-buzz">Type + buzz</option></select></label>
-        {question.mode !== 'buzzer' && <label>{question.mode === 'type-and-buzz' ? 'Typed answer points' : 'Fixed points'}<input type="number" min={1} max={10000} value={question.fixedPoints ?? ''} onChange={(event) => updateQuestion({ fixedPoints: Number(event.target.value) })} /></label>}
-        {question.mode === 'type-and-buzz' && <><label>Buzzer points for a correct answer<input type="number" min={1} max={10000} value={question.buzzPoints ?? ''} onChange={(event) => updateQuestion({ buzzPoints: Number(event.target.value) })} /></label>
-          <label>Initial typing window (seconds)<input type="number" min={1} max={3600} value={question.typingSeconds ?? ''} onChange={(event) => updateQuestion({ typingSeconds: Number(event.target.value) })} /></label></>}
-        <label>{question.mode === 'type-and-buzz' ? 'Buzzer countdown (seconds)' : 'Timer countdown (seconds)'}<input type="number" min={1} max={3600} placeholder={`Inherit global (${archive.gameSetup?.questionTimerSeconds ?? gameState.settings.questionTimerSeconds}s)`}
-          value={question.timerSeconds ?? ''} onChange={(event) => updateQuestion({ timerSeconds: event.target.value === '' ? undefined : Number(event.target.value) })} /></label>
         <label>Clue type<select value={question.type} onChange={(event) => changeType(event.target.value as ArchiveQuestion['type'])}>
           <option value="text">Text</option><option value="image">Image</option><option value="audio">Audio</option><option value="video">Video</option></select></label>
-        {question.type === 'text' ? <label>Clue text (optional)<textarea rows={1} value={question.text ?? ''} onChange={(event) => updateQuestion({ text: event.target.value || undefined })} /></label>
-          : mediaField('Clue media', question.media, question.type, question.id, () => updateQuestion({ media: undefined }))}
-        {question.type === 'image' && <><label>Reveal effect<select value={question.reveal?.effect ?? 'static'} onChange={(event) => updateQuestion({ reveal: { ...question.reveal, effect: event.target.value === 'tiles' ? 'tiles' : 'static' } })}><option value="static">Static</option><option value="tiles">Tiles</option></select></label>
-          {question.reveal?.effect === 'tiles' && (['durationSeconds', 'columns', 'rows', 'seed'] as const).map((field) => <label key={field}>{field}<input type="number" value={question.reveal?.[field] ?? ''} placeholder="Default" onChange={(event) => updateQuestion({ reveal: { ...question.reveal, [field]: event.target.value === '' ? undefined : Number(event.target.value) } })} /></label>)}</>}
-        {(question.type === 'audio' || question.type === 'video') && (['startSeconds', 'endSeconds'] as const).map((field) => <label key={field}>Playback {field}<input type="number" step="any" value={question.playback?.[field] ?? ''} onChange={(event) => updateQuestion({ playback: { ...question.playback, [field]: event.target.value === '' ? undefined : Number(event.target.value) } })} /></label>)}
-        {question.type === 'audio' && <label><input type="checkbox" checked={question.visualizer?.enabled ?? false} onChange={(event) => updateQuestion({ visualizer: { enabled: event.target.checked, style: 'spectrum' } })} /> Show audio visualizer</label>}
-      </div></div>
-      {preview && <QuestionPreview preview={preview} generation={preview.generation} gameState={gameState}
+        <label className="editor-question-enabled"><input type="checkbox" checked={question.enabled !== false}
+          onChange={(event) => updateQuestion({ enabled: event.target.checked })} /> Include question in quiz</label>
+        <label>Question<textarea rows={1} value={question.question} onChange={(event) => updateQuestion({ question: event.target.value })} /></label>
+        <label>Answer<textarea rows={1} value={question.answer} onChange={(event) => updateQuestion({ answer: event.target.value })} /></label>
+        {question.mode !== 'buzzer' && <label>{question.mode === 'type-and-buzz' ? 'Typed answer points' : 'Fixed points'}<input type="number" min={1} max={10000} value={question.fixedPoints ?? ''} onChange={(event) => updateQuestion({ fixedPoints: Number(event.target.value) })} /></label>}
+        {question.mode === 'type-and-buzz' && <label>Initial typing window (seconds)<input type="number" min={1} max={3600} value={question.typingSeconds ?? ''} onChange={(event) => updateQuestion({ typingSeconds: Number(event.target.value) })} /></label>}
+        {question.mode !== 'typed' && <div className="editor-optional"><h3>Buzzer points</h3>
+          <label>Point type<select value={question.pointMode ?? (question.mode === 'type-and-buzz' ? 'fixed' : 'decay')} onChange={(event) => {
+            const inherited = { ...(globalSettings ?? gameState.settings), ...archive.gameSetup };
+            if (event.target.value === 'fixed') {
+              updateQuestion({ pointMode: 'fixed', pointDecay: undefined, buzzPoints: Math.max(inherited.startPoints, (question.fixedPoints ?? 0) + 1) });
+            } else {
+              const startPoints = Math.max(inherited.startPoints, (question.fixedPoints ?? 0) + 1);
+              updateQuestion({ pointMode: 'decay', buzzPoints: undefined, pointDecay: { startPoints,
+                minimumPoints: Math.min(inherited.minimumPoints, startPoints), dropPoints: inherited.dropPoints,
+                dropEverySeconds: inherited.dropEverySeconds, pointDecayDelaySeconds: inherited.pointDecayDelaySeconds } });
+            }
+          }}><option value="fixed">Fixed points</option><option value="decay">Decaying points</option></select></label>
+          {(question.pointMode ?? (question.mode === 'type-and-buzz' ? 'fixed' : 'decay')) === 'fixed'
+            ? <label>Buzzer points for a correct answer<input type="number" min={1} max={10000} value={question.buzzPoints ?? ''} onChange={(event) => updateQuestion({ buzzPoints: Number(event.target.value) })} /></label>
+            : <>
+          {!question.pointDecay && <small>Showing the quiz's default values. Editing a value saves all five settings for this question.</small>}
+          {([['startPoints', 'Starting points', 1, 10000], ['minimumPoints', 'Minimum points', 1, 10000],
+            ['dropPoints', 'Points dropped per step', 1, 10000], ['dropEverySeconds', 'Seconds between drops', 1, 120],
+            ['pointDecayDelaySeconds', 'Wait before points start dropping (seconds)', 0, 300]] as const).map(([field, label, min, max]) =>
+            <label key={field}>{label}<input type="number" min={min} max={max} step={field === 'dropEverySeconds' ? 'any' : 1} value={decayPoints[field]}
+              onChange={(event) => updateQuestion({ pointDecay: { ...decayPoints, [field]: Number(event.target.value) } })} /></label>)}
+          </>}
+        </div>}
+        {question.type !== 'text' && mediaField('Clue media', question.media, question.type, question.id, () => updateQuestion({ media: undefined }))}
+        <div className="editor-optional"><h3>Optional settings</h3>
+          <label>Keyword (optional)<input value={question.keyword ?? ''} onChange={(event) => updateQuestion({ keyword: event.target.value || undefined })} />
+            <small>A short name for finding this question in the editor.</small></label>
+          {question.type === 'text' && <label>Clue text (optional)<textarea rows={1} value={question.text ?? ''} onChange={(event) => updateQuestion({ text: event.target.value || undefined })} />
+            <small>Additional text displayed below the question.</small></label>}
+          <label>{question.mode === 'type-and-buzz' ? 'Buzzer countdown (seconds) (optional)' : 'Timer countdown (seconds) (optional)'}<input type="number" min={1} max={3600} placeholder={`Inherit global (${archive.gameSetup?.questionTimerSeconds ?? globalSettings?.questionTimerSeconds ?? gameState.settings.questionTimerSeconds}s)`}
+            value={question.timerSeconds ?? ''} onChange={(event) => updateQuestion({ timerSeconds: event.target.value === '' ? undefined : Number(event.target.value) })} />
+            <small>Leave blank to use the quiz's default countdown.</small></label>
+          {question.type === 'image' && <><label>Reveal effect (optional)<select value={question.reveal?.effect ?? 'static'} onChange={(event) => updateQuestion({ reveal: { ...question.reveal, effect: event.target.value === 'tiles' ? 'tiles' : 'static' } })}><option value="static">Static</option><option value="tiles">Tiles</option></select>
+            <small>Choose whether the image appears at once or is revealed in tiles.</small></label>
+            {question.reveal?.effect === 'tiles' && ([['durationSeconds', 'Reveal duration (seconds)', 'Default: 20 seconds.'], ['columns', 'Tile columns', 'Default: 8 columns.'], ['rows', 'Tile rows', 'Default: 6 rows.'], ['seed', 'Reveal seed', 'Default: 814; the same seed repeats the tile order.']] as const).map(([field, label, help]) => <label key={field}>{label} (optional)<input type="number" value={question.reveal?.[field] ?? ''} placeholder="Default" onChange={(event) => updateQuestion({ reveal: { ...question.reveal, [field]: event.target.value === '' ? undefined : Number(event.target.value) } })} /><small>{help}</small></label>)}</>}
+          {(question.type === 'audio' || question.type === 'video') && ([['startSeconds', 'Playback start (seconds)', 'Leave blank to start at the beginning.'], ['endSeconds', 'Playback end (seconds)', 'Leave blank to play to the end.']] as const).map(([field, label, help]) => <label key={field}>{label} (optional)<input type="number" step="any" value={question.playback?.[field] ?? ''} onChange={(event) => updateQuestion({ playback: { ...question.playback, [field]: event.target.value === '' ? undefined : Number(event.target.value) } })} /><small>{help}</small></label>)}
+          {question.type === 'audio' && <label className="editor-question-enabled"><input type="checkbox" checked={question.visualizer?.enabled ?? false} onChange={(event) => updateQuestion({ visualizer: { enabled: event.target.checked, style: 'spectrum' } })} /> Show audio visualizer (optional)</label>}
+        </div>
+      </div> : <p>Add a question to start building this quiz.</p>}</div>
+      {preview && <QuestionPreview preview={preview} generation={preview.generation} gameState={gameState} quizId={quizId}
         onRefresh={openPreview} error={previewError} onClose={() => { setPreview(null); setPreviewError(''); previewButton.current?.focus(); }} />}
       {picker && <MediaPicker files={files} draft={archive} saved={savedArchive} loadedReferences={loadedReferences}
         busy={busy} error={mediaError} onUpload={upload} onRefresh={refreshMedia} fixedType={picker.type} initial={picker.initial}

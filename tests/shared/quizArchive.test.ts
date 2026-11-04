@@ -16,6 +16,28 @@ function archive(entry: unknown = question()) {
   return { schemaVersion: 1, quiz: { id: 42, title: 'Quiz' }, questions: [entry] };
 }
 
+test('buzzer question point decay overrides are validated and survive runtime conversion', () => {
+  const pointDecay = { startPoints: 800, minimumPoints: 200, dropPoints: 75, dropEverySeconds: 3, pointDecayDelaySeconds: 4 };
+  const parsed = quizArchiveSchema.parse(archive({ ...question(), pointDecay }));
+  assert.deepEqual(toRuntimeQuiz(parsed).questions[0].pointDecay, pointDecay);
+  assert.equal(archiveQuestionSchema.safeParse({ ...question(), pointDecay: { ...pointDecay, minimumPoints: 900 } }).success, false);
+  assert.equal(archiveQuestionSchema.safeParse({ ...question(), pointDecay: { ...pointDecay, dropEverySeconds: 0 } }).success, false);
+  assert.equal(archiveQuestionSchema.safeParse({ ...question('text', 'typed'), pointDecay }).success, false);
+});
+
+test('buzzer point types validate fixed and decaying settings for both buzzer modes', () => {
+  const pointDecay = { startPoints: 800, minimumPoints: 200, dropPoints: 75, dropEverySeconds: 3, pointDecayDelaySeconds: 4 };
+  const fixed = { ...question(), pointMode: 'fixed', buzzPoints: 500 };
+  assert.equal(archiveQuestionSchema.safeParse(fixed).success, true);
+  assert.equal(archiveQuestionSchema.safeParse({ ...fixed, buzzPoints: undefined }).success, false);
+  assert.equal(archiveQuestionSchema.safeParse({ ...fixed, pointDecay }).success, false);
+  const combined = { ...question(), mode: 'type-and-buzz', fixedPoints: 100, typingSeconds: 10, pointMode: 'decay', pointDecay };
+  assert.equal(archiveQuestionSchema.safeParse(combined).success, true);
+  assert.equal(archiveQuestionSchema.safeParse({ ...combined, pointDecay: undefined }).success, false);
+  assert.equal(archiveQuestionSchema.safeParse({ ...combined, pointDecay: { ...pointDecay, startPoints: 100 } }).success, false);
+  assert.equal(archiveQuestionSchema.safeParse({ ...question('text', 'typed'), pointMode: 'decay' }).success, false);
+});
+
 test('type-and-buzz archive settings are required, constrained and preserved at runtime', () => {
   const entry = { ...question(), mode: 'type-and-buzz', fixedPoints: 100, buzzPoints: 500, typingSeconds: 10 };
   const parsed = quizArchiveSchema.parse(archive(entry));
@@ -162,7 +184,6 @@ test('archive validates IDs, metadata, question counts, settings ranges and play
   assert.equal(duplicate.success, false);
   if (!duplicate.success) assert.deepEqual(duplicate.error.issues[0].path, ['questions', 1, 'id']);
   for (const value of [
-    { ...archive(), questions: [] },
     { ...archive(), questions: Array.from({ length: 501 }, () => question()) },
     archive({ ...question(), id: 'not-a-uuid' }),
     archive({ ...question(), keyword: '' }),

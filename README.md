@@ -130,13 +130,16 @@ npm start
     They are global server settings; restart after changing them and rebuild
     production after adding or replacing assets. They remain enabled by default
     even if `countdownSound` is `null`.
-- **gameSetup**: defaults for the host's editable game settings.
+- **gameSetup**: defaults for game settings and question point settings.
+  Point defaults are configured in this file and used by the quiz editor; they
+  are not editable or saved from Game setup. Existing per-quiz point overrides
+  are preserved for compatibility.
   `maxAnswerLength` (1-500; default 100) limits typed answers for this quiz.
   `questionTimerSeconds` (1-3600; default 30) is the countdown for questions
   without their own `timerSeconds` override. It can also be changed in Game setup.
   `pointDecayDelaySeconds` (0-300; default 5) holds the starting point value
-  before reductions begin. It applies to standard buzzer questions; typed and
-  Type + buzz questions keep their fixed points. The first reduction happens after this
+  before reductions begin. It applies to buzzer questions using the quiz's
+  default decaying points. Individual questions can set their own scoring. The first reduction happens after this
   delay plus one `dropEverySeconds` interval.
 - **quizzes/\<quiz-id\>/quiz.json**: per-quiz overrides, identified by the
   numeric quiz ID in the question file. The quiz file can contain a partial `gameSetup` section; omitted values use global defaults. You can create a
@@ -144,7 +147,8 @@ npm start
 
 On startup, global game defaults are merged with per-quiz overrides. The title
 comes from `quiz.title`. **Save setup** writes the title to `quiz.title` and the
-current game settings to `gameSetup` in that quiz's `quiz.json`, never server
+editable game settings to `gameSetup` in that quiz's `quiz.json`. It preserves
+existing point overrides without adding or changing them, and never writes server
 options. Saved values take precedence over later global-default changes; remove
 an override from the quiz file to inherit the global value again.
 
@@ -165,6 +169,9 @@ None of the server-only options can be saved in a per-quiz override file.
    on a phone refers to the phone, not the laptop. If the laptop has multiple
    network interfaces, select the Wi-Fi/LAN address rather than a VPN or virtual
    adapter. For remote VS Code environments, use an address reachable by players.
+   Changing the address in the host lobby updates the TV and home-page QR codes
+   for all connected browsers. The selection lasts until the server restarts;
+   `joinOrigin` or `JOIN_ORIGIN` can set the preferred address at startup.
 4. Only the TV renders audio/video. If autoplay is blocked, use its
    **Enable TV playback/audio** button; the host can pause the clue while doing so.
    Use one active TV playback tab to avoid duplicate audio.
@@ -243,7 +250,7 @@ sharing the QR code.
   zero, while typed questions close submissions and begin review as appropriate.
   The TV's clue panel shows the remaining countdown and a decreasing time bar
   for both modes; the right-hand panel labels the current question points
-  **Fixed points** for typed questions or **Timed points** for buzzer questions.
+  **Fixed points** for fixed scoring or **Timed points** for decaying buzzer scoring.
   Video continues to its clip end even if buzzing closes first.
   Points may reach their minimum before the question closes, or remain above it
   when time runs out.
@@ -361,7 +368,14 @@ awarded points, so use undo first if the scores should be reversed.
 
 ## Questions and media
 
-Use **Quiz editor** in the host console to edit the currently configured quiz, or edit [quizzes/100001/quiz.json](./quizzes/100001/quiz.json) directly. Set `server.startupQuizId` in `settings.json` to select the quiz; `QUIZ_ID` overrides it. Set `QUIZ_DATA_DIR` to the archive directory (default `quizzes`). Each quiz lives in `<data directory>/<id>/quiz.json`, with its own files in `<id>/media/`. The ID in the JSON must match the folder name.
+Use **Quiz library** in the host console to create, edit, load or reload quizzes. New quizzes receive an ID and an empty archive; add and save at least one enabled question before loading them. Editing a quiz does not change the running game. In the lobby, loading or reloading a quiz applies its saved questions and settings, keeps players connected, and resets scores. The selection lasts for the current server session; `server.startupQuizId` (or `QUIZ_ID`) still chooses the quiz at server startup. Set `QUIZ_DATA_DIR` to the archive directory (default `quizzes`). Each quiz lives in `<data directory>/<id>/quiz.json`, with its own files in `<id>/media/`. The ID in the JSON must match the folder name.
+
+The library can permanently delete a quiz and all files in its folder, including
+media. The currently loaded quiz cannot be deleted. The startup quiz is also
+protected so the next server restart can succeed; choose a different
+`server.startupQuizId` (or `QUIZ_ID`) and restart before deleting it. A deletion
+is rejected if the saved quiz changed after the library was loaded; reopen the
+library to review its latest state. Another host's unsaved edits cannot be detected.
 
 The editor adds, duplicates, removes and reorders questions and manages quiz-local
 media. The question list labels each question as **Buzzer**, **Typed**, or **Type + buzz**. Clear
@@ -369,12 +383,12 @@ media. The question list labels each question as **Buzzer**, **Typed**, or **Typ
 questions are marked in the list and remain editable and previewable. Questions
 are included by default. As with other edits, the saved selection takes effect
 after the quiz is reloaded. You can save with every question opted out, but
-starting the quiz requires at least one enabled question. It saves
-only complete, valid quizzes; unfinished edits remain in the
+loading the quiz requires at least one enabled question. It saves
+only valid questions; unfinished question edits remain in the
 browser and are lost if discarded. Save writes to disk, but the running game
-continues using the quiz loaded at startup. **Restart the server to apply quiz
-edits**, losing players, scores and progress. Game setup changes still apply in
-the lobby; if the quiz file changes separately, restart before saving setup.
+continues using its currently loaded copy until the quiz is reloaded from the
+library in the lobby. Game setup changes still apply in the lobby; if the quiz
+file changes separately, reload it before saving setup.
 The editor detects conflicting changes to the archive; reload only after
 preserving any unsaved edits you need. Avoid simultaneous external writes during
 an editor or setup save. Changing a clue's type immediately removes incompatible
@@ -429,8 +443,8 @@ Each file has a required `schemaVersion`, `quiz` metadata, optional `gameSetup` 
 }
 ```
 
-The empty array above illustrates the structure only; a playable quiz requires
-at least one question.
+An empty array is valid for a new quiz; loading it for play requires at least one
+enabled question.
 `schemaVersion` must be the number **1**. Missing or unsupported versions are
 rejected, never guessed or silently upgraded. To migrate an existing unversioned
 quiz, add `"schemaVersion": 1` at the root, ensure every question has an explicit
@@ -446,8 +460,8 @@ runtime snapshots as quiz files.
 
 Use a unique positive safe integer for each quiz (1 to 9007199254740991).
 Keep the ID when renaming or editing that quiz; assign a different ID when
-creating a separate quiz. Future library entries should use this ID as their
-identifier rather than the title. Select a quiz at startup using `server.startupQuizId` or `QUIZ_ID`; a library interface is not available yet.
+creating a separate quiz. The library uses this ID rather than the title as its
+identifier. Select the startup quiz using `server.startupQuizId` or `QUIZ_ID`.
 
 The ID is shown as **Quiz #100001** beside the quiz name on TV, phone, and admin
 live/setup screens. It survives server restarts because it is stored in the quiz
@@ -465,22 +479,35 @@ than reusing IDs across quizzes.
 ### Question modes
 
 The editor offers **Buzzer**, **Typed**, and **Type + buzz**. For Type + buzz,
-set the smaller typed-answer points, the larger buzzer points, the typing-only
+set the smaller typed-answer points, the buzzer points, the initial typing
 window, and optionally the buzzer countdown. A configurable rules screen appears
 before the game-start or next-round countdown. Players can buzz as soon as they submit a typed answer; players
 who have not submitted can buzz after the initial window. Typing stays open until
 the first buzz or the buzzer countdown expires. The first buzz freezes the typed
 roster; after a wrong ruling all other eligible players can buzz, even if the
-initial window has not ended. A correct buzz wins the fixed buzzer points and a wrong buzz loses half,
+initial window has not ended. A correct buzz wins the current buzzer points and a wrong buzz loses half,
 rounded up to a whole point. After the buzzer round and any finishing media, the host reviews the
 typed answers using the usual fast approval or TV review. Players can earn both
-awards. Point decay does not apply to this mode.
+awards. Buzzer points can be fixed or decay over time. In Type + buzz, decay
+starts when the initial typing window ends, or at the first buzz if it happens
+earlier; the clock pauses while a player answers and during the result.
 
 In quiz JSON, use `"mode": "type-and-buzz"`, `"fixedPoints"` for the typed
-reward, `"buzzPoints"` for the larger buzzer reward, and `"typingSeconds"` for
+reward, `"buzzPoints"` for a fixed buzzer reward, and `"typingSeconds"` for
 the initial typing window. The optional `"timerSeconds"` controls the remaining
 countdown after that window; otherwise it inherits the game setup countdown.
 The editor supplies defaults of 100 points, 500 points, and 10 seconds.
+
+For Buzzer and Type + buzz questions, the editor offers **Fixed points** or
+**Decaying points**. Fixed points do not decay, but the question still has its
+answer countdown. Decaying points have starting points, minimum points, a drop
+amount, a drop interval, and an initial delay. Buzzer questions can inherit the
+quiz settings or specify all five values; Type + buzz questions with decay use
+their own values. Existing buzzer questions without point settings continue to
+inherit quiz defaults; existing Type + buzz questions retain their fixed points.
+In JSON, `pointMode` is `"fixed"` or `"decay"`; `buzzPoints` supplies fixed
+points, and `pointDecay` contains the five decay settings named `startPoints`,
+`minimumPoints`, `dropPoints`, `dropEverySeconds`, and `pointDecayDelaySeconds`.
 
 The bundled quiz is also a playable examples catalog:
 
@@ -555,7 +582,9 @@ Question fields are validated according to mode and media type:
 | Field | Allowed on |
 | --- | --- |
 | `fixedPoints` | Required on `typed` and `type-and-buzz`; forbidden on `buzzer` |
-| `buzzPoints` | Required on `type-and-buzz`; must exceed `fixedPoints` |
+| `pointMode` | Optional on buzzer and Type + buzz; selects `fixed` or `decay` |
+| `buzzPoints` | Required for fixed buzzer scoring; must exceed `fixedPoints` on Type + buzz |
+| `pointDecay` | Optional on decaying buzzer questions; required on decaying Type + buzz |
 | `typingSeconds` | Required on `type-and-buzz`; initial window before everyone can buzz |
 | `timerSeconds` | Optional countdown override on every question |
 | `text` | Text clues only; optional body below the question headline |
@@ -683,7 +712,7 @@ distinct online players, and clean disconnection on Ctrl+C.
 
 - Session state is in memory. **Stopping/restarting the server loses all players,
   scores, and active progress.** Restart to begin a fresh session.
-- No multi-quiz library, persistent drafts, database, additional reveal modes, or
+- No persistent unfinished-question drafts, database, additional reveal modes, or
   alternate themes yet.
 - Audio/video positions are synchronized to the server clue clock with periodic
   browser seeking. Actual TV playback-position reporting, buffering feedback, and
