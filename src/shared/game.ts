@@ -17,11 +17,11 @@ export function pointSettingsFor(question: PublicQuestion | null | undefined, se
 }
 
 export function buzzerPointMode(question: PublicQuestion | null | undefined): 'fixed' | 'decay' {
-  return question?.pointMode ?? (question?.mode === 'type-and-buzz' ? 'fixed' : 'decay');
+  return question?.pointMode ?? (question?.mode === 'buzzer' ? 'decay' : 'fixed');
 }
 
 export function buzzerPointsAt(question: PublicQuestion | null | undefined, elapsedMs: number, settings: Settings, decayStartMs?: number | null): number {
-  if (buzzerPointMode(question) === 'fixed') return question?.buzzPoints ?? 0;
+  if (buzzerPointMode(question) === 'fixed') return (question?.mode === 'typed' ? question.fixedPoints : question?.buzzPoints) ?? 0;
   const scoringElapsed = question?.mode === 'type-and-buzz'
     ? Math.max(0, elapsedMs - (decayStartMs ?? (question.typingSeconds ?? 0) * 1000)) : elapsedMs;
   return pointsAt(scoringElapsed, pointSettingsFor(question, settings));

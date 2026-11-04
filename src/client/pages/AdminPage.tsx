@@ -128,7 +128,7 @@ export function AdminConsole({ logout, requirePasscode, development, passcode = 
                 <h2>{state.question?.question}</h2><div className="admin-media"><Media state={state} preview /></div>
                 <div className="private-answer"><span className="eyebrow">PRIVATE ANSWER / HOST ONLY</span><strong>{state.privateAnswer}</strong></div>
                 {combined ? <p>Type: +{state.question?.fixedPoints} / Buzz: +{state.currentPoints} or −{wrongBuzzPenalty(state.currentPoints)} / Time remaining: {countdownSeconds(questionTimerMs(state) - state.clueElapsedMs)}s</p>
-                  : typed ? <p>{state.question?.fixedPoints} fixed points / time remaining: {countdownSeconds(questionTimerMs(state) - state.clueElapsedMs)}s</p>
+                  : typed ? <p>{state.currentPoints} {state.question?.pointMode === 'decay' ? 'points' : 'fixed points'} / time remaining: {countdownSeconds(questionTimerMs(state) - state.clueElapsedMs)}s</p>
                     : buzzerPointMode(state.question) === 'fixed' ? <p>Fixed buzzer points: {state.currentPoints} / Time remaining: {countdownSeconds(questionTimerMs(state) - state.clueElapsedMs)}s</p> : <PointBar state={state} />}</section>
               <section className="panel game-actions"><span className="eyebrow">GAME ACTIONS</span>
                 {finishing && <div className="notice" role="status"><strong>Finishing the clue / score frozen</strong>
@@ -145,9 +145,9 @@ export function AdminConsole({ logout, requirePasscode, development, passcode = 
                     <strong>{state.players.find((player) => player.id === state.review?.playerId)?.name}</strong>
                     <p>{state.review.answer ?? 'No answer'}</p>
                     <p>Answer {state.reviewIndex + 1} of {state.reviewCount}
-                      {state.review.correct !== null && (state.review.correct ? ` / Correct +${state.question?.fixedPoints}` : ' / +0')}</p>
+                      {state.review.correct !== null && (state.review.correct ? ` / Correct +${state.review.points ?? state.question?.fixedPoints}` : ' / +0')}</p>
                     <div className="ruling-buttons"><button className="success" disabled={disabled || state.review.correct !== null || state.review.answer === null}
-                      onClick={() => { void command({ type: 'judgeReview', correct: true }); }}>Correct +{state.question?.fixedPoints}</button>
+                      onClick={() => { void command({ type: 'judgeReview', correct: true }); }}>Correct +{state.review.points ?? state.question?.fixedPoints}</button>
                       <button className="danger" disabled={disabled || state.review.correct !== null}
                         onClick={() => { void command({ type: 'judgeReview', correct: false }); }}>{state.review.answer === null ? 'No answer +0' : 'Wrong +0'}</button></div>
                     {state.review.correct !== null && <p role="status">{connected ? 'Advancing automatically after the result...' : 'Connection lost. Waiting to reconnect...'}</p>}
@@ -193,11 +193,11 @@ export function AdminConsole({ logout, requirePasscode, development, passcode = 
             <div className="submission-row">
               <strong className="submission-player">Player: {state.players.find((player) => player.id === entry.playerId)?.name ?? 'Unknown player'}</strong>
               <div className="submission-text">Answer: {entry.answer ?? 'No answer'}
-                {entry.correct !== null && <span className={entry.correct ? 'positive' : 'muted'}>{entry.correct ? ` / Correct +${state.question?.fixedPoints}` : ' / Wrong or missing +0'}</span>}</div>
+                {entry.correct !== null && <span className={entry.correct ? 'positive' : 'muted'}>{entry.correct ? ` / Correct +${entry.points ?? state.question?.fixedPoints}` : ' / Wrong or missing +0'}</span>}</div>
             <div className="submission-rulings">
               <button className="success small" disabled={disabled || state.phase !== 'QUESTION_CLOSED' || entry.correct !== null || entry.answer === null}
                 aria-label={`Mark ${state.players.find((player) => player.id === entry.playerId)?.name ?? 'player'} correct`}
-                onClick={() => { void command({ type: 'judgeSubmission', playerId: entry.playerId, correct: true }); }}>Correct +{state.question?.fixedPoints}</button>
+                onClick={() => { void command({ type: 'judgeSubmission', playerId: entry.playerId, correct: true }); }}>Correct +{entry.points ?? state.question?.fixedPoints}</button>
               <button className="danger small" disabled={disabled || state.phase !== 'QUESTION_CLOSED' || entry.correct !== null}
                 aria-label={`Mark ${state.players.find((player) => player.id === entry.playerId)?.name ?? 'player'} wrong or missing`}
                 onClick={() => { void command({ type: 'judgeSubmission', playerId: entry.playerId, correct: false }); }}>{entry.answer === null ? 'No answer +0' : 'Wrong +0'}</button>

@@ -48,7 +48,14 @@
       "type": "image",
       "question": "Hvilken POPulær artist",
       "mode": "typed",
-      "fixedPoints": 400,
+      "pointMode": "decay",
+      "pointDecay": {
+        "startPoints": 500,
+        "minimumPoints": 200,
+        "dropPoints": 20,
+        "dropEverySeconds": 5,
+        "pointDecayDelaySeconds": 0
+      },
       "timerSeconds": 20,
       "media": "media/Michael-Jackson-Pic_mod-9328.png",
       "answer": "MJ"

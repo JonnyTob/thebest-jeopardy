@@ -29,7 +29,7 @@ export function QuestionClue({ state }: { state: Snapshot }) {
         {reviewedPlayer && <div className="review-player"><Avatar id={reviewedPlayer.avatarId} /><h2>{reviewedPlayer.name}</h2></div>}
         <strong className="review-answer">{state.review.answer ?? 'No answer'}</strong>
         {state.review.correct !== null && <p className={state.review.correct ? 'positive' : 'negative'}>
-          {state.review.correct ? `Correct +${state.question?.fixedPoints}` : state.review.answer === null ? 'No answer / +0' : 'Wrong / +0'}</p>}
+          {state.review.correct ? `Correct +${state.review.points ?? state.question?.fixedPoints}` : state.review.answer === null ? 'No answer / +0' : 'Wrong / +0'}</p>}
       </section>}
       {answeringPlayer && <section className="review-overlay" aria-label="Player answering" aria-live="polite" aria-atomic="true">
         <span className="eyebrow">FIRST TO BUZZ</span>
@@ -68,7 +68,7 @@ function ReviewGroupOverlay({ group, players }: { group: ReviewGroup; players: P
     <ul className="review-group-grid" tabIndex={0} aria-label="Players in this group">
       {members.map((player) => <li key={player.id} className="review-group-player">
         <Avatar id={player.avatarId} /><strong>{player.name}</strong>
-        <span className={correct ? 'positive' : 'negative'}>+{(correct ? group.points : 0).toLocaleString()}</span>
+        <span className={correct ? 'positive' : 'negative'}>+{(correct ? group.pointsByPlayer?.[player.id] ?? group.points : 0).toLocaleString()}</span>
       </li>)}
     </ul>
   </section>;

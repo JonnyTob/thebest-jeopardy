@@ -54,7 +54,7 @@ export class GameEngine {
   private countdownId: string | null = null;
   private reviewResultAt: number | null = null;
   private reviewResultId: string | null = null;
-  private reviewGroup: { id: string; outcome: 'correct' | 'wrong'; playerIds: string[]; points: number; at: number } | null = null;
+  private reviewGroup: { id: string; outcome: 'correct' | 'wrong'; playerIds: string[]; points: number; pointsByPlayer?: Record<string, number>; at: number } | null = null;
   private buzzResult: { id: string; playerId: string; correct: boolean; delta: number; at: number } | null = null;
   private mediaFinishAt: number | null = null;
   private mediaFinishDurationMs: number | null = null;
@@ -319,7 +319,9 @@ export class GameEngine {
     this.require(answer.length > 0 && answer.length <= this.settings.maxAnswerLength,
       `Enter an answer of 1-${this.settings.maxAnswerLength} characters.`);
     this.require(!this.clue.submissions.some((entry) => entry.playerId === playerId), 'Your answer has already been submitted.');
-    this.clue.submissions.push({ playerId, answer, correct: null });
+    const question = this.quiz.questions[this.clue.questionIndex];
+    const points = question.mode === 'typed' && question.pointMode === 'decay' ? buzzerPointsAt(question, this.elapsed(), this.settings) : undefined;
+    this.clue.submissions.push({ playerId, answer, correct: null, ...(points === undefined ? {} : { points }) });
     this.revision++;
   }
 
@@ -392,7 +394,7 @@ export class GameEngine {
     this.require(!correct || entry.answer !== null, 'A missing answer cannot be marked correct.');
     const player = this.players.get(entry.playerId);
     this.require(player, 'Review player not found.');
-    const points = this.quiz.questions[this.clue.questionIndex].fixedPoints;
+    const points = entry.points ?? this.quiz.questions[this.clue.questionIndex].fixedPoints;
     this.require(points !== undefined, 'Question points are missing.');
     this.saveScore(player, correct ? points : 0, `${player.name}: ${correct ? 'correct' : entry.answer === null ? 'no answer' : 'wrong'}`);
     entry.correct = correct;
@@ -411,7 +413,8 @@ export class GameEngine {
     if (!playerIds.length) return false;
     this.clue.phase = 'REVIEW_GROUP';
     this.reviewGroup = { id: randomUUID(), outcome, playerIds,
-      points: outcome === 'correct' ? this.quiz.questions[this.clue.questionIndex].fixedPoints! : 0, at: this.now() };
+      points: outcome === 'correct' ? this.quiz.questions[this.clue.questionIndex].fixedPoints ?? 0 : 0,
+      ...(this.quiz.questions[this.clue.questionIndex].mode === 'typed' && this.quiz.questions[this.clue.questionIndex].pointMode === 'decay' ? { pointsByPlayer: Object.fromEntries(this.clue.reviewQueue.filter((entry) => playerIds.includes(entry.playerId)).map((entry) => [entry.playerId, outcome === 'correct' ? entry.points ?? 0 : 0])) } : {}), at: this.now() };
     return true;
   }
 
@@ -650,8 +653,7 @@ export class GameEngine {
           (this.buzzResult?.playerId === id && !this.buzzResult.correct
             ? Math.max(0, this.buzzResult.at + BUZZ_RESULT_MS - now) : 0)])),
       activePlayerId: this.clue.activePlayerId, pointsAtBuzz: this.clue.pointsAtBuzz,
-      currentPoints: question?.mode === 'typed' ? question.fixedPoints ?? 0
-        : this.clue.pointsAtBuzz ?? buzzerPointsAt(question, this.clue.phase === 'TYPE_BUZZ_INTRO' ? 0 : elapsed, this.settings, this.clue.buzzDecayStartMs),
+      currentPoints: this.clue.pointsAtBuzz ?? buzzerPointsAt(question, this.clue.phase === 'TYPE_BUZZ_INTRO' ? 0 : elapsed, this.settings, this.clue.buzzDecayStartMs),
       clueElapsedMs: elapsed, clockRunning: this.clue.startedAt !== null, paused: this.clue.paused,
       displayElapsedMs: displayElapsed,
       displayClockRunning: this.clue.startedAt !== null || (this.mediaFinishAt !== null && (finishRemaining === null || finishRemaining > 0)),
@@ -674,7 +676,7 @@ export class GameEngine {
       },
       reviewGroup: this.reviewGroup === null ? null : {
         id: this.reviewGroup.id, outcome: this.reviewGroup.outcome, playerIds: [...this.reviewGroup.playerIds],
-        points: this.reviewGroup.points, remainingMs: Math.max(0, REVIEW_GROUP_MS - (now - this.reviewGroup.at)),
+        points: this.reviewGroup.points, ...(this.reviewGroup.pointsByPlayer ? { pointsByPlayer: this.reviewGroup.pointsByPlayer } : {}), remainingMs: Math.max(0, REVIEW_GROUP_MS - (now - this.reviewGroup.at)),
       },
       review: this.clue.phase === 'REVIEW' ? structuredClone(this.clue.reviewQueue[this.clue.reviewIndex]) : null,
       reviewResultId: this.reviewResultId,

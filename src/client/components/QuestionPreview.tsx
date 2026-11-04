@@ -30,7 +30,7 @@ export function previewSnapshot(base: Snapshot, preview: Preview, elapsedMs: num
     revealedAnswer: null,
     players: [], leaderboardIds: [], lockedOutIds: [], lockoutRemainingMs: {},
     activePlayerId: null, pointsAtBuzz: null,
-    currentPoints: question.mode === 'typed' ? question.fixedPoints ?? 0 : buzzerPointsAt(question, elapsed, preview.settings),
+    currentPoints: buzzerPointsAt(question, elapsed, preview.settings),
     clueElapsedMs: elapsed, displayElapsedMs: elapsed,
     clockRunning: running, displayClockRunning: running, paused: false,
     revealProgress: Math.min(1, elapsed / ((question.reveal?.durationSeconds ?? 20) * 1000)),

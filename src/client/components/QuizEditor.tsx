@@ -255,29 +255,29 @@ export function QuizEditor({ passcode, onDirtyChange, gameState, quizId }: { pas
           onChange={(event) => updateQuestion({ enabled: event.target.checked })} /> Include question in quiz</label>
         <label>Question<textarea rows={1} value={question.question} onChange={(event) => updateQuestion({ question: event.target.value })} /></label>
         <label>Answer<textarea rows={1} value={question.answer} onChange={(event) => updateQuestion({ answer: event.target.value })} /></label>
-        {question.mode !== 'buzzer' && <label>{question.mode === 'type-and-buzz' ? 'Typed answer points' : 'Fixed points'}<input type="number" min={1} max={10000} value={Number.isNaN(question.fixedPoints) ? '' : question.fixedPoints ?? ''} onChange={(event) => updateQuestion({ fixedPoints: event.target.valueAsNumber })} /></label>}
-        {question.mode === 'type-and-buzz' && <label>Initial typing window (seconds)<input type="number" min={1} max={3600} value={Number.isNaN(question.typingSeconds) ? '' : question.typingSeconds ?? ''} onChange={(event) => updateQuestion({ typingSeconds: event.target.valueAsNumber })} /></label>}
-        {question.mode !== 'typed' && <div className="editor-optional"><h3>Buzzer points</h3>
-          <label>Point type<select value={question.pointMode ?? (question.mode === 'type-and-buzz' ? 'fixed' : 'decay')} onChange={(event) => {
+        {(question.mode === 'type-and-buzz' || (question.mode === 'typed' && question.pointMode !== 'decay')) && <label>{question.mode === 'type-and-buzz' ? 'Typed answer points' : 'Fixed points'}<input type="number" min={1} max={10000} value={Number.isNaN(question.fixedPoints) ? '' : question.fixedPoints ?? ''} onChange={(event) => updateQuestion({ fixedPoints: event.target.value === '' ? NaN : Number(event.target.value) })} /></label>}
+        {question.mode === 'type-and-buzz' && <label>Initial typing window (seconds)<input type="number" min={1} max={3600} value={Number.isNaN(question.typingSeconds) ? '' : question.typingSeconds ?? ''} onChange={(event) => updateQuestion({ typingSeconds: event.target.value === '' ? NaN : Number(event.target.value) })} /></label>}
+        {<div className="editor-optional"><h3>{question.mode === 'typed' ? 'Answer points' : 'Buzzer points'}</h3>
+          <label>Point type<select value={question.pointMode ?? (question.mode === 'buzzer' ? 'decay' : 'fixed')} onChange={(event) => {
             const inherited = { ...(globalSettings ?? gameState.settings), ...archive.gameSetup };
             if (event.target.value === 'fixed') {
-              updateQuestion({ pointMode: 'fixed', pointDecay: undefined, buzzPoints: Math.max(inherited.startPoints, (question.fixedPoints ?? 0) + 1) });
+              updateQuestion(question.mode === 'typed' ? { pointMode: 'fixed', pointDecay: undefined, fixedPoints: inherited.startPoints, buzzPoints: undefined } : { pointMode: 'fixed', pointDecay: undefined, buzzPoints: Math.max(inherited.startPoints, (question.fixedPoints ?? 0) + 1) });
             } else {
               const startPoints = Math.max(inherited.startPoints, (question.fixedPoints ?? 0) + 1);
-              updateQuestion({ pointMode: 'decay', buzzPoints: undefined, pointDecay: { startPoints,
+              updateQuestion({ pointMode: 'decay', buzzPoints: undefined, ...(question.mode === 'typed' ? { fixedPoints: undefined } : {}), pointDecay: { startPoints,
                 minimumPoints: Math.min(inherited.minimumPoints, startPoints), dropPoints: inherited.dropPoints,
                 dropEverySeconds: inherited.dropEverySeconds, pointDecayDelaySeconds: inherited.pointDecayDelaySeconds } });
             }
           }}><option value="fixed">Fixed points</option><option value="decay">Decaying points</option></select></label>
-          {(question.pointMode ?? (question.mode === 'type-and-buzz' ? 'fixed' : 'decay')) === 'fixed'
-            ? <label>Buzzer points for a correct answer<input type="number" min={1} max={10000} value={Number.isNaN(question.buzzPoints) ? '' : question.buzzPoints ?? ''} onChange={(event) => updateQuestion({ buzzPoints: event.target.valueAsNumber })} /></label>
+          {(question.pointMode ?? (question.mode === 'buzzer' ? 'decay' : 'fixed')) === 'fixed'
+            ? question.mode === 'typed' ? null : <label>Buzzer points for a correct answer<input type="number" min={1} max={10000} value={Number.isNaN(question.buzzPoints) ? '' : question.buzzPoints ?? ''} onChange={(event) => updateQuestion({ buzzPoints: event.target.value === '' ? NaN : Number(event.target.value) })} /></label>
             : <>
           {!question.pointDecay && <small>Showing the quiz's default values. Editing a value saves all five settings for this question.</small>}
           {([['startPoints', 'Starting points', 1, 10000], ['minimumPoints', 'Minimum points', 1, 10000],
             ['dropPoints', 'Points dropped per step', 1, 10000], ['dropEverySeconds', 'Seconds between drops', 1, 120],
             ['pointDecayDelaySeconds', 'Wait before points start dropping (seconds)', 0, 300]] as const).map(([field, label, min, max]) =>
             <label key={field}>{label}<input type="number" min={min} max={max} step={field === 'dropEverySeconds' ? 'any' : 1} value={Number.isNaN(decayPoints[field]) ? '' : decayPoints[field]}
-              onChange={(event) => updateQuestion({ pointDecay: { ...decayPoints, [field]: event.target.valueAsNumber } })} /></label>)}
+              onChange={(event) => updateQuestion({ pointDecay: { ...decayPoints, [field]: event.target.value === '' ? NaN : Number(event.target.value) } })} /></label>)}
           </>}
         </div>}
         <div className="editor-optional"><h3>Optional settings</h3>

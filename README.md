@@ -286,7 +286,7 @@ sharing the QR code.
   (or `gameSetup.questionTimerSeconds` when omitted). The visible countdown and
   submission deadline reach zero together. The countdown displays whole seconds
   through zero. Pausing pauses the timer and submissions.
-  The TV bar freezes when paused or closed; points remain fixed. The official
+  The TV bar freezes when paused or closed; decaying points freeze with it. The official
   answer appears on the TV while submissions are closed, then hides when the host
   starts review. Review never starts automatically just because all answers are judged.
   On typed video clues, the video continues playing on the TV after submissions
@@ -295,7 +295,7 @@ sharing the QR code.
   The host can see all submissions privately; other players see only the count.
   Use **Close submissions** to end answering early, or wait for the timer to close it.
   Then use **Start answer review** when fast review is complete. Mark each answer
-  correct or wrong. Correct earns the question's fixed points;
+  correct or wrong. Correct earns the points available when the answer was submitted;
   wrong or missing answers earn zero. The leaderboard updates immediately.
   Review order is submission order, followed by non-submitters in join order.
   Players present when submissions close are included, even if disconnected;
@@ -339,7 +339,7 @@ This is manual judging, not automatic answer matching.
   happens automatically when the question timer reaches zero. The TV displays the
   official answer while the host prepares review.
 2. Optionally mark closed submissions **Correct**, **Wrong**, or **No answer**
-  privately. Correct earns the fixed points immediately; wrong or missing earns zero.
+  privately. Correct earns the points captured at submission immediately; wrong or missing earns zero.
 3. Use **Start answer review** when ready. The TV
   first shows fast-approved correct players together with their points, then wrong
   or missing players together with +0. Each nonempty group appears for four
@@ -558,8 +558,9 @@ The optional `"enabled": false` excludes a question from play while retaining it
 in the archive; omit it or set it to `true` to include the question. Disabled
 questions must still satisfy the normal validation and media requirements.
 
-A typed question requires its own fixed point value. It may override the inherited
-countdown in seconds:
+A typed question can use fixed points or decaying points. For decaying points, the
+value is captured when each player submits. It may override the inherited countdown
+in seconds. For example, a fixed-point question:
 
 ```json
 {
@@ -585,10 +586,10 @@ Question fields are validated according to mode and media type:
 
 | Field | Allowed on |
 | --- | --- |
-| `fixedPoints` | Required on `typed` and `type-and-buzz`; forbidden on `buzzer` |
-| `pointMode` | Optional on buzzer and Type + buzz; selects `fixed` or `decay` |
+| `fixedPoints` | Required for fixed `typed` questions and `type-and-buzz`; forbidden on `buzzer` and decaying `typed` questions |
+| `pointMode` | Optional on all modes; selects `fixed` or `decay` (on Type + buzz, controls buzzer points) |
 | `buzzPoints` | Required for fixed buzzer scoring; must exceed `fixedPoints` on Type + buzz |
-| `pointDecay` | Optional on decaying buzzer questions; required on decaying Type + buzz |
+| `pointDecay` | Optional on decaying buzzer questions; required for decaying typed and Type + buzz questions |
 | `typingSeconds` | Required on `type-and-buzz`; initial window before everyone can buzz |
 | `timerSeconds` | Optional countdown override on every question |
 | `text` | Text clues only; optional body below the question headline |

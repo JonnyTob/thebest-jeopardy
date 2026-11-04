@@ -136,3 +136,27 @@ test('reset and restart discard group timers without undoing already awarded poi
     assert.equal(game.snapshot().phase, action === 'reset' ? 'QUESTION_OPEN' : 'LOBBY');
   }
 });
+
+test('typed decaying points are captured per submission and shown in fast review', () => {
+  let time = 0;
+  const question = { id: 'decay', type: 'text', mode: 'typed', pointMode: 'decay',
+    pointDecay: { startPoints: 500, minimumPoints: 100, dropPoints: 100, dropEverySeconds: 5, pointDecayDelaySeconds: 0 },
+    question: 'Question', answer: 'Answer' } as const;
+  const game = new GameEngine(quizSchema.parse({ id: 1, title: 'Quiz', questions: [question] }), () => time);
+  const alice = game.join({ name: 'Alice', avatarId: 'fox' });
+  const bob = game.join({ name: 'Bob', avatarId: 'fox' });
+  const send = (action: HostAction) => game.command({ id: randomUUID(), revision: game.revision, action });
+  send({ type: 'start' }); time += START_COUNTDOWN_MS; game.tick();
+  const instance = game.snapshot().questionInstanceId!;
+  game.submitAnswer(alice.id, instance, 'first');
+  time += 5000;
+  assert.equal(game.snapshot().currentPoints, 400);
+  game.submitAnswer(bob.id, instance, 'second');
+  send({ type: 'close' });
+  send({ type: 'judgeSubmission', playerId: alice.id, correct: true });
+  send({ type: 'judgeSubmission', playerId: bob.id, correct: true });
+  send({ type: 'startReview' });
+  assert.deepEqual(game.snapshot().reviewGroup?.pointsByPlayer, { [alice.id]: 500, [bob.id]: 400 });
+  assert.equal(game.snapshot().players.find((player) => player.id === alice.id)?.score, 500);
+  assert.equal(game.snapshot().players.find((player) => player.id === bob.id)?.score, 400);
+});

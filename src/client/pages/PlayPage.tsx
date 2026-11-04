@@ -114,7 +114,7 @@ function TypedAnswer({ state }: { state: Snapshot }) {
     return <section className="panel typed-answer"><span className="eyebrow">FAST APPROVAL / GROUP RESULT</span>
       <h2 role="status">{connected ? 'Group results on TV' : 'Reconnecting'}</h2>
       <p>{!connected ? 'Waiting to reconnect. Your score is saved on the server.' : included
-        ? `${group.outcome === 'correct' ? 'Correct' : 'Wrong or missing'} / +${group.outcome === 'correct' ? group.points : 0} points. Watch the TV.`
+        ? `${group.outcome === 'correct' ? 'Correct' : 'Wrong or missing'} / +${group.outcome === 'correct' ? group.pointsByPlayer?.[playerId!] ?? group.points : 0} points. Watch the TV.`
         : 'Watch the TV as previously judged answers are shown in groups.'}</p>
     </section>;
   }
@@ -123,7 +123,7 @@ function TypedAnswer({ state }: { state: Snapshot }) {
     <h2 role="status">{connected ? 'Reviewing answers on TV' : 'Reconnecting'}</h2>
     <p>{connected ? 'Submissions are closed. Watch the TV for the current answer.' : 'Waiting to reconnect. Your score is saved on the server.'}</p>
   </section>;
-  return <section className="panel typed-answer"><span className="eyebrow">{combined ? 'TYPE BEFORE THE FIRST BUZZ' : 'EVERYONE ANSWERS'} / {state.question?.fixedPoints} POINTS</span>
+  return <section className="panel typed-answer"><span className="eyebrow">{combined ? 'TYPE BEFORE THE FIRST BUZZ' : 'EVERYONE ANSWERS'} / {combined ? state.question?.fixedPoints : state.currentPoints} POINTS</span>
     <h2>{state.mySubmitted ? 'Answer submitted' : open ? 'Your answer' : state.paused ? 'Host paused' : 'Submissions closed'}</h2>
     {(state.phase === 'QUESTION_OPEN' || state.phase === 'QUESTION_CLOSED') && <p>Time remaining: {remaining}s</p>}
     {state.mySubmitted ? <p>Your answer is locked in. {combined && state.phase === 'QUESTION_OPEN' && !state.paused

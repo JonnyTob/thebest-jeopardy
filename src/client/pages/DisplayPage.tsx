@@ -63,7 +63,7 @@ export function DisplayScreen({ state, connected, receivedAt, preview = false }:
         <span className="eyebrow">{typed ? 'ANSWER STATUS' : 'BUZZER STATUS'}</span>
         <div className="buzzer-status"><span className="buzzer-orb" /><h2>{connected ? buzzerLabel(state) : 'RECONNECTING'}</h2></div>
         {!preGame && !finished && state.question && <section className="tv-question-points" aria-label="Question points">
-          <span>{combined ? 'BUZZER POINTS' : typed || buzzerPointMode(state.question) === 'fixed' ? 'FIXED POINTS' : 'TIMED POINTS'}</span><strong>{state.currentPoints.toLocaleString()} <small>pts</small></strong>
+          <span>{combined ? 'BUZZER POINTS' : buzzerPointMode(state.question) === 'fixed' ? 'FIXED POINTS' : 'TIMED POINTS'}</span><strong>{state.currentPoints.toLocaleString()} <small>pts</small></strong>
           {combined && <span>TYPE FOR {state.question.fixedPoints} POINTS</span>}
         </section>}
         {lobby ? <div className="lobby-join"><JoinLink compact /></div>

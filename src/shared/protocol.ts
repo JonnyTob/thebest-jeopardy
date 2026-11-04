@@ -57,24 +57,21 @@ export const questionDefinitionSchema = z.strictObject({
   }).optional(),
   playback: playbackDefinitionSchema.optional(),
 }).superRefine((question, context) => {
-  if (question.mode === 'typed' && (question.pointDecay !== undefined || question.pointMode !== undefined)) {
-    context.addIssue({ code: 'custom', path: ['pointMode'], message: 'Typed questions always use fixed points' });
-  }
-  const scoring = question.pointMode ?? (question.mode === 'type-and-buzz' ? 'fixed' : 'decay');
+  const scoring = question.pointMode ?? (question.mode === 'buzzer' ? 'decay' : 'fixed');
   if (question.pointDecay !== undefined && scoring !== 'decay') {
     context.addIssue({ code: 'custom', path: ['pointDecay'], message: 'Point decay settings require decaying points' });
   }
-  if (question.mode === 'type-and-buzz' && scoring === 'decay' && question.pointDecay === undefined) {
+  if (question.mode !== 'buzzer' && scoring === 'decay' && question.pointDecay === undefined) {
     context.addIssue({ code: 'custom', path: ['pointDecay'], message: 'Type + buzz questions with decaying points require decay settings' });
   }
   if (question.type !== 'text' && !question.media) {
     context.addIssue({ code: 'custom', path: ['media'], message: 'Media clues require a local media path' });
   }
   for (const field of ['fixedPoints'] as const) {
-    if (question.mode !== 'buzzer' && question[field] === undefined) {
+    if ((question.mode === 'type-and-buzz' || (question.mode === 'typed' && scoring === 'fixed')) && question[field] === undefined) {
       context.addIssue({ code: 'custom', path: [field], message: `Questions with typed answers require ${field}` });
     }
-    if (question.mode === 'buzzer' && question[field] !== undefined) {
+    if ((question.mode === 'buzzer' || (question.mode === 'typed' && scoring === 'decay')) && question[field] !== undefined) {
       context.addIssue({ code: 'custom', path: [field], message: `${field} is only allowed for typed questions` });
     }
   }
@@ -172,6 +169,7 @@ export interface TypedReview {
   playerId: string;
   answer: string | null;
   correct: boolean | null;
+  points?: number;
 }
 /** A previously judged group, without individual answers or future groups. */
 export interface ReviewGroup {
@@ -179,6 +177,7 @@ export interface ReviewGroup {
   outcome: 'correct' | 'wrong';
   playerIds: string[];
   points: number;
+  pointsByPlayer?: Record<string, number>;
   /** Server-calculated time until automatic advancement; zero until the next tick. */
   remainingMs: number;
 }
