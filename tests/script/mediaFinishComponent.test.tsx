@@ -252,3 +252,27 @@ test('tile display actually uncovers tiles during finishing and respects restart
   assert.equal(uncovered(), 0);
   await act(async () => { view.unmount(); });
 });
+
+test('timed phone lockout counts down locally and stays frozen during the buzzer result', async (t) => {
+  let now = 1000;
+  t.mock.method(performance, 'now', () => now);
+  let result: Snapshot | null = null;
+  function Probe({ state }: { state: Snapshot }) {
+    result = useAnimatedSnapshot(state, 1000, true);
+    return null;
+  }
+  const locked: Snapshot = { ...base, phase: 'ANSWERING', clockRunning: false, displayClockRunning: false,
+    lockedOutIds: ['player'], lockoutRemainingMs: { player: 2000 } };
+  let view!: ReactTestRenderer;
+  await act(async () => { view = create(createElement(Probe, { state: locked })); });
+  now = 2000;
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 70)); });
+  assert.equal((result as unknown as Snapshot).lockoutRemainingMs.player, 1000);
+  await act(async () => { view.update(createElement(Probe, { state: { ...locked, phase: 'BUZZ_RESULT' } })); });
+  assert.equal((result as unknown as Snapshot).lockoutRemainingMs.player, 2000);
+  await act(async () => { view.update(createElement(Probe, { state: locked })); });
+  now = 3100;
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 70)); });
+  assert.deepEqual((result as unknown as Snapshot).lockedOutIds, []);
+  await act(async () => { view.unmount(); });
+});

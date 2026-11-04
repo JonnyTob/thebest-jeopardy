@@ -73,13 +73,14 @@ test('sample quiz plays through mixed buzzer and typed questions to completion',
     if (question.mode === 'typed') {
       const instanceId = game.snapshot().questionInstanceId;
       assert.ok(instanceId);
+      const submittedPoints = game.snapshot().currentPoints;
       game.submitAnswer(player.id, instanceId, 'Practice answer');
       command({ type: 'close' });
       command({ type: 'startReview' });
       command({ type: 'judgeReview', correct: true });
       time += REVIEW_RESULT_MS;
       game.tick();
-      expectedScore += question.fixedPoints!;
+      expectedScore += submittedPoints;
     } else {
       if (question.mode === 'type-and-buzz') {
         game.submitAnswer(player.id, game.snapshot().questionInstanceId!, 'Practice answer');

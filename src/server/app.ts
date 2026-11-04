@@ -7,6 +7,7 @@ import express from 'express';
 import { Server } from 'socket.io';
 import { brandingSchema, createJoinSchema, hostCommandSchema, serverSettingsSchema, settingsSchema, type Branding, type ClientEvents, type ServerEvents, type Settings, type ServerSettings } from '../shared/protocol.js';
 import { GameEngine, GameError } from './engine.js';
+import { playerSnapshotFactory } from './playerSnapshot.js';
 import { ArchiveConflictError, ArchiveQuizSettingsStorage, ArchiveQuizStorage, QuizLibrary, type QuizStorage } from './storage.js';
 import type { QuizSettingsStorage } from './settings.js';
 import { renderBrandingHtml } from './branding.js';
@@ -174,12 +175,15 @@ export async function createApp(options: AppOptions) {
     next();
   });
 
-  function broadcast() {
+  function broadcast(includePlayers = true, onlyPlayerId?: string) {
     const publicState = engine.snapshot();
     const privateState = engine.snapshot(true);
+    const forPlayer = includePlayers ? playerSnapshotFactory(publicState, privateState) : null;
     for (const socket of io.sockets.sockets.values()) {
-      socket.emit('session:snapshot', socket.data.host ? privateState
-        : socket.data.playerId ? engine.snapshot(false, socket.data.playerId) : publicState);
+      if (socket.data.host) socket.emit('session:snapshot', privateState);
+      else if (socket.handshake.auth.role === 'player') {
+        if (forPlayer && (!onlyPlayerId || socket.data.playerId === onlyPlayerId)) socket.emit('session:snapshot', forPlayer(socket.data.playerId));
+      } else socket.emit('session:snapshot', publicState);
     }
   }
 
@@ -265,7 +269,7 @@ export async function createApp(options: AppOptions) {
         if (!socket.data.playerId) throw new GameError('Join the game before answering.');
         engine.submitAnswer(socket.data.playerId, request.questionInstanceId, request.answer);
         ack({ ok: true, data: undefined });
-        broadcast();
+        broadcast(true, socket.data.playerId);
       } catch (error) {
         ack({ ok: false, error: errorMessage(error) });
       }
@@ -352,7 +356,7 @@ export async function createApp(options: AppOptions) {
     engine.tick();
     const state = engine.snapshot();
     if (engine.revision !== revision || state.phase === 'STARTING' || state.phase === 'NEXT_ROUND' || state.phase === 'BUZZ_RESULT' || state.phase === 'REVIEW_GROUP' || state.displayClockRunning || (state.settings.lockoutSeconds > 0
-      && (state.phase === 'QUESTION_OPEN' || state.phase === 'ANSWERING'))) broadcast();
+      && (state.phase === 'QUESTION_OPEN' || state.phase === 'ANSWERING'))) broadcast(engine.revision !== revision);
     for (const [address, failures] of failedHosts) {
       if (Date.now() - failures.since > 60000) failedHosts.delete(address);
     }

@@ -105,3 +105,12 @@ test('type + buzz keeps typing open until the first buzz and enables buzzing aft
     assert.equal(view.root.findAllByProps({ autoComplete: 'off' }).length, 0);
   } finally { await act(async () => { view.unmount(); }); }
 });
+
+test('phone displays its rank and player count from a compact snapshot', async () => {
+  const compact = { ...base, players: [player], playerCount: 300, playerRank: 42 };
+  let view!: ReactTestRenderer;
+  await act(async () => { view = create(wrapped(makeSession(compact))); });
+  try {
+    assert.equal(view.root.findByProps({ className: 'personal-score' }).findByType('span').children.join(''), 'RANK 42 OF 300');
+  } finally { await act(async () => { view.unmount(); }); }
+});

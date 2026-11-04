@@ -148,6 +148,7 @@ h3 { font-size: 1.35rem; }
 .time-arrow::after { content: ''; position: absolute; right: 0; top: 50%; width: 10px; height: 10px; border-top: 3px solid var(--yellow); border-right: 3px solid var(--yellow); transform: translateY(-50%) rotate(45deg); }
 .closing { position: relative; display: flex; justify-content: space-between; align-items: end; gap: 30px; overflow: hidden; padding: 54px; border: 1px solid #735589; border-radius: 15px; background: radial-gradient(circle at 88% 40%, #5b3065, transparent 38%), #2b193d; }
 .closing > div:first-child, .closing .button { position: relative; z-index: 1; }.closing h2 { font-size: clamp(2.5rem, 4vw, 3.8rem); }.closing p:not(.eyebrow) { max-width: 470px; margin-top: 18px; color: #ccbad6; font-size: .9rem; }
+.closing p.closing-tagline { color: var(--yellow); font-size: clamp(1.1rem, 2vw, 1.4rem); font-weight: 800; }
 .closing .button { flex-shrink: 0; }.closing-star { position: absolute; top: -70px; right: 95px; color: #ffffff0b; font-size: 18rem; line-height: 1; }
 .footer { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding-block: 40px; color: #a996b8; font-size: .59rem; font-weight: 800; letter-spacing: .1em; }.footer .brand { color: #fff; letter-spacing: -.06em; }.footer > span:last-child span { color: var(--pink); }
 @media (max-width: 900px) {

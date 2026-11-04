@@ -699,6 +699,14 @@ does not delete them or their scores.** Remove them in admin between questions,
 or restart the server to clear the entire session. A lost connection or removed
 test player stops the batch with an explicit message; rerun to create a new batch.
 
+### Player snapshot load probe
+
+Run `node --import tsx script/benchmarkPlayerSnapshots.ts` to simulate 50, 100,
+and 300 phones over local WebSocket connections. It reports JSON snapshot payload
+bytes, buzz acknowledgement latency and combined server/client CPU usage. This
+single-process loopback probe is not a substitute for testing the intended host
+and phones over Wi-Fi; the configured player limit is unchanged.
+
 ### Automated checks
 
 ```sh

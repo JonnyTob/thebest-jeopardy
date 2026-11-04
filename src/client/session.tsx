@@ -149,7 +149,7 @@ export function useAnimatedState(): Snapshot | null {
 export function useAnimatedSnapshot(state: Snapshot | null, receivedAt: number, connected: boolean): Snapshot | null {
   const [now, setNow] = useState(() => performance.now());
   useEffect(() => {
-    if ((!state?.clockRunning && !state?.displayClockRunning && state?.phase !== 'STARTING' && state?.phase !== 'NEXT_ROUND' && state?.phase !== 'TYPE_BUZZ_INTRO') || !connected) return;
+    if ((!state?.clockRunning && !state?.displayClockRunning && state?.phase !== 'STARTING' && state?.phase !== 'NEXT_ROUND' && state?.phase !== 'TYPE_BUZZ_INTRO' && Object.keys(state?.lockoutRemainingMs ?? {}).length === 0) || !connected) return;
     const timer = setInterval(() => setNow(performance.now()), 50);
     return () => clearInterval(timer);
   }, [state?.clockRunning, state?.displayClockRunning, state?.phase, connected]);
@@ -161,7 +161,9 @@ export function useAnimatedSnapshot(state: Snapshot | null, receivedAt: number, 
   const displayExtra = clueExtra + visualExtra;
   const finishRemaining = state.mediaFinishRemainingMs === null ? null : Math.max(0, state.mediaFinishRemainingMs - visualExtra);
   const elapsed = state.clueElapsedMs + clueExtra;
-  return { ...state, clockRunning: state.clockRunning && connected,
+  const lockoutRemainingMs = Object.fromEntries(Object.entries(state.lockoutRemainingMs).map(([id, remaining]) => [id, Math.max(0, remaining - (state.phase === 'BUZZ_RESULT' ? 0 : extra))]));
+  const lockedOutIds = state.lockedOutIds.filter((id) => state.lockoutRemainingMs[id] === undefined || lockoutRemainingMs[id] > 0);
+  return { ...state, lockoutRemainingMs, lockedOutIds, clockRunning: state.clockRunning && connected,
     displayClockRunning: state.displayClockRunning && connected && (state.phase !== 'MEDIA_FINISH' || finishRemaining === null || finishRemaining > 0),
     displayElapsedMs: state.displayElapsedMs + displayExtra,
     mediaFinishRemainingMs: finishRemaining,
@@ -170,8 +172,7 @@ export function useAnimatedSnapshot(state: Snapshot | null, receivedAt: number, 
     nextRoundCountdownMs: state.nextRoundCountdownMs === null ? null
       : Math.max(0, state.nextRoundCountdownMs - (state.phase === 'NEXT_ROUND' ? extra : 0)),
     typeBuzzIntroMs: state.typeBuzzIntroMs == null ? null : Math.max(0, state.typeBuzzIntroMs - (state.phase === 'TYPE_BUZZ_INTRO' ? extra : 0)),
-    clueElapsedMs: elapsed, currentPoints: state.question?.mode === 'typed'
-      ? state.question.fixedPoints ?? state.currentPoints : state.pointsAtBuzz ?? buzzerPointsAt(state.question, state.phase === 'TYPE_BUZZ_INTRO' ? 0 : elapsed, state.settings, state.buzzDecayStartMs),
+    clueElapsedMs: elapsed, currentPoints: state.pointsAtBuzz ?? buzzerPointsAt(state.question, state.phase === 'TYPE_BUZZ_INTRO' ? 0 : elapsed, state.settings, state.buzzDecayStartMs),
     revealProgress: Math.min(1, state.revealProgress + displayExtra / ((state.question?.reveal?.durationSeconds ?? 20) * 1000)),
     mediaPositionSeconds: state.mediaPositionSeconds + displayExtra / 1000 };
 }

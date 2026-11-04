@@ -328,7 +328,7 @@ test('server interval broadcasts typed auto-close, next-round countdowns and fre
     const reviewReconnect = await connect({ role: 'player', token: joined.data.token });
     assert.equal(reviewReconnect.state.reviewResultId, result.reviewResultId);
     assert.equal(reviewReconnect.state.reviewRemainingMs, 1001);
-    assert.equal(reviewReconnect.state.review?.correct, false);
+    assert.equal(reviewReconnect.state.review, null); // Phones do not receive other players' answers.
     time = 23000;
     const final = await finished;
     assert.equal(final.nextRoundCountdownMs, null);

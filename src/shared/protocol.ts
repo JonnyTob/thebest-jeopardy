@@ -212,6 +212,9 @@ export interface Snapshot {
   revealedAnswer: string | null;
   privateAnswer?: string;
   players: Player[];
+  /** Present on phone snapshots, which contain only the current player. */
+  playerCount?: number;
+  playerRank?: number;
   leaderboardIds: string[];
   lockedOutIds: string[];
   lockoutRemainingMs: Record<string, number>;
