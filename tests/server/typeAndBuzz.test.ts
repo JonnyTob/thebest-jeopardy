@@ -38,7 +38,7 @@ function setup() {
   return { game, alice, bob, command, advance };
 }
 
-test('typing closes at first buzz, wrong buzz permits another, and both rewards can be earned', () => {
+test('a correct buzzer winner is excluded from typed review while other answers remain eligible', () => {
   const { game, alice, bob, command, advance } = setup();
   const instance = game.snapshot().questionInstanceId!;
   game.submitAnswer(alice.id, instance, 'Secret');
@@ -60,16 +60,55 @@ test('typing closes at first buzz, wrong buzz permits another, and both rewards 
   advance(BUZZ_CORRECT_ANSWER_MS);
   assert.equal(game.snapshot().phase, 'QUESTION_CLOSED');
   assert.throws(() => command({ type: 'next' }), /Review all answers/);
-  command({ type: 'judgeSubmission', playerId: bob.id, correct: true });
-  assert.equal(bob.score, 600);
-  command({ type: 'undo' });
+  assert.deepEqual(game.snapshot(true).hostSubmissions?.map((entry) => entry.playerId), [alice.id]);
+  assert.throws(() => command({ type: 'judgeSubmission', playerId: bob.id, correct: true }), /Review player not found/);
   assert.equal(bob.score, 500);
-  assert.equal(game.snapshot(true).hostSubmissions?.find((entry) => entry.playerId === bob.id)?.correct, null);
-  command({ type: 'judgeSubmission', playerId: bob.id, correct: true });
   command({ type: 'judgeSubmission', playerId: alice.id, correct: true });
   assert.equal(alice.score, -150);
   command({ type: 'startReview' });
   assert.equal(game.snapshot().phase, 'REVIEW_GROUP');
+});
+
+test('undoing a correct buzz restores the winner to typed review, even after the result', () => {
+  const { game, alice, bob, command, advance } = setup();
+  const instance = game.snapshot().questionInstanceId!;
+  game.submitAnswer(alice.id, instance, 'Secret');
+  game.submitAnswer(bob.id, instance, 'Secret');
+  game.buzz(alice.id);
+  command({ type: 'judge', correct: true });
+  assert.deepEqual(game.snapshot(true).hostSubmissions?.map((entry) => entry.playerId), [bob.id]);
+  advance(BUZZ_CORRECT_ANSWER_MS);
+  command({ type: 'undo' });
+  assert.equal(alice.score, 0);
+  assert.equal(game.snapshot().phase, 'ANSWERING');
+  assert.deepEqual(game.snapshot(true).hostSubmissions?.map((entry) => entry.playerId), [alice.id, bob.id]);
+  command({ type: 'judge', correct: false });
+  advance(BUZZ_RESULT_MS);
+  command({ type: 'close' });
+  command({ type: 'judgeSubmission', playerId: alice.id, correct: true });
+  assert.equal(alice.score, -150);
+});
+
+test('a lone correct buzzer winner leaves an empty typed review and can advance', () => {
+  let time = 0;
+  const game = new GameEngine(quiz, () => time);
+  const player = game.join({ name: 'Alice', avatarId: 'fox' });
+  const command = (action: HostAction) => game.command({ id: randomUUID(), revision: game.revision, action });
+  command({ type: 'start' });
+  time += 3000; game.tick();
+  time += START_COUNTDOWN_MS; game.tick();
+  game.submitAnswer(player.id, game.snapshot().questionInstanceId!, 'Secret');
+  game.buzz(player.id);
+  command({ type: 'judge', correct: true });
+  assert.equal(game.snapshot().submissionCount, 1);
+  assert.equal(game.snapshot(false, player.id).mySubmitted, true);
+  assert.deepEqual(game.snapshot(true).hostSubmissions, []);
+  time += BUZZ_CORRECT_ANSWER_MS; game.tick();
+  assert.equal(game.snapshot().reviewCount, 0);
+  assert.throws(() => command({ type: 'judgeSubmission', playerId: player.id, correct: true }), /Review player not found/);
+  command({ type: 'startReview' });
+  assert.equal(game.snapshot().phase, 'GAME_FINISHED');
+  assert.equal(player.score, 500);
 });
 
 test('a player can buzz immediately after typing; others can buzz after a wrong ruling', () => {
@@ -189,9 +228,9 @@ test('correct buzzer answer waits for remaining media before typed review', () =
   assert.throws(() => command({ type: 'startReview' }), /media playback/);
   advance(10000);
   assert.equal(game.snapshot().phase, 'QUESTION_CLOSED');
-  assert.equal(game.snapshot(true).hostSubmissions?.length, 1);
+  assert.equal(game.snapshot(true).hostSubmissions?.length, 0);
   command({ type: 'startReview' });
-  assert.equal(game.snapshot().phase, 'REVIEW');
+  assert.equal(game.snapshot().phase, 'GAME_FINISHED');
 });
 
 test('announcement precedes the next-round countdown and undo can cancel it', () => {

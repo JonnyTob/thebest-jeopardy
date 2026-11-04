@@ -107,7 +107,7 @@ export function DisplayScreen({ state, connected, receivedAt, preview = false }:
       <div className="game-start-ring" aria-hidden="true" /><div className="game-start-content">
         <span className="eyebrow">TYPE + BUZZ</span><h1>BIGGER STAKES. BIGGER REWARDS.</h1>
         <p>Type before the first buzz for {state.question?.fixedPoints} points.</p>
-        <p>Buzz for {state.currentPoints} points{buzzerPointMode(state.question) === 'decay' ? ' to start' : ''}. Wrong buzz loses half.</p>
+        <p>Buzz for {state.currentPoints} points{buzzerPointMode(state.question) === 'decay' ? ' to start' : ''}. Wrong buzz loses half; a correct buzz replaces your typed award.</p>
         <strong>{Math.ceil((state.typeBuzzIntroMs ?? 0) / 1000)}</strong>
       </div>
     </div>}

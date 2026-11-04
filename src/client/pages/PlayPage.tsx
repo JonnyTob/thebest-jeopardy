@@ -28,12 +28,13 @@ export function PlayPage() {
   if (!connected) { status = 'Reconnecting'; detail = 'Your score and place are saved on the server.'; }
   else if (state?.phase === 'STARTING') { status = 'Game starting!'; detail = 'Watch the TV countdown. Answering opens when the first question appears.'; }
   else if (state?.phase === 'NEXT_ROUND') { status = `Next round: ${nextRoundCountdownText(state.nextRoundCountdownMs)}`; detail = 'Watch the TV. Buzzing opens when the next question appears.'; }
-  else if (state?.phase === 'TYPE_BUZZ_INTRO') { status = 'Type + buzz'; detail = 'Type for smaller points. Buzz for more, but a wrong buzz loses points. Typing closes on the first buzz.'; }
+  else if (state?.phase === 'TYPE_BUZZ_INTRO') { status = 'Type + buzz'; detail = 'Type for smaller points or buzz for more. A correct buzz replaces your typed award; a wrong buzz loses points. Typing closes on the first buzz.'; }
   else if (state?.phase === 'MEDIA_FINISH') { status = 'Finishing the clue'; detail = 'Watch the TV. Buzzing is closed and scores are frozen.'; }
   else if (state?.phase === 'GAME_FINISHED') { status = 'That is a wrap!'; detail = 'Thanks for playing. See the TV for the final scores.'; }
   else if (state?.phase === 'BUZZ_RESULT' && state.buzzResult) {
     status = state.buzzResult.correct ? 'Correct answer!' : 'Wrong answer';
-    detail = state.buzzResult.correct ? 'Watch the TV. The next question is on its way.' : 'Buzzers reopen after the result.';
+    detail = state.buzzResult.correct ? combined ? 'Typed answer review follows.' : 'Watch the TV. The next question is on its way.' : 'Buzzers reopen after the result.';
+    if (combined && state.buzzResult.correct && state.buzzResult.playerId === playerId) detail = 'Your typed answer will not be scored.';
     if (state.buzzResult.playerId === playerId) detail = `${state.buzzResult.delta > 0 ? '+' : ''}${state.buzzResult.delta} points. ${detail}`;
   }
   else if (answering) { status = 'You buzzed first!'; detail = 'Say your answer out loud. The host will make the call.'; }
@@ -125,7 +126,8 @@ function TypedAnswer({ state }: { state: Snapshot }) {
   return <section className="panel typed-answer"><span className="eyebrow">{combined ? 'TYPE BEFORE THE FIRST BUZZ' : 'EVERYONE ANSWERS'} / {state.question?.fixedPoints} POINTS</span>
     <h2>{state.mySubmitted ? 'Answer submitted' : open ? 'Your answer' : state.paused ? 'Host paused' : 'Submissions closed'}</h2>
     {(state.phase === 'QUESTION_OPEN' || state.phase === 'QUESTION_CLOSED') && <p>Time remaining: {remaining}s</p>}
-    {state.mySubmitted ? <p>Your answer is locked in. {combined ? 'You can buzz now.' : 'Watch the TV for review.'}</p>
+    {state.mySubmitted ? <p>Your answer is locked in. {combined && state.phase === 'QUESTION_OPEN' && !state.paused
+      ? 'Buzz if eligible.' : 'Watch the TV for review.'}</p>
       : open ? <form onSubmit={submit}><label>Type your answer
         <input value={answer} maxLength={state.settings.maxAnswerLength} required
           onChange={(event) => setAnswer(event.target.value)} autoComplete="off" /></label>

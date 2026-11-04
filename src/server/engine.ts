@@ -547,6 +547,9 @@ export class GameEngine {
         const delta = action.correct ? this.clue.pointsAtBuzz : -wrongBuzzPenalty(this.clue.pointsAtBuzz);
         this.saveScore(player, delta,
           `${player.name}: ${action.correct ? 'correct' : 'wrong'}`);
+        if (action.correct && this.quiz.questions[this.clue.questionIndex]?.mode === 'type-and-buzz') {
+          this.clue.reviewQueue = this.clue.reviewQueue.filter((entry) => entry.playerId !== player.id);
+        }
         const at = this.now();
         if (!action.correct) {
           if (!this.clue.lockedOutIds.includes(player.id)) this.clue.lockedOutIds.push(player.id);
@@ -678,7 +681,7 @@ export class GameEngine {
       reviewRemainingMs: this.reviewResultAt === null ? null : Math.max(0, REVIEW_RESULT_MS - (now - this.reviewResultAt)),
       reviewIndex: this.clue.reviewIndex,
       reviewCount: this.clue.reviewQueue.length,
-      ...(host ? { hostSubmissions: structuredClone(this.clue.reviewQueue.length ? this.clue.reviewQueue : this.clue.submissions) } : {}),
+      ...(host ? { hostSubmissions: structuredClone(this.clue.submissionsClosed ? this.clue.reviewQueue : this.clue.submissions) } : {}),
     };
   }
 }

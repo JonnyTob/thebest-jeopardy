@@ -99,10 +99,6 @@ test('sample quiz plays through mixed buzzer and typed questions to completion',
       if (question.mode === 'type-and-buzz') {
         assert.equal(game.snapshot().phase, 'QUESTION_CLOSED');
         command({ type: 'startReview' });
-        command({ type: 'judgeReview', correct: true });
-        time += REVIEW_RESULT_MS;
-        game.tick();
-        expectedScore += question.fixedPoints!;
       }
     }
     assert.equal(player.score, expectedScore);

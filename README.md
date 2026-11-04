@@ -487,8 +487,10 @@ the first buzz or the buzzer countdown expires. The first buzz freezes the typed
 roster; after a wrong ruling all other eligible players can buzz, even if the
 initial window has not ended. A correct buzz wins the current buzzer points and a wrong buzz loses half,
 rounded up to a whole point. After the buzzer round and any finishing media, the host reviews the
-typed answers using the usual fast approval or TV review. Players can earn both
-awards. Buzzer points can be fixed or decay over time. In Type + buzz, decay
+typed answers using the usual fast approval or TV review. A player judged correct
+on the buzzer receives only the buzzer award and is excluded from typed review,
+whether or not they submitted an answer. Other players' typed answers are reviewed
+normally, including those of players who buzzed incorrectly. Buzzer points can be fixed or decay over time. In Type + buzz, decay
 starts when the initial typing window ends, or at the first buzz if it happens
 earlier; the clock pauses while a player answers and during the result.
 

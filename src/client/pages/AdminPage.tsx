@@ -186,6 +186,7 @@ export function AdminConsole({ logout, requirePasscode, development, passcode = 
         {hasTypedAnswers && state.phase !== 'GAME_FINISHED' && state.phase !== 'TYPE_BUZZ_INTRO' && <section className="panel">
           <div className="typed-answers-heading"><h2>Typed answers ({state.submissionCount} submitted)</h2></div>
           <p className="muted">After submissions close, optionally mark answers here privately or leave them for individual TV review. The official answer stays on TV until you start review. The TV then shows previously judged players in groups: correct first, then wrong or missing, each for four seconds without their answers. Unjudged answers follow individually.</p>
+          {combined && <p className="muted">A correct buzzer winner is excluded from typed-answer review and receives only the buzzer award.</p>}
           {state.phase === 'QUESTION_CLOSED' && <p>{state.hostSubmissions?.filter((entry) => entry.correct === null).length ?? 0} awaiting review.
             {' '}Start answer review to show judged groups first, then review remaining answers individually.</p>}
           {state.hostSubmissions?.length ? <ol className="host-submissions">{state.hostSubmissions.map((entry) => <li key={entry.playerId}>
@@ -201,7 +202,7 @@ export function AdminConsole({ logout, requirePasscode, development, passcode = 
                 aria-label={`Mark ${state.players.find((player) => player.id === entry.playerId)?.name ?? 'player'} wrong or missing`}
                 onClick={() => { void command({ type: 'judgeSubmission', playerId: entry.playerId, correct: false }); }}>{entry.answer === null ? 'No answer +0' : 'Wrong +0'}</button>
             </div></div>
-          </li>)}</ol> : <p>No answers submitted yet.</p>}</section>}
+          </li>)}</ol> : <p>{state.submissionsClosed ? 'No answers to review.' : 'No answers submitted yet.'}</p>}</section>}
         <div className="admin-bottom-grid"><PlayerTable state={state} /><section className="panel game-log"><span className="eyebrow">SCORE LOG</span><h2>The night's numbers</h2>
           <button disabled={undoDisabled || !state.canUndo} onClick={() => { void command({ type: 'undo' }); }}>Undo last score change</button>
           {state.scoreEvents.length ? <ol>{state.scoreEvents.map((event) => <li key={event.id}><span>{event.description}</span>

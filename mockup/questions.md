@@ -9,16 +9,27 @@
 * Baywatch - slow running beach pamela from behind
 * Randy March South Park - Picture - revealing (buzzer)
 
+
+## Post 2000 MUSIC and MOVIES/TV
+* Cast Away (rebus picture)
+* Kings of leon - Closer (Live video with replaced faces)
+* Umbrella Rihanna - metal cover
+* Daft Punk get lucky synth video
+
 ## POP/ROCK - 80s
 * Michael Jackson - sketch picture - (typed)
 * Tina Turner ?
 * Madonna - Funny quote "I'm Like a Virgin on Holiday with Papa" - (typed)
 * Michael Jackson Thriller parody dance Q:“Name the song that made these dance moves famous" (typed)
 * U2 Rebus Picture Q:“Navn på vokalist”
+* A-ha take on my synth (video)
+* Foreigner What is love Live Video
+* Def leppard - hysteria
 
 ## POP/ROCK - 90s
 * Sabotage Beastie Boys - cover clip (buzzer)
 * Prodegy - picture of singer Firestarter (picture reveal)
+* The Cranberries - Zombie
 
 ## Post 2000 MIX
 * Captain Jack Sparrow
@@ -32,6 +43,24 @@
 * Trainspotting
 * Pulp Fiction - clip
 * American Beauty - clip
+Snap - Rythm Is A Dancer
+Rock and alternative
+Answer	Question idea	Mode
+Oasis – “Wonderwall” (1995)	Play an acoustic cover with the performer hidden. Name the song.	Buzzer
+Blur – “Song 2” (1997)	Play the opening drums. Name the band.	Buzzer
+R.E.M. – “Losing My Religion” (1991)	Play the mandolin intro. Name the song.	Typed
+Metallica – “Nothing Else Matters” (1992 single)	Play a classical or piano cover. Name the band.	Typed
+4 Non Blondes – “What’s Up?” (1993)	Show a picture of the singer with a gradual reveal. Name the band.	Buzzer
+Alanis Morissette – “Ironic” (1996 single)	Play a short cover. Name the artist.	Typed
+Pop and dance
+Answer	Question idea	Mode
+Spice Girls – “Wannabe” (1996)	Show five silhouettes with different accessories. Name the group.	Typed
+Aqua – “Barbie Girl” (1997)	Play a metal cover, as with your Rihanna idea. Name the original group.	Buzzer
+Backstreet Boys – “Everybody” (1997)	Show a cropped still from the music video, gradually revealing it. Name the group.	Buzzer
+Natalie Imbruglia – “Torn” (1997)	Play an instrumental cover. Name the artist.	Typed
+Cher – “Believe” (1998)	Play a short instrumental excerpt. Name the artist.	Typed
+Ricky Martin – “Livin’ la Vida Loca” (1999)	Show a live clip with the performer’s face initially hidden. Name the artist.	Buzzer
+
 
 ## Rebus
 

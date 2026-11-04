@@ -17,6 +17,23 @@ function textOf(node: ReactTestInstance): string {
   return node.children.map((child) => typeof child === 'string' ? child : textOf(child)).join('');
 }
 
+test('Type + buzz introduction explains that the buzzer award replaces the typed award', async () => {
+  const game = new GameEngine({ id: 42, title: 'Quiz', questions: [{
+    id: randomUUID(), type: 'text', mode: 'type-and-buzz', question: 'Clue', answer: 'Answer',
+    fixedPoints: 100, buzzPoints: 500, typingSeconds: 10,
+  }] });
+  game.command({ id: randomUUID(), revision: game.revision, action: { type: 'start' } });
+  let view!: ReactTestRenderer;
+  try {
+    await act(async () => { view = create(createElement(DisplayScreen, {
+      state: game.snapshot(), connected: true, receivedAt: 0, preview: true,
+    })); });
+    assert.match(textOf(view.root), /a correct buzz replaces your typed award/);
+  } finally {
+    if (view) await act(async () => { view.unmount(); });
+  }
+});
+
 test('TV separates the buzzer countdown from the changing and frozen question points', async () => {
   let time = 0;
   const game = new GameEngine({ id: 42, title: 'Quiz', questions: [{
