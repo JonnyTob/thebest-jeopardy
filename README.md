@@ -71,7 +71,8 @@ npm start
     "typeBuzzAnnouncementSeconds": 3,
     "countdownSound": "/media/sounds/countdown-beep.wav",
     "reviewCorrectSound": "/media/sounds/countdown-beep.wav",
-    "reviewWrongSound": "/media/sounds/countdown-beep.wav"
+    "reviewWrongSound": "/media/sounds/countdown-beep.wav",
+    "endMusic": null
   },
   "gameSetup": {
     "leaderboardCount": 8,
@@ -132,6 +133,11 @@ npm start
     They are global server settings; restart after changing them and rebuild
     production after adding or replacing assets. They remain enabled by default
     even if `countdownSound` is `null`.
+  - `endMusic`: optional local WAV, MP3, OGG or M4A path for the final results,
+    such as `/media/sounds/finale.mp3`. Defaults to `null` (disabled). Place the
+    file under [src/public/media/](./src/public/media/), restart the server, and
+    rebuild production after adding the file. Enable TV sounds in the display
+    browser; playback depends on browser audio permission and format support.
 - **gameSetup**: defaults for game settings and question point settings.
   Point defaults are configured in this file and used by the quiz editor; they
   are not editable or saved from Game setup. Existing per-quiz point overrides

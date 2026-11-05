@@ -6,12 +6,13 @@ type SoundStatus = 'locked' | 'unlocking' | 'enabled' | 'error';
 
 export function CountdownSound({ sound, id, phase, remaining, connected, receivedAt,
   reviewCorrectSound, reviewWrongSound, reviewResultId = null, reviewRemainingMs = null, reviewCorrect = null,
-  reviewHoldMs = REVIEW_RESULT_MS }: {
+  reviewHoldMs = REVIEW_RESULT_MS, endMusic = null, endGameId = null, endGameElapsedMs = 0 }: {
   sound: string | null; id: string | null; phase: CountdownPhase | null;
   remaining: number | null; connected: boolean; receivedAt: number;
   reviewCorrectSound: string | null; reviewWrongSound: string | null;
   reviewResultId?: string | null; reviewRemainingMs?: number | null; reviewCorrect?: boolean | null;
   reviewHoldMs?: number;
+  endMusic?: string | null; endGameId?: string | null; endGameElapsedMs?: number;
 }) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const dedupe = useRef(initialCountdownSoundState);
@@ -20,6 +21,7 @@ export function CountdownSound({ sound, id, phase, remaining, connected, receive
   const ready = useRef(false);
   const source = useRef<string | null>(null);
   const playingReview = useRef<string | null>(null);
+  const playingEnd = useRef<string | null>(null);
   const previousCountdown = useRef<string | null>(null);
   const seenReviewResults = useRef(new Set<string>());
   const connection = useRef({ disconnectedAt: null as number | null });
@@ -41,10 +43,11 @@ export function CountdownSound({ sound, id, phase, remaining, connected, receive
     audioRef.current?.pause();
     ready.current = false;
     playingReview.current = null;
+    playingEnd.current = null;
     unlocking.current = false;
     setStatus('locked');
     setError('');
-  }, [sound, reviewCorrectSound, reviewWrongSound]);
+  }, [sound, reviewCorrectSound, reviewWrongSound, endMusic]);
 
   function selectSource(audio: HTMLAudioElement, path: string) {
     if (source.current !== path) {
@@ -93,12 +96,12 @@ export function CountdownSound({ sound, id, phase, remaining, connected, receive
         setStatus('error');
         setError(cause instanceof Error && cause.name === 'NotAllowedError'
           ? 'Browser blocked TV sound. Enable it again.'
-          : 'Countdown sound could not play. Check the WAV file and retry.');
+          : 'Countdown sound could not play. Check the audio file and retry.');
       });
     } catch {
       ready.current = false;
       setStatus('error');
-      setError('Countdown sound could not play. Check the WAV file and retry.');
+      setError('Countdown sound could not play. Check the audio file and retry.');
     }
   }, [id, phase, remaining, connected, receivedAt, sound]);
 
@@ -127,18 +130,43 @@ export function CountdownSound({ sound, id, phase, remaining, connected, receive
         if (operation.current !== currentOperation) return;
         ready.current = false;
         setStatus('error');
-        setError('Review sound could not play. Check the WAV file and retry.');
+        setError('Review sound could not play. Check the audio file and retry.');
       });
     } catch {
       ready.current = false;
       setStatus('error');
-      setError('Review sound could not play. Check the WAV file and retry.');
+      setError('Review sound could not play. Check the audio file and retry.');
     }
   }, [reviewResultId, reviewRemainingMs, reviewCorrect, reviewHoldMs, connected, receivedAt, reviewCorrectSound, reviewWrongSound]);
 
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!connected || !endGameId) {
+      if (playingEnd.current) { audio?.pause(); playingEnd.current = null; }
+      return;
+    }
+    if (!audio || !endMusic || !ready.current || playingEnd.current === endGameId) return;
+    const currentOperation = ++operation.current;
+    try {
+      playingEnd.current = endGameId;
+      playingReview.current = null;
+      selectSource(audio, endMusic);
+      audio.playbackRate = 1;
+      audio.currentTime = Math.max(0, endGameElapsedMs / 1000);
+      void audio.play().catch(() => {
+        if (operation.current !== currentOperation) return;
+        playingEnd.current = null; ready.current = false; setStatus('error');
+        setError('End music could not play. Check the audio file and retry.');
+      });
+    } catch {
+      playingEnd.current = null; ready.current = false; setStatus('error');
+      setError('End music could not play. Check the audio file and retry.');
+    }
+  }, [endGameId, endGameElapsedMs, endMusic, connected, status]);
+
   function enable() {
     const audio = audioRef.current;
-    const previewSound = sound ?? reviewCorrectSound ?? reviewWrongSound;
+    const previewSound = (endGameId && endMusic) || sound || reviewCorrectSound || reviewWrongSound || endMusic;
     if (!audio || !previewSound || !connected || (phase !== null && (remaining === null || remaining <= 0))) return;
     const currentOperation = ++operation.current;
     unlocking.current = true;
@@ -151,6 +179,7 @@ export function CountdownSound({ sound, id, phase, remaining, connected, receive
       selectSource(audio, previewSound);
       audio.playbackRate = 1;
       audio.load();
+      if (endGameId && previewSound === endMusic) { playingEnd.current = endGameId; audio.currentTime = Math.max(0, endGameElapsedMs / 1000); }
       void audio.play().then(() => {
         if (operation.current !== currentOperation) return;
         unlocking.current = false;
@@ -162,12 +191,12 @@ export function CountdownSound({ sound, id, phase, remaining, connected, receive
         setStatus('error');
         setError(cause instanceof Error && cause.name === 'NotAllowedError'
           ? 'Browser blocked TV sound. Try enabling it again.'
-          : 'TV sound could not load or play. Check the WAV file and retry.');
+          : 'TV sound could not load or play. Check the audio file and retry.');
       });
     } catch {
       unlocking.current = false;
       setStatus('error');
-      setError('TV sound could not load or play. Check the WAV file and retry.');
+      setError('TV sound could not load or play. Check the audio file and retry.');
     }
   }
 
@@ -179,9 +208,9 @@ export function CountdownSound({ sound, id, phase, remaining, connected, receive
       unlocking.current = false;
       ready.current = false;
       setStatus('error');
-      setError('Sound could not load. Check the WAV file and retry.');
+      setError('Sound could not load. Check the audio file and retry.');
     }} />
-    {sound || reviewCorrectSound || reviewWrongSound ? <button type="button" className="small" onClick={enable}
+    {sound || reviewCorrectSound || reviewWrongSound || endMusic ? <button type="button" className="small" onClick={enable}
       disabled={!connected || status === 'unlocking' || (phase !== null && (remaining === null || remaining <= 0))}>
       {status === 'unlocking' ? 'Enabling TV sounds...' : status === 'enabled' ? 'TV sounds enabled' :
         status === 'error' ? 'Retry TV sounds' : 'Enable TV sounds'}

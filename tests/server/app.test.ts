@@ -458,7 +458,7 @@ test('server nickname and player limits are advertised and enforced, including r
     const info = await (await fetch(`${url}/api/info`)).json();
     assert.deepEqual(info.serverSettings, { maxPlayerNameLength: 32, maxPlayers: 1, requireAdminPasscode: true, typeBuzzAnnouncementSeconds: 3,
       countdownSound: '/media/sounds/countdown-beep.wav',
-      reviewCorrectSound: '/media/sounds/countdown-beep.wav', reviewWrongSound: '/media/sounds/countdown-beep.wav' });
+      reviewCorrectSound: '/media/sounds/countdown-beep.wav', reviewWrongSound: '/media/sounds/countdown-beep.wav', endMusic: null });
     assert.deepEqual(application.engine.snapshot().serverSettings, info.serverSettings);
     const host = await connect({ role: 'host', passcode: 'test-host-passcode' });
     const alice = await connect({ role: 'player' });

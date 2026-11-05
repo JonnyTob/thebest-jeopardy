@@ -27,7 +27,7 @@
       "timerSeconds": 10,
       "text": "Which planet in our solar system is known as the Red Planet?",
       "answer": "Mars",
-      "enabled": true
+      "enabled": false
     },
     {
       "id": "5552d069-9906-4e98-9804-92bf81f033e7",
@@ -70,7 +70,8 @@
       "answer": "Five gold stars. The small white dots are not stars for this question.",
       "reveal": {
         "effect": "static"
-      }
+      },
+      "enabled": false
     },
     {
       "id": "cf316242-6e7b-4715-be08-7c1700b8268b",
@@ -88,7 +89,8 @@
         "columns": 6,
         "rows": 4,
         "seed": 2026
-      }
+      },
+      "enabled": false
     },
     {
       "id": "cf87c00a-5f94-43b0-8d4f-dedd172717b2",
@@ -101,7 +103,8 @@
       "visualizer": {
         "enabled": true,
         "style": "spectrum"
-      }
+      },
+      "enabled": false
     },
     {
       "id": "1b5d039d-29e5-4286-aa85-69e06182d138",
@@ -120,7 +123,8 @@
       "playback": {
         "startSeconds": 4.5,
         "endSeconds": 8
-      }
+      },
+      "enabled": false
     },
     {
       "id": "6ee2f4f5-7947-4053-b6c2-e0c07e002a0a",
@@ -129,7 +133,8 @@
       "question": "Watch the moving shapes. What colour is the circle?",
       "mode": "buzzer",
       "media": "media/examples/shapes.mp4",
-      "answer": "Magenta / pink / purple-pink. The square is gold and the triangle is mint green."
+      "answer": "Magenta / pink / purple-pink. The square is gold and the triangle is mint green.",
+      "enabled": false
     },
     {
       "id": "4b463ea7-6cec-4734-b5f6-32c29e3bd0db",
@@ -144,7 +149,8 @@
       "playback": {
         "startSeconds": 2,
         "endSeconds": 6
-      }
+      },
+      "enabled": false
     },
     {
       "id": "726bddca-b7b7-4ca3-8af1-a6f92be9a841",
@@ -153,7 +159,8 @@
       "question": "One last question. Make it count!",
       "mode": "buzzer",
       "text": "How many sides does a hexagon have?",
-      "answer": "Six"
+      "answer": "Six",
+      "enabled": false
     }
   ]
 }

@@ -148,11 +148,12 @@ export function useAnimatedState(): Snapshot | null {
 
 export function useAnimatedSnapshot(state: Snapshot | null, receivedAt: number, connected: boolean): Snapshot | null {
   const [now, setNow] = useState(() => performance.now());
+  const endAnimating = state?.phase === 'GAME_FINISHED' && (state.endGameElapsedMs ?? 9000) + Math.max(0, now - receivedAt) < 9000;
   useEffect(() => {
-    if ((!state?.clockRunning && !state?.displayClockRunning && state?.phase !== 'STARTING' && state?.phase !== 'NEXT_ROUND' && state?.phase !== 'TYPE_BUZZ_INTRO' && Object.keys(state?.lockoutRemainingMs ?? {}).length === 0) || !connected) return;
+    if ((!state?.clockRunning && !state?.displayClockRunning && state?.phase !== 'STARTING' && state?.phase !== 'NEXT_ROUND' && state?.phase !== 'TYPE_BUZZ_INTRO' && !endAnimating && Object.keys(state?.lockoutRemainingMs ?? {}).length === 0) || !connected) return;
     const timer = setInterval(() => setNow(performance.now()), 50);
     return () => clearInterval(timer);
-  }, [state?.clockRunning, state?.displayClockRunning, state?.phase, connected]);
+  }, [state?.clockRunning, state?.displayClockRunning, state?.phase, connected, endAnimating]);
   if (!state) return null;
   const extra = connected ? Math.max(0, now - receivedAt) : 0;
   const clueExtra = state.clockRunning ? extra : 0;
@@ -172,6 +173,7 @@ export function useAnimatedSnapshot(state: Snapshot | null, receivedAt: number, 
     nextRoundCountdownMs: state.nextRoundCountdownMs === null ? null
       : Math.max(0, state.nextRoundCountdownMs - (state.phase === 'NEXT_ROUND' ? extra : 0)),
     typeBuzzIntroMs: state.typeBuzzIntroMs == null ? null : Math.max(0, state.typeBuzzIntroMs - (state.phase === 'TYPE_BUZZ_INTRO' ? extra : 0)),
+    endGameElapsedMs: state.endGameElapsedMs == null ? null : state.endGameElapsedMs + (state.phase === 'GAME_FINISHED' ? extra : 0),
     clueElapsedMs: elapsed, currentPoints: state.pointsAtBuzz ?? buzzerPointsAt(state.question, state.phase === 'TYPE_BUZZ_INTRO' ? 0 : elapsed, state.settings, state.buzzDecayStartMs),
     revealProgress: Math.min(1, state.revealProgress + displayExtra / ((state.question?.reveal?.durationSeconds ?? 20) * 1000)),
     mediaPositionSeconds: state.mediaPositionSeconds + displayExtra / 1000 };

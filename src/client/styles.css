@@ -471,3 +471,19 @@ td:last-child, th:last-child { padding-right: 0; }
 @keyframes game-start-spin {
   to { transform: rotate(360deg); }
 }
+
+/* End-of-game reveal and complete standings. */
+.final-screen { min-height: 100vh; grid-template-rows: 40px minmax(0, 1fr); }
+.final-results { position: relative; overflow-y: auto; text-align: center; padding: clamp(24px, 4vh, 60px); border: 1px solid #735589; border-radius: 24px; background: radial-gradient(circle at 50% 0, #5b3176, #21102f 65%); }
+.final-results h1 { margin: .3em 0 .5em; font-size: clamp(2.5rem, 5vw, 5rem); }
+.final-intro { min-height: 55vh; display: grid; place-content: center; animation: final-enter .6s ease-out both; }
+.final-podium { position: relative; display: flex; justify-content: center; align-items: end; flex-wrap: wrap; gap: 18px; margin: 24px auto; }
+.final-podium-card { display: grid; justify-items: center; gap: 10px; min-width: 190px; max-width: 260px; padding: 22px; border: 2px solid #a58ab4; border-radius: 20px; background: #342046; animation: final-enter .6s ease-out both; overflow-wrap: anywhere; }
+.final-podium-card.place-1 { order: 1; border-color: var(--gold); background: #594020; transform: scale(1.05); }
+.final-podium-card.place-2 { order: 0; }.final-podium-card.place-3 { order: 2; }
+.final-podium-card .avatar { width: 76px; height: 76px; }.final-podium-card strong { font-size: 1.4rem; }.final-place { color: var(--gold); font-weight: 900; letter-spacing: .1em; }
+.final-confetti { color: var(--gold); font-size: 2rem; letter-spacing: 1em; animation: final-enter .8s ease-out both; }
+.final-standings { max-width: 900px; margin: 36px auto 0; text-align: left; }.final-standings h2 { text-align: center; }
+.final-standings ol { list-style: none; padding: 0; display: grid; gap: 6px; }.final-standings li { display: grid; grid-template-columns: 55px 36px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 10px; background: #ffffff10; }.final-standings li .avatar { width: 32px; height: 32px; }.final-standings li strong { overflow-wrap: anywhere; }
+@keyframes final-enter { from { opacity: 0; translate: 0 20px; } to { opacity: 1; translate: 0 0; } }
+@media (prefers-reduced-motion: reduce) { .final-intro, .final-podium-card, .final-confetti { animation: none; } }

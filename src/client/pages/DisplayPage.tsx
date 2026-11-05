@@ -3,7 +3,7 @@ import { Avatar, Brand, Connection, JoinLink, QuizName, SessionError, buzzerLabe
 import { QuestionClue } from '../components/QuestionClue';
 import { QuizCover } from '../components/QuizCover';
 import { CountdownSound } from '../components/CountdownSound';
-import { branding } from '../branding';
+import { FinalResults } from '../components/FinalResults';
 import { buzzerPointMode, REVIEW_GROUP_MS, REVIEW_RESULT_MS, startCountdownText } from '../../shared/game';
 import type { Snapshot } from '../../shared/protocol';
 
@@ -28,16 +28,27 @@ export function DisplayScreen({ state, connected, receivedAt, preview = false }:
   const countdownText = nextRound ? nextRoundCountdownText(state.nextRoundCountdownMs) : startCountdownText(state.startCountdownMs ?? 0);
   const finished = state.phase === 'GAME_FINISHED';
   const open = state.phase === 'QUESTION_OPEN' && !state.paused && connected;
-  const winner = finished ? players[0] : null;
   const typed = state.question?.mode === 'typed';
   const combined = state.question?.mode === 'type-and-buzz';
   const intro = state.phase === 'TYPE_BUZZ_INTRO';
   const group = state.phase === 'REVIEW_GROUP' ? state.reviewGroup : null;
 
+  if (finished) return <main className="tv-shell final-screen">
+    {!preview && <CountdownSound sound={state.serverSettings.countdownSound}
+      reviewCorrectSound={state.serverSettings.reviewCorrectSound} reviewWrongSound={state.serverSettings.reviewWrongSound}
+      endMusic={state.serverSettings.endMusic} endGameId={state.endGameId ?? null} endGameElapsedMs={state.endGameElapsedMs ?? 9000}
+      id={null} phase={null} remaining={null} connected={connected} receivedAt={receivedAt} />}
+    <header className="tv-header"><Brand staticView={preview} /><QuizName title={state.settings.title} id={state.quizId} />
+      <span className="question-counter">THAT IS A WRAP</span></header>
+    {!connected && <div className="tv-offline" role="alert">Connection lost. Waiting to reconnect.</div>}
+    <FinalResults state={state} />
+  </main>;
+
   return <main className="tv-shell">
     {!preview && <CountdownSound sound={state.serverSettings.countdownSound}
       reviewCorrectSound={state.serverSettings.reviewCorrectSound}
       reviewWrongSound={state.serverSettings.reviewWrongSound}
+      endMusic={state.serverSettings.endMusic}
       id={state.countdownId}
       phase={starting ? 'STARTING' : nextRound ? 'NEXT_ROUND' : null}
       remaining={starting ? state.startCountdownMs : nextRound ? state.nextRoundCountdownMs : null}
@@ -54,10 +65,7 @@ export function DisplayScreen({ state, connected, receivedAt, preview = false }:
     <section className="tv-stage">
       <div className={`panel clue-panel ${preGame ? 'lobby-cover-panel' : ''}`}>
         {preGame ? <QuizCover key={`${state.quizId}:${state.coverImage}`} title={state.settings.title} id={state.quizId} image={state.coverImage} />
-          : finished ? <div className="tv-welcome"><span className="eyebrow">OUR {branding.name.toUpperCase()} CHAMPION</span>
-            {winner ? <><Avatar id={winner.avatarId} /><h1>{winner.name}</h1><strong className="winner-score">{winner.score.toLocaleString()} points</strong></>
-              : <h1>Thanks for playing!</h1>}<p>Same time next quiz?</p></div>
-            : intro || (preview && nextRound) ? <div className="tv-welcome"><h1>Get ready to play</h1></div> : <QuestionClue state={state} />}
+          : intro || (preview && nextRound) ? <div className="tv-welcome"><h1>Get ready to play</h1></div> : <QuestionClue state={state} />}
       </div>
       <aside className={`panel tv-buzzer ${lobby ? 'lobby-buzzer' : open ? 'is-open' : active ? 'is-answering' : ''}`}>
         <span className="eyebrow">{typed ? 'ANSWER STATUS' : 'BUZZER STATUS'}</span>

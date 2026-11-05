@@ -185,7 +185,7 @@ test('global sections load defaults, respect environment overrides and reject in
   try {
     const serverDefaults = { startupQuizId: 100001, maxPlayerNameLength: 24, requireAdminPasscode: true, maxPlayers: 12, typeBuzzAnnouncementSeconds: 3,
       countdownSound: '/media/sounds/countdown-beep.wav',
-      reviewCorrectSound: '/media/sounds/countdown-beep.wav', reviewWrongSound: '/media/sounds/countdown-beep.wav' };
+      reviewCorrectSound: '/media/sounds/countdown-beep.wav', reviewWrongSound: '/media/sounds/countdown-beep.wav', endMusic: null };
     const config = { branding, server: { port: 3000, joinOrigin: 'http://example.com:3000' }, gameSetup: defaults };
     writeFileSync(file, JSON.stringify(config));
     assert.deepEqual(loadGlobalSettings(file, {}), { ...config, server: { ...config.server, ...serverDefaults } });
@@ -195,7 +195,7 @@ test('global sections load defaults, respect environment overrides and reject in
     assert.throws(() => loadGlobalSettings(file, { QUIZ_ID: '0' }), /Unable to load global settings/);
     const customServer = { ...config.server, startupQuizId: 100001, maxPlayerNameLength: 32, requireAdminPasscode: false, maxPlayers: 20, typeBuzzAnnouncementSeconds: 7,
       countdownSound: '/media/custom/countdown.wav',
-      reviewCorrectSound: '/media/custom/correct.wav', reviewWrongSound: '/media/custom/wrong.wav' };
+      reviewCorrectSound: '/media/custom/correct.wav', reviewWrongSound: '/media/custom/wrong.wav', endMusic: '/media/custom/end.mp3' };
     writeFileSync(file, JSON.stringify({ ...config, server: customServer }));
     assert.deepEqual(loadGlobalSettings(file, {}).server, customServer);
     writeFileSync(file, JSON.stringify(config));

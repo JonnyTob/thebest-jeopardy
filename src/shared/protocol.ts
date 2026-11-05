@@ -154,6 +154,7 @@ export const serverSettingsSchema = z.object({
     .nullable().default('/media/sounds/countdown-beep.wav'),
   reviewWrongSound: localMedia.refine((value) => /\.wav$/i.test(value), 'Review wrong sound must be a WAV file')
     .nullable().default('/media/sounds/countdown-beep.wav'),
+  endMusic: localMedia.refine((value) => /\.(wav|mp3|ogg|m4a)$/i.test(value), 'End music must be a WAV, MP3, OGG or M4A file').nullable().default(null),
 }).strict();
 export type ServerSettings = z.infer<typeof serverSettingsSchema>;
 export type Phase = 'LOBBY' | 'STARTING' | 'NEXT_ROUND' | 'TYPE_BUZZ_INTRO' | 'QUESTION_OPEN' | 'ANSWERING' | 'BUZZ_RESULT' | 'MEDIA_FINISH' | 'QUESTION_CLOSED' | 'REVIEW_GROUP' | 'REVIEW' | 'REVIEW_COMPLETE' | 'ANSWER_REVEALED' | 'GAME_FINISHED';
@@ -206,6 +207,9 @@ export interface Snapshot {
   nextRoundCountdownMs: number | null;
   typeBuzzIntroMs?: number | null;
   countdownId: string | null;
+  /** Synchronized game-finish reveal, elapsed since the server began it. */
+  endGameId?: string | null;
+  endGameElapsedMs?: number | null;
   questionIndex: number;
   questionCount: number;
   question: PublicQuestion | null;

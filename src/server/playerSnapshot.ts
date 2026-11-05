@@ -18,7 +18,7 @@ export function playerSnapshotFactory(publicState: Snapshot, hostState: Snapshot
     return {
       ...publicState,
       playerCount,
-      playerRank: playerId ? ranks.get(playerId) ?? 0 : 0,
+      playerRank: publicState.phase === 'GAME_FINISHED' ? 0 : playerId ? ranks.get(playerId) ?? 0 : 0,
       players: player ? [player] : [],
       leaderboardIds: [],
       lockedOutIds: playerId && locked.has(playerId) ? [playerId] : [],

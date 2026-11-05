@@ -13,7 +13,8 @@
     "typeBuzzAnnouncementSeconds": 10,
     "countdownSound": "/media/sounds/countdown-beep.wav",
     "reviewCorrectSound": "/media/sounds/countdown-beep.wav",
-    "reviewWrongSound": "/media/sounds/countdown-beep.wav"
+    "reviewWrongSound": "/media/sounds/countdown-beep.wav",
+    "endMusic": null
   },
   "gameSetup": {
     "leaderboardCount": 8,

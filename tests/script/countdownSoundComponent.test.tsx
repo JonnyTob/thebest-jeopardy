@@ -184,3 +184,18 @@ test('four-second group sounds play once per fresh group, not on late or reconne
   assert.equal(audio.plays, 4, 'individual result still plays');
   await act(async () => { view.unmount(); });
 });
+test('end music plays once at game end using the existing enabled TV sound control', async () => {
+  const audio = makeAudio();
+  const props = { ...base, endMusic: '/media/sounds/finale.mp3', endGameId: null as string | null, endGameElapsedMs: 0 };
+  let view!: ReactTestRenderer;
+  await act(async () => { view = create(createElement(CountdownSound, props), { createNodeMock: () => audio }); });
+  await act(async () => { view.root.findByType('button').props.onClick(); });
+  const count = audio.plays;
+  await act(async () => { view.update(createElement(CountdownSound, { ...props, endGameId: 'finish', endGameElapsedMs: 250 })); });
+  assert.equal(audio.plays, count + 1);
+  assert.equal(audio.src, props.endMusic);
+  assert.equal(audio.currentTime, .25);
+  await act(async () => { view.update(createElement(CountdownSound, { ...props, endGameId: 'finish', endGameElapsedMs: 1200 })); });
+  assert.equal(audio.plays, count + 1);
+  await act(async () => { view.unmount(); });
+});

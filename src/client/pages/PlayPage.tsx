@@ -73,7 +73,7 @@ export function PlayPage() {
       <p className="footnote">Keep this page open while you play.</p>
     </form> : <>
       <section className="panel player-profile"><Avatar id={player.avatarId} /><div><span className="eyebrow">YOU'RE IN</span><h1>{player.name}</h1></div>
-        <div className="personal-score"><strong>{player.score.toLocaleString()}</strong><span>RANK {rank} OF {state?.playerCount ?? state?.players.length}</span></div></section>
+        <div className="personal-score"><strong>{player.score.toLocaleString()}</strong>{state?.phase !== 'GAME_FINISHED' && <span>RANK {rank} OF {state?.playerCount ?? state?.players.length}</span>}</div></section>
       {state?.question?.mode !== 'buzzer' && state?.question && state.phase !== 'GAME_FINISHED' && state.phase !== 'TYPE_BUZZ_INTRO'
         && <TypedAnswer key={state.questionInstanceId} state={state} />}
       {(state?.question?.mode !== 'typed' || state?.phase === 'GAME_FINISHED') && <><section className={`buzzer-card ${answering ? 'is-answering' : ''}`}>

@@ -114,3 +114,11 @@ test('phone displays its rank and player count from a compact snapshot', async (
     assert.equal(view.root.findByProps({ className: 'personal-score' }).findByType('span').children.join(''), 'RANK 42 OF 300');
   } finally { await act(async () => { view.unmount(); }); }
 });
+
+test('phone hides rank when the game is finished', async () => {
+  const final = { ...base, phase: 'GAME_FINISHED' as const, playerRank: 1, playerCount: 3 };
+  let view!: ReactTestRenderer;
+  await act(async () => { view = create(wrapped(makeSession(final))); });
+  try { assert.doesNotMatch(JSON.stringify(view.toJSON()), /RANK|champion|winner/i); }
+  finally { await act(async () => { view.unmount(); }); }
+});

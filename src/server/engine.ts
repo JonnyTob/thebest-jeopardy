@@ -45,6 +45,8 @@ export class GameEngine {
   revision = 0;
   private nextOrder = 0;
   private leaderboardIds: string[] = [];
+  private endGameAt: number | null = null;
+  private endGameId: string | null = null;
   private history: UndoEntry[] = [];
   private scoreEvents: ScoreEvent[] = [];
   private processed = new Set<string>();
@@ -188,6 +190,8 @@ export class GameEngine {
     this.rank();
     if (this.clue.questionIndex + 1 >= this.quiz.questions.length) {
       this.clue.phase = 'GAME_FINISHED';
+      this.endGameAt = this.now();
+      this.endGameId = randomUUID();
       this.nextRoundAt = null;
       this.countdownId = null;
     } else {
@@ -514,6 +518,8 @@ export class GameEngine {
         break;
       case 'restartQuiz':
         this.players.clear();
+        this.endGameAt = null;
+        this.endGameId = null;
         this.nextOrder = 0;
         this.leaderboardIds = [];
         this.history = [];
@@ -638,6 +644,8 @@ export class GameEngine {
       typeBuzzIntroMs: this.typeBuzzIntroAt === null ? null
         : Math.max(0, this.serverSettings.typeBuzzAnnouncementSeconds * 1000 - (now - this.typeBuzzIntroAt)),
       countdownId: this.countdownId,
+      endGameId: this.clue.phase === 'GAME_FINISHED' ? this.endGameId : null,
+      endGameElapsedMs: this.clue.phase === 'GAME_FINISHED' && this.endGameAt !== null ? Math.max(0, now - this.endGameAt) : null,
       serverSettings: { ...this.serverSettings },
       coverImage: this.quiz.coverImage ?? null,
       questionIndex, questionCount: this.quiz.questions.length,

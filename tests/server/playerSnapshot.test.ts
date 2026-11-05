@@ -32,3 +32,22 @@ test('phone snapshots remain small and contain only personal status, including r
   assert.equal(snapshot(players[0].id).players[0].score, 250);
   assert.doesNotMatch(JSON.stringify(snapshot(players[1].id)), /private answer/);
 });
+
+test('finish snapshot hides personal rank and keeps the reveal synchronized on reconnect', () => {
+  let time = 0;
+  const game = new GameEngine({ id: 1, title: 'Quiz', questions: [{ id: 'q', type: 'text', mode: 'buzzer', question: 'Question', answer: 'Secret' }] }, () => time);
+  const alice = game.join({ name: 'Alice', avatarId: 'fox' });
+  const send = (action: HostAction) => game.command({ id: randomUUID(), revision: game.revision, action });
+  send({ type: 'start' }); time += START_COUNTDOWN_MS; game.tick();
+  send({ type: 'close' }); send({ type: 'next' });
+  const first = game.snapshot();
+  assert.equal(first.phase, 'GAME_FINISHED');
+  assert.ok(first.endGameId);
+  assert.equal(first.endGameElapsedMs, 0);
+  time += 4200;
+  const reconnect = playerSnapshotFactory(game.snapshot(), game.snapshot(true))(alice.id);
+  assert.equal(reconnect.endGameId, first.endGameId);
+  assert.equal(reconnect.endGameElapsedMs, 4200);
+  assert.equal(reconnect.playerRank, 0);
+  assert.deepEqual(reconnect.leaderboardIds, []);
+});
