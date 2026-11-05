@@ -172,10 +172,10 @@ export interface TypedReview {
   correct: boolean | null;
   points?: number;
 }
-/** A previously judged group, without individual answers or future groups. */
+/** A group of judged or missing answers, without individual answers or future groups. */
 export interface ReviewGroup {
   id: string;
-  outcome: 'correct' | 'wrong';
+  outcome: 'correct' | 'wrong' | 'missing';
   playerIds: string[];
   points: number;
   pointsByPlayer?: Record<string, number>;

@@ -59,16 +59,17 @@ function ReviewGroupOverlay({ group, players }: { group: ReviewGroup; players: P
   // Keep the original offset across snapshots, including late reconnects.
   const delay = useRef(-Math.max(0, Math.min(REVIEW_GROUP_MS, REVIEW_GROUP_MS - group.remainingMs)));
   const correct = group.outcome === 'correct';
+  const missing = group.outcome === 'missing';
   const members = group.playerIds.flatMap((id) => players.find((player) => player.id === id) ?? []);
   return <section className={`review-group review-group-${group.outcome}`} aria-label="Grouped answer results"
-    aria-live="polite" aria-atomic="true" style={{ animationDelay: `${delay.current}ms` }}>
-    <ReviewResultAnimation correct={correct} remaining={group.remainingMs} duration={REVIEW_GROUP_MS} />
-    <header className="review-group-heading"><span className="eyebrow">FAST APPROVAL / GROUP RESULT</span>
-      <h2>{correct ? 'Correct answers' : 'Wrong or missing answers'}</h2></header>
+    aria-live="polite" aria-atomic="true" style={missing ? undefined : { animationDelay: `${delay.current}ms` }}>
+    {!missing && <ReviewResultAnimation correct={correct} remaining={group.remainingMs} duration={REVIEW_GROUP_MS} />}
+    <header className="review-group-heading"><span className="eyebrow">{missing ? 'ANSWER REVIEW' : 'FAST APPROVAL / GROUP RESULT'}</span>
+      <h2>{correct ? 'Correct answers' : missing ? 'No answer' : 'Wrong answers'}</h2></header>
     <ul className="review-group-grid" tabIndex={0} aria-label="Players in this group">
       {members.map((player) => <li key={player.id} className="review-group-player">
         <Avatar id={player.avatarId} /><strong>{player.name}</strong>
-        <span className={correct ? 'positive' : 'negative'}>+{(correct ? group.pointsByPlayer?.[player.id] ?? group.points : 0).toLocaleString()}</span>
+        <span className={correct ? 'positive' : missing ? 'muted' : 'negative'}>+{(correct ? group.pointsByPlayer?.[player.id] ?? group.points : 0).toLocaleString()}</span>
       </li>)}
     </ul>
   </section>;

@@ -52,9 +52,9 @@ export function DisplayScreen({ state, connected, receivedAt, preview = false }:
       id={state.countdownId}
       phase={starting ? 'STARTING' : nextRound ? 'NEXT_ROUND' : null}
       remaining={starting ? state.startCountdownMs : nextRound ? state.nextRoundCountdownMs : null}
-      reviewResultId={group?.id ?? state.buzzResult?.id ?? state.reviewResultId}
+      reviewResultId={group?.outcome === 'missing' ? null : group?.id ?? state.buzzResult?.id ?? state.reviewResultId}
       reviewRemainingMs={group?.remainingMs ?? state.buzzResult?.remainingMs ?? state.reviewRemainingMs}
-      reviewCorrect={group ? group.outcome === 'correct' : state.buzzResult?.correct ?? state.review?.correct ?? null}
+      reviewCorrect={group ? group.outcome === 'missing' ? null : group.outcome === 'correct' : state.buzzResult?.correct ?? state.review?.correct ?? null}
       reviewHoldMs={group ? REVIEW_GROUP_MS : REVIEW_RESULT_MS}
       connected={connected} receivedAt={receivedAt} />}
     <header className="tv-header"><Brand staticView={preview} /><QuizName title={state.settings.title} id={state.quizId} />

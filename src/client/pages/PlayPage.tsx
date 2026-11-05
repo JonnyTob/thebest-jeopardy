@@ -110,11 +110,11 @@ function TypedAnswer({ state }: { state: Snapshot }) {
   if (state.phase === 'REVIEW_GROUP' && state.reviewGroup) {
     const group = state.reviewGroup;
     const included = !!playerId && group.playerIds.includes(playerId);
-    return <section className="panel typed-answer"><span className="eyebrow">FAST APPROVAL / GROUP RESULT</span>
+    return <section className="panel typed-answer"><span className="eyebrow">{group.outcome === 'missing' ? 'ANSWER REVIEW' : 'FAST APPROVAL / GROUP RESULT'}</span>
       <h2 role="status">{connected ? 'Group results on TV' : 'Reconnecting'}</h2>
       <p>{!connected ? 'Waiting to reconnect. Your score is saved on the server.' : included
-        ? `${group.outcome === 'correct' ? 'Correct' : 'Wrong or missing'} / +${group.outcome === 'correct' ? group.pointsByPlayer?.[playerId!] ?? group.points : 0} points. Watch the TV.`
-        : 'Watch the TV as previously judged answers are shown in groups.'}</p>
+        ? `${group.outcome === 'correct' ? 'Correct' : group.outcome === 'missing' ? 'No answer' : 'Wrong'} / +${group.outcome === 'correct' ? group.pointsByPlayer?.[playerId!] ?? group.points : 0} points. Watch the TV.`
+        : group.outcome === 'missing' ? 'Watch the TV for players who did not answer.' : 'Watch the TV as previously judged answers are shown in groups.'}</p>
     </section>;
   }
   if (state.phase === 'REVIEW') return <section className="panel typed-answer">

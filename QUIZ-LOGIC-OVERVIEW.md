@@ -87,9 +87,9 @@ flowchart TD
 4. **Correct:** the answer appears immediately while media is paused. After three seconds, remaining audio/video playback or tile reveal resumes with buzzing closed. The quiz advances automatically when it finishes. If its endpoint is unknown, the host skips the finishing media when ready.
 5. If time runs out while the question is open, it enters `QUESTION_CLOSED`. In the proposed flow, the official answer is then displayed and the question resolves. Currently, the host may reveal the answer and/or advance. Media ending or points reaching minimum alone never closes buzzing.
 
-### Typed-answer path — proposed simplification
+### Typed-answer review path
 
-This diagram is a **target flow for a later refactor**, not the current engine behavior. Here, “reveal correct answer” means displaying the official answer on the TV; “correct group” means players whose submissions the host has already marked correct. Showing the official answer does not judge any player automatically.
+Here, “reveal correct answer” means displaying the official answer on the TV; “correct group” means players whose submissions the host has already marked correct. Showing the official answer does not judge any player automatically.
 
 ```mermaid
 flowchart TD
@@ -106,10 +106,10 @@ flowchart TD
 
 1. While open, each player can submit once. The host does not judge answers yet.
 2. When the timer expires, or the host closes early, submissions stop and the review list is finalized. The official answer appears on TV. Before starting review, the host may optionally mark submitted answers correct or wrong privately; these fast judgments award points immediately. Closing alone must **not** start review, even if every answer has already been judged.
-3. The host starts review explicitly from the closed state. The engine shows nonempty groups in a fixed order: **fast-approved correct**, **fast-approved wrong**, then **no answer** (zero points). Each group is shown once; empty groups are skipped. Players who submitted but have not been judged belong to none of these groups.
+3. The host starts review explicitly from the closed state. The engine shows nonempty groups in a fixed order: **fast-approved correct**, **fast-approved wrong**, then **no answer** (zero points). Each group lasts four seconds; empty groups are skipped. The no-answer group is static and silent, requires no ruling, and creates no score event. Players who submitted but have not been judged belong to none of these groups.
 4. After the groups, the host manually judges remaining unjudged submissions in submission order. Each result uses the existing individual hold/animation. When none remain, the question resolves and the shared next-question/final flow resumes.
 
-**Current implementation differs:** it combines fast-approved wrong and missing answers in one group. The official answer is visible while submissions are closed and disappears only when the host starts review. Closure and host-triggered review are now separate steps, and fast judgments are limited to the closed state.
+The official answer is visible while submissions are closed and disappears when the host starts review. Closure and host-triggered review are separate steps, and fast judgments are limited to the closed state.
 
 ## 5. Current host actions and reset behavior
 
@@ -127,12 +127,12 @@ Only the TV plays audio/video. Playback start/end may constrain the clip; the se
 
 The public question omits the official `answer`; the host receives it privately. Typed submissions are sent only to the host until a particular answer is shown during review. TV and phone countdowns interpolate between server snapshots, but the server remains authoritative for deadlines, first buzz, scores and phase changes. The editor's TV preview simulates a question timeline; it is not a live game or a player-submission simulation.
 
-## 7. Refactor checklist for the proposed typed path
+## 7. Typed review checklist
 
 - [x] Use the closed typed state as a waiting point: submissions and roster frozen, official answer visible, review started only by an explicit host action. The existing `QUESTION_CLOSED` phase is sufficient.
 - [x] Make timer expiry and **Close submissions** use the same close operation. Remove automatic review start when all entries are pre-judged, and require closure before **Start review** is available; there is no direct open-to-review shortcut.
 - [x] Restrict fast approval to the closed state before review. Award its points immediately; undo restores judgments, scores, the revealed answer, and the waiting state.
-- [ ] Partition the frozen review roster exactly once into fast-approved correct, fast-approved wrong, no-answer, and unjudged submitted entries. No-answer players should not be mixed into the wrong group or appear again in manual review; empty groups should be skipped.
+- [x] Group the frozen review roster into fast-approved correct, fast-approved wrong, no-answer, and unjudged submitted entries. No-answer players are not mixed into the wrong group or shown for manual review; empty groups are skipped.
 - [ ] Specify group timing and what appears on TV and phones while the official answer is visible, while each group is shown, and during individual manual review. Preserve answer privacy until the intended reveal point.
 - [ ] Update host controls and phase guards so review begins only on the host's command and cannot be bypassed by **Next question**. Preserve reset, restart, reconnect, and media playback behavior while waiting for review.
 - [ ] Update server snapshots, client rendering, and editor preview to reflect the new closed/revealed waiting step and separate no-answer group.

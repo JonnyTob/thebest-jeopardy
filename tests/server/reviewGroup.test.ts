@@ -34,7 +34,8 @@ test('groups reveal only current judged players, then unjudged individuals, with
   send({ type: 'close' });
   send({ type: 'judgeSubmission', playerId: alice.id, correct: true });
   send({ type: 'judgeSubmission', playerId: bob.id, correct: false });
-  send({ type: 'judgeSubmission', playerId: eve.id, correct: false });
+  assert.throws(() => send({ type: 'judgeSubmission', playerId: eve.id, correct: false }), /missing answer/);
+  assert.throws(() => send({ type: 'judgeSubmission', playerId: eve.id, correct: true }), /missing answer/);
   game.setConnected(bob.id, false);
   const start = send({ type: 'startReview' });
   const first = game.snapshot();
@@ -47,8 +48,8 @@ test('groups reveal only current judged players, then unjudged individuals, with
   assert.equal(first.clockRunning, false);
   assert.equal(first.displayClockRunning, false);
   assert.equal(game.snapshot(true).hostSubmissions?.length, 5);
-  assert.deepEqual(game.snapshot(true).hostSubmissions?.map((e) => e.correct), [true, false, null, null, false]);
-  assert.equal(game.snapshot(true).scoreEvents.length, 3);
+  assert.deepEqual(game.snapshot(true).hostSubmissions?.map((e) => e.correct), [true, false, null, null, null]);
+  assert.equal(game.snapshot(true).scoreEvents.length, 2);
   for (const state of [first, game.snapshot(false, alice.id), game.snapshot(false, bob.id)]) {
     assert.equal(state.hostSubmissions, undefined);
     assert.equal(state.privateAnswer, undefined);
@@ -73,13 +74,19 @@ test('groups reveal only current judged players, then unjudged individuals, with
   assert.equal(game.snapshot().reviewGroup?.remainingMs, 0);
   game.tick();
   const second = game.snapshot();
-  assert.deepEqual(second.reviewGroup, { id: second.reviewGroup!.id, outcome: 'wrong', playerIds: [bob.id, eve.id], points: 0, remainingMs: 4000 });
+  assert.deepEqual(second.reviewGroup, { id: second.reviewGroup!.id, outcome: 'wrong', playerIds: [bob.id], points: 0, remainingMs: 4000 });
   assert.notEqual(second.reviewGroup?.id, group.id);
   assert.equal(second.review, null);
   assert.equal(second.clueElapsedMs, first.clueElapsedMs);
   assert.equal(second.mediaPositionSeconds, first.mediaPositionSeconds);
   assert.equal(second.revealProgress, first.revealProgress);
   advance(REVIEW_GROUP_MS); game.tick();
+  const missing = game.snapshot().reviewGroup!;
+  assert.deepEqual(missing, { id: missing.id, outcome: 'missing', playerIds: [eve.id], points: 0, remainingMs: 4000 });
+  assert.equal(game.snapshot(true).scoreEvents.length, 2);
+  advance(REVIEW_GROUP_MS - 1); game.tick();
+  assert.equal(game.snapshot().reviewGroup?.remainingMs, 1);
+  advance(1); game.tick();
   assert.equal(game.snapshot().reviewGroup, null);
   assert.equal(game.snapshot().review?.playerId, carol.id);
   assert.equal(game.snapshot().review?.answer, 'PRIVATE Carol');
@@ -90,7 +97,7 @@ test('groups reveal only current judged players, then unjudged individuals, with
   assert.equal(game.snapshot().phase, 'NEXT_ROUND');
   assert.equal(game.snapshot().reviewGroup, null);
   assert.deepEqual(playersScores(game), [250, 0, 250, 0, 0]);
-  assert.equal(game.snapshot(true).scoreEvents.length, 5);
+  assert.equal(game.snapshot(true).scoreEvents.length, 4);
   advance(NEXT_ROUND_MS); game.tick();
   assert.equal(game.snapshot().reviewGroup, null);
 });
@@ -99,15 +106,15 @@ function playersScores(game: GameEngine) {
   return [...game.players.values()].map((player) => player.score);
 }
 
-test('undo during either group restores the preceding score snapshot and cancels all group timers', () => {
-  for (const secondGroup of [false, true]) {
+test('undo during any group restores the preceding score snapshot and cancels all group timers', () => {
+  for (const groupIndex of [0, 1, 2]) {
     const { game, players: [alice, bob], send, advance } = setup();
     send({ type: 'close' });
     send({ type: 'judgeSubmission', playerId: alice.id, correct: true });
     send({ type: 'judgeSubmission', playerId: bob.id, correct: false });
     send({ type: 'startReview' });
-    if (secondGroup) { advance(REVIEW_GROUP_MS); game.tick(); }
-    assert.equal(game.snapshot().reviewGroup?.outcome, secondGroup ? 'wrong' : 'correct');
+    for (let i = 0; i < groupIndex; i++) { advance(REVIEW_GROUP_MS); game.tick(); }
+    assert.equal(game.snapshot().reviewGroup?.outcome, ['correct', 'wrong', 'missing'][groupIndex]);
     send({ type: 'undo' });
     assert.equal(game.snapshot().phase, 'QUESTION_CLOSED');
     assert.equal(game.snapshot().reviewGroup, null);
@@ -128,6 +135,8 @@ test('reset and restart discard group timers without undoing already awarded poi
     send({ type: 'close' });
     send({ type: 'judgeSubmission', playerId: alice.id, correct: true });
     send({ type: 'startReview' });
+    advance(REVIEW_GROUP_MS); game.tick();
+    assert.equal(game.snapshot().reviewGroup?.outcome, 'missing');
     send({ type: action });
     assert.equal(game.snapshot().reviewGroup, null);
     assert.equal(game.snapshot().phase, action === 'reset' ? 'QUESTION_OPEN' : 'LOBBY');
@@ -135,6 +144,37 @@ test('reset and restart discard group timers without undoing already awarded poi
     advance(1000); game.tick();
     assert.equal(game.snapshot().phase, action === 'reset' ? 'QUESTION_OPEN' : 'LOBBY');
   }
+});
+
+test('all missing answers form one four-second group without score events, including disconnected players', () => {
+  let time = 0;
+  const game = new GameEngine(quiz, () => time);
+  const alice = game.join({ name: 'Alice', avatarId: 'fox' });
+  const bob = game.join({ name: 'Bob', avatarId: 'cat' });
+  const send = (action: HostAction) => game.command({ id: randomUUID(), revision: game.revision, action });
+  send({ type: 'start' }); time += START_COUNTDOWN_MS; game.tick();
+  game.setConnected(bob.id, false);
+  send({ type: 'close' });
+  const late = game.join({ name: 'Late', avatarId: 'owl' });
+  for (const correct of [true, false]) {
+    assert.throws(() => send({ type: 'judgeSubmission', playerId: alice.id, correct }), /missing answer/);
+  }
+  assert.throws(() => send({ type: 'judgeSubmission', playerId: late.id, correct: false }), /not found/);
+  send({ type: 'startReview' });
+  assert.deepEqual(game.snapshot().reviewGroup?.playerIds, [alice.id, bob.id]);
+  assert.equal(game.snapshot().reviewGroup?.outcome, 'missing');
+  assert.equal(game.snapshot().reviewCount, 0);
+  assert.equal(game.snapshot(true).scoreEvents.length, 0);
+  assert.equal(game.snapshot().canUndo, false);
+  assert.throws(() => send({ type: 'judgeReview', correct: false }), /review group/);
+  game.setConnected(bob.id, true);
+  assert.deepEqual(game.snapshot().reviewGroup?.playerIds, [alice.id, bob.id]);
+  time += REVIEW_GROUP_MS - 1; game.tick();
+  assert.equal(game.snapshot().reviewGroup?.remainingMs, 1);
+  time++; game.tick();
+  assert.equal(game.snapshot().phase, 'NEXT_ROUND');
+  assert.equal(game.snapshot(true).scoreEvents.length, 0);
+  assert.deepEqual(playersScores(game), [0, 0, 0]);
 });
 
 test('typed decaying points are captured per submission and shown in fast review', () => {
@@ -145,6 +185,7 @@ test('typed decaying points are captured per submission and shown in fast review
   const game = new GameEngine(quizSchema.parse({ id: 1, title: 'Quiz', questions: [question] }), () => time);
   const alice = game.join({ name: 'Alice', avatarId: 'fox' });
   const bob = game.join({ name: 'Bob', avatarId: 'fox' });
+  const carol = game.join({ name: 'Carol', avatarId: 'fox' });
   const send = (action: HostAction) => game.command({ id: randomUUID(), revision: game.revision, action });
   send({ type: 'start' }); time += START_COUNTDOWN_MS; game.tick();
   const instance = game.snapshot().questionInstanceId!;
@@ -159,4 +200,9 @@ test('typed decaying points are captured per submission and shown in fast review
   assert.deepEqual(game.snapshot().reviewGroup?.pointsByPlayer, { [alice.id]: 500, [bob.id]: 400 });
   assert.equal(game.snapshot().players.find((player) => player.id === alice.id)?.score, 500);
   assert.equal(game.snapshot().players.find((player) => player.id === bob.id)?.score, 400);
+  time += REVIEW_GROUP_MS; game.tick();
+  assert.equal(game.snapshot().reviewGroup?.outcome, 'missing');
+  assert.deepEqual(game.snapshot().reviewGroup?.playerIds, [carol.id]);
+  assert.equal(game.snapshot().reviewGroup?.pointsByPlayer, undefined);
+  assert.equal(game.snapshot(true).scoreEvents.length, 2);
 });

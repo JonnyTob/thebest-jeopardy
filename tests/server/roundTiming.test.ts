@@ -102,6 +102,8 @@ test('typed deadline equals timerSeconds and rejects at the boundary before a ti
   assert.equal(game.revision, revision + 1);
   assert.equal(game.snapshot().clueElapsedMs, deadline);
   command({ type: 'startReview' });
+  assert.equal(game.snapshot().reviewGroup?.outcome, 'missing');
+  advance(REVIEW_GROUP_MS); game.tick();
   assert.equal(game.snapshot().review?.answer, 'On time');
 });
 

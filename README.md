@@ -300,14 +300,15 @@ sharing the QR code.
   remains stopped.
   The host can see all submissions privately; other players see only the count.
   Use **Close submissions** to end answering early, or wait for the timer to close it.
-  Then use **Start answer review** when fast review is complete. Mark each answer
-  correct or wrong. Correct earns the points available when the answer was submitted;
-  wrong or missing answers earn zero. The leaderboard updates immediately.
-  Review order is submission order, followed by non-submitters in join order.
+  Then use **Start answer review** when fast review is complete. Mark each submitted
+  answer correct or wrong. Correct earns the points available when the answer was submitted;
+  wrong answers earn zero. Missing answers automatically earn zero and need no ruling.
+  The leaderboard updates immediately.
   Players present when submissions close are included, even if disconnected;
   later joiners are not included in that review. Each ruling remains visible for
   two seconds while gold bars fall for a correct answer or money flies away for a
-  wrong or missing answer. The next review starts automatically; the final ruling
+  wrong answer. Missing answers are shown together for four seconds without animation
+  or a result sound. The next review starts automatically; the final result
   advances to the next-round countdown or final standings. Undo cancels the hold.
   Fast approvals score immediately without an individual animation; their grouped
   results are shown at the start of TV review as described below.
@@ -344,21 +345,23 @@ This is manual judging, not automatic answer matching.
 1. **Close submissions** freezes the roster and adds missing answers. This also
   happens automatically when the question timer reaches zero. The TV displays the
   official answer while the host prepares review.
-2. Optionally mark closed submissions **Correct**, **Wrong**, or **No answer**
-  privately. Correct earns the points captured at submission immediately; wrong or missing earns zero.
+2. Optionally mark submitted answers **Correct** or **Wrong** privately. Correct
+  earns the points captured at submission immediately; wrong earns zero. Players
+  who did not answer automatically receive zero and cannot be judged.
 3. Use **Start answer review** when ready. The TV
   first shows fast-approved correct players together with their points, then wrong
-  or missing players together with +0. Each nonempty group appears for four
-  seconds with its configured result sound. Answers themselves stay private.
-  Remaining unjudged entries then appear individually in their original order.
+  players together with +0. Each nonempty judged group appears for four
+  seconds with its configured result sound. Next, all non-submitters appear together
+  in a static, silent four-second group. Answers themselves stay private.
+  Remaining unjudged submissions then appear individually in submission order.
   Review does not start automatically, even when every roster entry is judged.
 
 Quick rulings are available after submissions close and before TV review starts.
 Normal review remains available for any unjudged answers. Undo applies to private
-rulings too, including zero-point rulings; it restores the previous score and
+rulings too, including wrong-answer rulings; it restores the previous score and
 judgment state in the closed question. Undo during a group cancels the grouped sequence.
 The host list retains all entries and their outcomes. TV review numbering still
-refers to positions in the full roster, so skipping judged entries can skip numbers.
+refers to positions among submitted answers, so skipping judged entries can skip numbers.
 
 **Undo semantics:** Undo restores the latest score operation and its saved
 question state, elapsed time, scores, and eligibility. Undoing a ruling restores
@@ -371,7 +374,7 @@ not erase previously awarded/deducted scores. Media restart restarts playback /
 image reveal without resetting the point clock.
 
 During typed-answer review, undo restores the last ruling and its score so it can
-be judged again, including wrong and missing answers. Reset after scoring retains
+be judged again, including wrong answers. Reset after scoring retains
 awarded points, so use undo first if the scores should be reversed.
 
 ## Questions and media
@@ -683,8 +686,8 @@ npm run players
 ```
 
 This joins **12 randomly named players with random avatars** and keeps them
-online while you inspect `/display` and `/admin`. Names have a unique batch
-suffix so repeated runs can coexist. The TV shows the top eight by default;
+online while you inspect `/display` and `/admin`. Names adapt to the server's
+nickname length limit; collisions with existing players are retried. The TV shows the top eight by default;
 admin lists every player.
 
 To change the count or target server:
@@ -704,6 +707,28 @@ Keep the helper running while testing. **Ctrl+C disconnects its players but
 does not delete them or their scores.** Remove them in admin between questions,
 or restart the server to clear the entire session. A lost connection or removed
 test player stops the batch with an explicit message; rerun to create a new batch.
+
+### Simulate players with a manual host
+
+For active test players, run the app in a separate test session and use:
+
+```sh
+npm run players -- --play --count 8
+```
+
+The simulated players use normal player connections. They submit placeholder
+answers and buzz at varied times on Buzzer, Typed, and Type + buzz questions.
+Some players may not answer. They observe pauses, lockouts, question deadlines
+and Type + buzz's typing window. The host still starts the quiz, judges spoken
+and typed answers, handles review and advances when necessary. The terminal
+logs submissions and a **random suggested ruling** for each accepted buzz; the
+host decides whether to follow it. Placeholder answers are not the quiz's real
+answers, and no simulated player speaks aloud.
+
+`--play` changes real game state and scores and uses player slots. Use an
+isolated test session rather than a live quiz. Ctrl+C stops the helper and
+disconnects its players but does not remove them or their scores. Without
+`--play`, the original layout-only behavior remains unchanged.
 
 ### Player snapshot load probe
 

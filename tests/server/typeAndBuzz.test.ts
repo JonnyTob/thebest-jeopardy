@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
-import { BUZZ_CORRECT_ANSWER_MS, BUZZ_RESULT_MS, NEXT_ROUND_MS, START_COUNTDOWN_MS } from '../../src/shared/game.js';
+import { BUZZ_CORRECT_ANSWER_MS, BUZZ_RESULT_MS, NEXT_ROUND_MS, REVIEW_GROUP_MS, START_COUNTDOWN_MS } from '../../src/shared/game.js';
 import { serverSettingsSchema, type HostAction, type Quiz } from '../../src/shared/protocol.js';
 import { GameEngine } from '../../src/server/engine.js';
 
@@ -109,6 +109,30 @@ test('a lone correct buzzer winner leaves an empty typed review and can advance'
   command({ type: 'startReview' });
   assert.equal(game.snapshot().phase, 'GAME_FINISHED');
   assert.equal(player.score, 500);
+});
+
+test('the correct buzzer winner is excluded from the missing-answer group and undo restores the roster', () => {
+  const { game, alice, bob, command, advance } = setup();
+  advance(10000);
+  game.buzz(alice.id);
+  command({ type: 'judge', correct: true });
+  advance(BUZZ_CORRECT_ANSWER_MS);
+  assert.deepEqual(game.snapshot(true).hostSubmissions?.map((entry) => entry.playerId), [bob.id]);
+  command({ type: 'startReview' });
+  assert.equal(game.snapshot().reviewGroup?.outcome, 'missing');
+  assert.deepEqual(game.snapshot().reviewGroup?.playerIds, [bob.id]);
+  assert.equal(game.snapshot(true).scoreEvents.length, 1);
+  command({ type: 'undo' });
+  assert.equal(game.snapshot().phase, 'ANSWERING');
+  assert.deepEqual(game.snapshot(true).hostSubmissions?.map((entry) => entry.playerId), [alice.id, bob.id]);
+  command({ type: 'judge', correct: true });
+  advance(BUZZ_CORRECT_ANSWER_MS);
+  command({ type: 'startReview' });
+  advance(REVIEW_GROUP_MS);
+  assert.equal(game.snapshot().phase, 'GAME_FINISHED');
+  assert.equal(alice.score, 500);
+  assert.equal(bob.score, 0);
+  assert.equal(game.snapshot(true).scoreEvents.length, 1);
 });
 
 test('a player can buzz immediately after typing; others can buzz after a wrong ruling', () => {

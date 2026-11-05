@@ -56,7 +56,7 @@ export class GameEngine {
   private countdownId: string | null = null;
   private reviewResultAt: number | null = null;
   private reviewResultId: string | null = null;
-  private reviewGroup: { id: string; outcome: 'correct' | 'wrong'; playerIds: string[]; points: number; pointsByPlayer?: Record<string, number>; at: number } | null = null;
+  private reviewGroup: { id: string; outcome: 'correct' | 'wrong' | 'missing'; playerIds: string[]; points: number; pointsByPlayer?: Record<string, number>; at: number } | null = null;
   private buzzResult: { id: string; playerId: string; correct: boolean; delta: number; at: number } | null = null;
   private mediaFinishAt: number | null = null;
   private mediaFinishDurationMs: number | null = null;
@@ -121,7 +121,8 @@ export class GameEngine {
       && this.now() - this.reviewGroup.at >= REVIEW_GROUP_MS) {
       const outcome = this.reviewGroup.outcome;
       this.reviewGroup = null;
-      if (outcome !== 'correct' || !this.startReviewGroup('wrong')) this.advanceReview(0);
+      if (!(outcome === 'correct' && this.startReviewGroup('wrong'))
+        && !(outcome !== 'missing' && this.startReviewGroup('missing'))) this.advanceReview(0);
       this.revision++;
     } else if (this.clue.phase === 'REVIEW' && this.reviewResultAt !== null
       && this.now() - this.reviewResultAt >= REVIEW_RESULT_MS) {
@@ -395,35 +396,37 @@ export class GameEngine {
   private judgeTypedAnswer(entry: TypedReview | undefined, correct: boolean) {
     this.require(entry, 'Review player not found.');
     this.require(entry.correct === null, 'This answer has already been reviewed.');
-    this.require(!correct || entry.answer !== null, 'A missing answer cannot be marked correct.');
+    this.require(entry.answer !== null, 'A missing answer does not need a ruling.');
     const player = this.players.get(entry.playerId);
     this.require(player, 'Review player not found.');
     const points = entry.points ?? this.quiz.questions[this.clue.questionIndex].fixedPoints;
     this.require(points !== undefined, 'Question points are missing.');
-    this.saveScore(player, correct ? points : 0, `${player.name}: ${correct ? 'correct' : entry.answer === null ? 'no answer' : 'wrong'}`);
+    this.saveScore(player, correct ? points : 0, `${player.name}: ${correct ? 'correct' : 'wrong'}`);
     entry.correct = correct;
   }
 
   private advanceReview(fromIndex: number) {
-    const next = this.clue.reviewQueue.findIndex((entry, index) => index >= fromIndex && entry.correct === null);
+    const next = this.clue.reviewQueue.findIndex((entry, index) => index >= fromIndex && entry.answer !== null && entry.correct === null);
     this.clue.reviewIndex = next < 0 ? this.clue.reviewQueue.length : next;
     this.clue.phase = next < 0 ? 'REVIEW_COMPLETE' : 'REVIEW';
     if (next < 0) this.beginNextRound();
   }
 
-  private startReviewGroup(outcome: 'correct' | 'wrong'): boolean {
-    const playerIds = this.clue.reviewQueue.filter((entry) => entry.correct === (outcome === 'correct'))
+  private startReviewGroup(outcome: 'correct' | 'wrong' | 'missing'): boolean {
+    const playerIds = this.clue.reviewQueue.filter((entry) => outcome === 'missing'
+      ? entry.answer === null : entry.answer !== null && entry.correct === (outcome === 'correct'))
       .map((entry) => entry.playerId);
     if (!playerIds.length) return false;
     this.clue.phase = 'REVIEW_GROUP';
     this.reviewGroup = { id: randomUUID(), outcome, playerIds,
       points: outcome === 'correct' ? this.quiz.questions[this.clue.questionIndex].fixedPoints ?? 0 : 0,
-      ...(this.quiz.questions[this.clue.questionIndex].mode === 'typed' && this.quiz.questions[this.clue.questionIndex].pointMode === 'decay' ? { pointsByPlayer: Object.fromEntries(this.clue.reviewQueue.filter((entry) => playerIds.includes(entry.playerId)).map((entry) => [entry.playerId, outcome === 'correct' ? entry.points ?? 0 : 0])) } : {}), at: this.now() };
+      ...(outcome !== 'missing' && this.quiz.questions[this.clue.questionIndex].mode === 'typed' && this.quiz.questions[this.clue.questionIndex].pointMode === 'decay' ? { pointsByPlayer: Object.fromEntries(this.clue.reviewQueue.filter((entry) => playerIds.includes(entry.playerId)).map((entry) => [entry.playerId, outcome === 'correct' ? entry.points ?? 0 : 0])) } : {}), at: this.now() };
     return true;
   }
 
   private beginReview() {
-    if (!this.startReviewGroup('correct') && !this.startReviewGroup('wrong')) this.advanceReview(0);
+    if (!this.startReviewGroup('correct') && !this.startReviewGroup('wrong')
+      && !this.startReviewGroup('missing')) this.advanceReview(0);
   }
 
   command(command: HostCommand, saveSettings?: (settings: Settings) => void) {
@@ -690,7 +693,7 @@ export class GameEngine {
       reviewResultId: this.reviewResultId,
       reviewRemainingMs: this.reviewResultAt === null ? null : Math.max(0, REVIEW_RESULT_MS - (now - this.reviewResultAt)),
       reviewIndex: this.clue.reviewIndex,
-      reviewCount: this.clue.reviewQueue.length,
+      reviewCount: this.clue.reviewQueue.filter((entry) => entry.answer !== null).length,
       ...(host ? { hostSubmissions: structuredClone(this.clue.submissionsClosed ? this.clue.reviewQueue : this.clue.submissions) } : {}),
     };
   }

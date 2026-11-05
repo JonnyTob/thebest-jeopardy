@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { performance } from 'node:perf_hooks';
 import { test } from 'node:test';
 import { createElement, type ReactNode } from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { MemoryRouter } from 'react-router-dom';
 import { GameEngine } from '../../src/server/engine.js';
+import { playerSnapshotFactory } from '../../src/server/playerSnapshot.js';
 import { REVIEW_GROUP_MS, START_COUNTDOWN_MS } from '../../src/shared/game.js';
 import type { HostAction, Snapshot } from '../../src/shared/protocol.js';
 import type { Session } from '../../src/client/session.js';
@@ -112,7 +114,7 @@ test('host controls, instructions, TV sound and phone status follow the current 
   await act(async () => { button('Confirm reset').props.onClick(); });
   assert.deepEqual(actions, [{ type: 'undo' }, { type: 'reset' }]);
   assert.equal(view.root.findAllByProps({ type: 'checkbox' }).length, 0);
-  assert.match(JSON.stringify(view.toJSON()), /correct first, then wrong or missing/);
+  assert.match(JSON.stringify(view.toJSON()), /players with no answer in a static group/);
   assert.ok(view.root.findAllByType('strong').some((node) => node.children.join('') === 'Correct group on TV'));
   session = makeSession(game.snapshot(), players[0].id);
   await act(async () => { view.update(wrapped(session, createElement(PlayPage))); });
@@ -128,7 +130,7 @@ test('host controls, instructions, TV sound and phone status follow the current 
   advance();
   session = makeSession(game.snapshot(), players[8].id);
   await act(async () => { view.update(wrapped(session, createElement(PlayPage))); });
-  assert.match(JSON.stringify(view.toJSON()), /Wrong or missing \/ \+0 points/);
+  assert.match(JSON.stringify(view.toJSON()), /Wrong \/ \+0 points/);
   session = makeSession(game.snapshot(), players[11].id);
   await act(async () => { view.update(wrapped(session, createElement(PlayPage))); });
   assert.match(JSON.stringify(view.toJSON()), /previously judged answers/);
@@ -162,9 +164,10 @@ test('host quick rulings unlock after closure and retain connection and judgment
       if (view) view.update(wrapped(session, admin));
       else view = create(wrapped(session, admin));
     });
+
   };
   const correct = (name: string) => view.root.findByProps({ 'aria-label': `Mark ${name} correct` });
-  const wrong = (name: string) => view.root.findByProps({ 'aria-label': `Mark ${name} wrong or missing` });
+  const wrong = (name: string) => view.root.findByProps({ 'aria-label': `Mark ${name} wrong` });
   try {
     await render();
     assert.equal(view.root.findAllByProps({ type: 'checkbox' }).length, 0);
@@ -185,18 +188,69 @@ test('host quick rulings unlock after closure and retain connection and judgment
     await render();
     assert.equal(correct('Alice').props.disabled, false);
     assert.equal(wrong('Alice').props.disabled, false);
-    assert.equal(correct('Bob').props.disabled, true);
-    assert.equal(wrong('Bob').props.disabled, false);
-    await act(async () => { wrong('Bob').props.onClick(); });
-    assert.deepEqual(actions[1], { type: 'judgeSubmission', playerId: bob.id, correct: false });
+    assert.equal(view.root.findAllByProps({ 'aria-label': 'Mark Bob correct' }).length, 0);
+    assert.equal(view.root.findAllByProps({ 'aria-label': 'Mark Bob wrong' }).length, 0);
+    assert.match(JSON.stringify(view.toJSON()), /No answer \/ \+0 automatically/);
+    assert.ok(view.root.findAllByType('p').some((node) => node.children.join('').includes('1 awaiting review')));
     send({ type: 'judgeSubmission', playerId: alice.id, correct: true });
     await render();
     assert.equal(correct('Alice').props.disabled, true);
     assert.equal(wrong('Alice').props.disabled, true);
     send({ type: 'startReview' });
     await render();
-    assert.equal(correct('Bob').props.disabled, true);
-    assert.equal(wrong('Bob').props.disabled, true);
+    assert.equal(view.root.findAllByProps({ 'aria-label': 'Mark Bob correct' }).length, 0);
+    assert.equal(view.root.findAllByProps({ 'aria-label': 'Mark Bob wrong' }).length, 0);
+  } finally {
+    if (view) await act(async () => { view.unmount(); });
+  }
+});
+
+test('missing answers display as a static silent group on TV, host and phones', async () => {
+  let time = 0;
+  const game = new GameEngine({ id: 1, title: 'Missing answers', questions: [
+    { id: 'one', type: 'text', mode: 'typed', fixedPoints: 250, timerSeconds: 30,
+      question: 'Clue', answer: 'SECRET' },
+  ] }, () => time);
+  const alice = game.join({ name: 'Alice', avatarId: 'fox' });
+  const bob = game.join({ name: 'Bob', avatarId: 'cat' });
+  const carol = game.join({ name: 'Carol', avatarId: 'owl' });
+  const send = (action: HostAction) => game.command({ id: randomUUID(), revision: game.revision, action });
+  send({ type: 'start' }); time += START_COUNTDOWN_MS; game.tick();
+  game.submitAnswer(alice.id, game.snapshot().questionInstanceId!, 'PRIVATE');
+  send({ type: 'close' }); send({ type: 'startReview' });
+  const host = game.snapshot(true);
+  const phone = playerSnapshotFactory(game.snapshot(), host);
+  assert.deepEqual(phone(bob.id).reviewGroup?.playerIds, [bob.id]);
+  assert.deepEqual(phone(alice.id).reviewGroup?.playerIds, []);
+  assert.equal(phone(bob.id).mySubmitted, false);
+  assert.equal(phone(alice.id).mySubmitted, true);
+  const css = readFileSync(new URL('../../src/client/styles.css', import.meta.url), 'utf8');
+  assert.match(css, /\.review-group-missing\s*\{[^}]*animation:\s*none\s*;/);
+  let view!: ReactTestRenderer;
+  try {
+    await act(async () => { view = create(createElement(QuestionClue, { state: game.snapshot() })); });
+    const group = view.root.findByProps({ 'aria-label': 'Grouped answer results' });
+    assert.match(group.props.className, /review-group-missing/);
+    assert.equal(group.props.style, undefined);
+    assert.equal(group.findAll((node) => typeof node.props.className === 'string'
+      && node.props.className.includes('review-result-animation')).length, 0);
+    assert.equal(group.findAllByType('li').length, 2);
+    assert.ok(group.findAllByType('li').every((card) => card.findByType('span').children.join('') === '+0'));
+    assert.match(JSON.stringify(view.toJSON()), /No answer/);
+    assert.doesNotMatch(JSON.stringify(view.toJSON()), /PRIVATE|SECRET|Wrong/);
+    time += 3000;
+    await act(async () => { view.update(wrapped(makeSession(game.snapshot(), bob.id), createElement(DisplayPage))); });
+    const sound = view.root.findByType(CountdownSound);
+    assert.equal(sound.props.reviewResultId, null);
+    assert.equal(sound.props.reviewCorrect, null);
+    await act(async () => { view.update(wrapped(makeSession(phone(bob.id), bob.id), createElement(PlayPage))); });
+    assert.match(JSON.stringify(view.toJSON()), /No answer \/ \+0 points/);
+    assert.doesNotMatch(JSON.stringify(view.toJSON()), /Carol|PRIVATE|Wrong/);
+    await act(async () => { view.update(wrapped(makeSession(phone(alice.id), alice.id), createElement(PlayPage))); });
+    assert.match(JSON.stringify(view.toJSON()), /players who did not answer/);
+    await act(async () => { view.update(wrapped(makeSession(host, carol.id),
+      createElement(AdminConsole, { logout: () => {}, requirePasscode: false, development: false }))); });
+    assert.ok(view.root.findAllByType('strong').some((node) => node.children.join('') === 'No answer group on TV'));
   } finally {
     if (view) await act(async () => { view.unmount(); });
   }
