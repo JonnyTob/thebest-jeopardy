@@ -115,6 +115,10 @@ npm start
     players, including disconnected players, until the host removes them.
     Reconnecting an existing player does not use another slot. New players
     cannot join a full game; phones show the limit and the server also enforces it.
+  - `showMissingAnswerGroup`: whether the TV shows players who did not submit
+    an answer during review. Defaults to **false**. The host can change this
+    global setting in Game setup while in the lobby; it is saved immediately to
+    `settings.json` and applies to all quizzes. Missing answers always earn zero.
   - `typeBuzzAnnouncementSeconds`: duration of the Type + buzz rules announcement
     before the countdown, in seconds. Defaults to **3**; use a whole number from
     1 to 60. This is a global setting; restart the server after changing it.
@@ -126,7 +130,7 @@ npm start
     setting, not a per-quiz option. Restart after changing the setting; rebuild
     production after adding or replacing the WAV asset.
   - `reviewCorrectSound` and `reviewWrongSound`: independent local WAV paths for
-    correct and wrong answers during TV review and buzzer rulings (including missing typed answers). Each defaults
+    correct and wrong answers during TV review and buzzer rulings. Each defaults
     to `/media/sounds/countdown-beep.wav` as a placeholder and can independently be
     set to `null` to disable it. For custom sounds, place WAV files under
     [src/public/media/](./src/public/media/) and use their `/media/...wav` paths.
@@ -334,8 +338,8 @@ sharing the QR code.
   Players present when submissions close are included, even if disconnected;
   later joiners are not included in that review. Each ruling remains visible for
   two seconds while gold bars fall for a correct answer or money flies away for a
-  wrong answer. Missing answers are shown together for four seconds without animation
-  or a result sound. The next review starts automatically; the final result
+  wrong answer. If enabled in Game setup, missing answers are shown in static,
+  silent pages for four seconds each; otherwise they are skipped on TV. The next review starts automatically; the final result
   advances to the next-round countdown or final standings. Undo cancels the hold.
   Fast approvals score immediately without an individual animation; their grouped
   results are shown at the start of TV review as described below.
@@ -377,9 +381,12 @@ This is manual judging, not automatic answer matching.
   who did not answer automatically receive zero and cannot be judged.
 3. Use **Start answer review** when ready. The TV
   first shows fast-approved correct players together with their points, then wrong
-  players together with +0. Each nonempty judged group appears for four
-  seconds with its configured result sound. Next, all non-submitters appear together
-  in a static, silent four-second group. Answers themselves stay private.
+  players together with +0. Each nonempty group is divided into pages of up to
+  six players, shown for four seconds per page. The configured result sound plays
+  once per judged group. If **Show players with no answer on TV** is enabled,
+  non-submitters follow in static, silent pages; otherwise they are skipped.
+  Long names may be truncated on TV, but remain visible in full to the host.
+  Answers themselves stay private.
   Remaining unjudged submissions then appear individually in submission order.
   Review does not start automatically, even when every roster entry is judged.
 

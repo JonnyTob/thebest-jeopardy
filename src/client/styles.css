@@ -232,6 +232,9 @@ td:last-child, th:last-child { padding-right: 0; }
 .setup-guide li { padding: 4px; }
 .setup-guide h3 { margin: 24px 0 10px; }
 .setup-guide p { font-size: .9rem; }
+.setup-guide h2:not(:first-child) { margin-top: 24px; }
+.setup-checkbox { display: flex; align-items: center; gap: 10px; margin: 16px 0 8px; }
+.setup-checkbox input { width: auto; }
 .phone-shell { max-width: 480px; padding: 22px 20px; margin: auto; min-height: 100dvh; display: flex; flex-direction: column; gap: 24px; }
 .phone-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .phone-header .brand { font-size: .85rem; }
@@ -326,11 +329,11 @@ td:last-child, th:last-child { padding-right: 0; }
 .review-group-heading h2 { color: #fff3d4; font-size: clamp(1.15rem, 2.2vw, 2.5rem); }
 .review-group-correct .eyebrow { color: var(--green); }
 .review-group-wrong .eyebrow { color: #ffb4ad; }
-.review-group-grid { position: relative; z-index: 2; list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr)); align-content: start; gap: clamp(6px, .7vw, 12px); overflow-y: auto; overscroll-behavior: contain; min-height: 0; margin: 0; padding: 2px 4px 4px 2px; }
+.review-group-grid { position: relative; z-index: 2; list-style: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: start; gap: clamp(6px, .7vw, 12px); overflow-y: auto; overscroll-behavior: contain; min-height: 0; margin: 0; padding: 2px 4px 4px 2px; }
 .review-group-grid:focus-visible { outline: 2px solid var(--gold); outline-offset: -2px; }
 .review-group-player { display: flex; align-items: center; gap: clamp(7px, .8vw, 14px); min-width: 0; padding: clamp(7px, .8vw, 14px); border: 1px solid #ffffff24; border-radius: 12px; background: #11191aad; }
 .review-group-player .avatar { width: clamp(38px, 4vw, 64px); height: auto; }
-.review-group-player strong { flex: 1; min-width: 0; overflow-wrap: anywhere; color: #fff3d4; font-size: clamp(.95rem, 1.3vw, 1.5rem); }
+.review-group-player strong { flex: 1; min-width: 0; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; color: #fff3d4; font-size: clamp(.95rem, 1.3vw, 1.5rem); }
 .review-group-player span { flex: none; font-size: clamp(1rem, 1.5vw, 1.7rem); font-weight: 850; font-variant-numeric: tabular-nums; }
 @keyframes review-group-arrive-leave { 0% { opacity: 0; transform: translateY(12px) scale(.98); } 9%, 90% { opacity: 1; transform: none; } 100% { opacity: .85; transform: translateY(-5px); } }
 .image-clue, .playback-clue { height: 100%; width: 100%; position: relative; overflow: hidden; }
@@ -453,11 +456,25 @@ td:last-child, th:last-child { padding-right: 0; }
   .personal-score span { font-size: .52rem; }
   .tv-shell { min-width: 640px; }
 }
+@media (max-height: 900px) {
+  .tv-shell:has(.review-group) { grid-template-rows: 34px minmax(0, 1fr); }
+  .tv-shell:has(.review-group) .tv-leaderboard { display: none; }
+  .tv-stage:has(.review-group) { grid-template-columns: minmax(0, 1fr); }
+  .tv-stage:has(.review-group) .tv-buzzer, .clue-panel:has(.review-group) > .clue-heading, .clue-panel:has(.review-group) > .question-timer { display: none; }
+  .clue-panel:has(.review-group) { grid-template-rows: minmax(0, 1fr); }
+}
 @media (max-height: 600px) {
   .tv-shell { grid-template-rows: 28px minmax(0, 1fr) 88px; padding: 10px; gap: 8px; }
+  .tv-shell:has(.review-group) { grid-template-rows: 28px minmax(0, 1fr); }
   .startup-screen { grid-template-rows: 28px minmax(0, 1fr); }
   .tv-header .brand-mark { width: 26px; height: 26px; font-size: 1rem; }
   .clue-panel { gap: 6px; padding: 10px; }
+  .review-group { gap: 4px; padding: 8px; }
+  .review-group-heading h2 { font-size: 1rem; }
+  .review-group-grid { gap: 4px; }
+  .review-group-player { gap: 6px; padding: 4px; }
+  .review-group-player .avatar { width: 28px; }
+  .review-group-player strong, .review-group-player span { font-size: .85rem; }
   .clue-heading .eyebrow, .buzzer-footer, .tv-welcome > p { display: none; }
   .point-label strong, .timer-label strong { font-size: 1.2rem; }
   .point-bar, .question-timer { gap: 4px; }

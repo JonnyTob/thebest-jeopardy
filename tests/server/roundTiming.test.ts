@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { NEXT_ROUND_MS, START_COUNTDOWN_MS, REVIEW_RESULT_MS, REVIEW_GROUP_MS, BUZZ_CORRECT_ANSWER_MS } from '../../src/shared/game.js';
-import { quizSchema, type HostAction } from '../../src/shared/protocol.js';
+import { quizSchema, serverSettingsSchema, type HostAction } from '../../src/shared/protocol.js';
 import { GameEngine } from '../../src/server/engine.js';
 
 const quiz = quizSchema.parse({
@@ -56,7 +56,7 @@ function setup({ last = false, empty = false, mode = 'typed' as 'typed' | 'buzze
       const { fixedPoints: _points, timerSeconds: _timer, ...buzzer } = question;
       return { ...buzzer, mode };
     });
-  const game = new GameEngine({ ...quiz, questions }, () => time);
+  const game = new GameEngine({ ...quiz, questions }, () => time, serverSettingsSchema.parse({ showMissingAnswerGroup: true }));
   const player = empty ? undefined : game.join({ name: 'Alice', avatarId: 'fox' });
   const command = (action: HostAction) => {
     const request = { id: randomUUID(), revision: game.revision, action };

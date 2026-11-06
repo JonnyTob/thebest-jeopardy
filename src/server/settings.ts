@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
@@ -36,6 +36,22 @@ export function loadGlobalSettings(file: string, env: NodeJS.ProcessEnv = proces
     return { ...settings, server };
   } catch (cause) {
     throw new Error(`Unable to load global settings from ${file}: ${cause instanceof Error ? cause.message : String(cause)}`, { cause });
+  }
+}
+
+export function saveShowMissingAnswerGroup(file: string, enabled: boolean) {
+  const original = JSON.parse(readFileSync(file, 'utf8'));
+  const parsed = globalSettingsSchema.parse(original);
+  settingsSchema.parse({ title: 'Quiz', ...parsed.gameSetup });
+  const raw = z.object({ server: z.record(z.string(), z.unknown()) }).passthrough().parse(original);
+  const updated = { ...raw, server: { ...raw.server, showMissingAnswerGroup: z.boolean().parse(enabled) } };
+  globalSettingsSchema.parse(updated);
+  const temporary = `${file}.${randomUUID()}.tmp`;
+  try {
+    writeFileSync(temporary, JSON.stringify(updated, null, 2) + '\n', { flag: 'wx', mode: statSync(file).mode & 0o777 });
+    renameSync(temporary, file);
+  } finally {
+    rmSync(temporary, { force: true });
   }
 }
 

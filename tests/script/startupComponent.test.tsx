@@ -110,7 +110,7 @@ test('startup join QR and address follow the selected LAN address inside the Wi-
   const state = game.snapshot();
   const currentSession = { ...session(state), joinUrl: 'http://example.test/play' };
   let view!: ReactTestRenderer;
-  const options = { width: 512, margin: 4, color: { dark: '#211035', light: '#ffffff' } };
+  const options = { width: 512, margin: 4, color: { dark: '#132425', light: '#ffffff' } };
   const waitForQr = async (url: string) => {
     const expected = await QRCode.toDataURL(url, options);
     const deadline = Date.now() + 2000;

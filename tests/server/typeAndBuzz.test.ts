@@ -25,7 +25,7 @@ test('configured announcement duration controls the transition and snapshot coun
 
 function setup() {
   let time = 0;
-  const game = new GameEngine(quiz, () => time);
+  const game = new GameEngine(quiz, () => time, serverSettingsSchema.parse({ showMissingAnswerGroup: true }));
   const alice = game.join({ name: 'Alice', avatarId: 'fox' });
   const bob = game.join({ name: 'Bob', avatarId: 'cat' });
   const command = (action: HostAction) => game.command({ id: randomUUID(), revision: game.revision, action });

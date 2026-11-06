@@ -162,6 +162,7 @@ export function AdminConsole({ logout, requirePasscode, development, passcode = 
                   <h2>{buzzerLabel(state)}</h2>
                   {state.phase === 'REVIEW_GROUP' && state.reviewGroup && <div className="notice" role="status">
                     <strong>{state.reviewGroup.outcome === 'correct' ? 'Correct' : state.reviewGroup.outcome === 'missing' ? 'No answer' : 'Wrong'} group on TV</strong>
+                    {state.reviewGroup.pageCount > 1 && <p>Page {state.reviewGroup.pageIndex + 1} of {state.reviewGroup.pageCount}</p>}
                     <p>{connected ? 'Advancing automatically to the next review.' : 'Connection lost. Waiting to reconnect...'}</p>
                   </div>}
                   {state.phase === 'REVIEW' && state.review && <div className="notice">
@@ -208,7 +209,7 @@ export function AdminConsole({ logout, requirePasscode, development, passcode = 
             </div>}
         {hasTypedAnswers && state.phase !== 'GAME_FINISHED' && state.phase !== 'TYPE_BUZZ_INTRO' && <section className="panel">
           <div className="typed-answers-heading"><h2>Typed answers ({state.submissionCount} submitted)</h2></div>
-          <p className="muted">After submissions close, optionally mark answers here privately or leave them for individual TV review. The TV shows previously judged correct and wrong answers in groups, then players with no answer in a static group. Each group lasts four seconds. Unjudged answers follow individually.</p>
+          <p className="muted">After submissions close, optionally mark answers here privately or leave them for individual TV review. The TV shows previously judged correct and wrong answers in groups{state.serverSettings.showMissingAnswerGroup ? ', then players with no answer in a static group' : ''}. Each group page lasts four seconds. Unjudged answers follow individually.</p>
           {combined && <p className="muted">A correct buzzer winner is excluded from typed-answer review and receives only the buzzer award.</p>}
           {state.phase === 'QUESTION_CLOSED' && <p>{state.hostSubmissions?.filter((entry) => entry.answer !== null && entry.correct === null).length ?? 0} awaiting review.
             {' '}Start answer review to show judged groups first, then review remaining answers individually.</p>}
@@ -313,11 +314,17 @@ function Setup({ state }: { state: Snapshot }) {
       <button className="primary" type="submit">Save setup</button></fieldset>
     {message && <p role="status">{message}</p>}
     <p className="muted">Configure points for each question in the quiz editor. Default point values come from settings.json.</p>
-    <p className="muted">Save setup writes this quiz's game settings to its quiz.json file for future sessions. Server options are file-only.</p>
+    <p className="muted">Save setup writes this quiz's game settings to its quiz.json file for future sessions.</p>
     <p className="muted">Timed lockouts start after the wrong-answer result and keep counting down during pauses and other players' answers. Players can buzz again when the timer ends and buzzers are open.</p>
-  </form><section className="panel setup-guide"><h2>Before you start</h2><ol><li>Connect the TV and choose <strong>Extend</strong>, not Duplicate.</li>
+  </form><section className="panel setup-guide"><h2>Global review setting</h2>
+    <label className="setup-checkbox"><input type="checkbox" checked={state.serverSettings.showMissingAnswerGroup}
+      disabled={!editable || !connected || pending}
+      onChange={(event) => { void command({ type: 'setShowMissingAnswerGroup', enabled: event.target.checked }); }} />
+      Show players with no answer on TV</label>
+    <p>This setting is saved immediately for all quizzes. Players without an answer still receive zero points.</p>
+    <h2>Before you start</h2><ol><li>Connect the TV and choose <strong>Extend</strong>, not Duplicate.</li>
     <li>Open <a href="/display" target="_blank" rel="noreferrer">the TV display</a> there and press F11.</li><li>Keep this private console on the laptop.</li>
     <li>Join phones on the same Wi-Fi. Allow the server port through the firewall.</li><li>For audio/video clues, enable playback in the TV browser.</li></ol>
     <h3>Question source</h3><code>Quiz archive</code><p>{state.questionCount} questions loaded. Save changes in Quiz editor, then load or reload the quiz from the library in the lobby.</p>
-    <h3>Avatars & theme</h3><p>Six original, bundled SVG characters. Purple, gold, and magenta game-show theme.</p><JoinLink compact /></section></div>;
+    <h3>Avatars & theme</h3><p>Six original, bundled SVG characters. Emerald Slate and gold game-show theme.</p><JoinLink compact /></section></div>;
 }

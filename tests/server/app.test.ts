@@ -7,8 +7,55 @@ import { tmpdir } from 'node:os';
 import { performance } from 'node:perf_hooks';
 import { io, type Socket } from 'socket.io-client';
 import { createApp } from '../../src/server/app.js';
-import { JsonQuizSettingsStorage } from '../../src/server/settings.js';
+import { JsonQuizSettingsStorage, loadGlobalSettings, saveShowMissingAnswerGroup } from '../../src/server/settings.js';
 import type { ClientEvents, ServerEvents, Snapshot, Result, HostAction } from '../../src/shared/protocol.js';
+
+test('host saves the global missing-answer switch and it survives another quiz and restart', async () => {
+  const directory = mkdtempSync(path.join(tmpdir(), 'quiz-global-review-'));
+  const file = path.join(directory, 'settings.json');
+  writeFileSync(file, JSON.stringify({
+    branding: { name: 'Kaboot', logoText: 'K', tagline: 'Buzz in. Get booted.' },
+    server: { port: 3000 },
+    gameSetup: { leaderboardCount: 8, startPoints: 500, minimumPoints: 100, dropPoints: 100, dropEverySeconds: 5 },
+  }));
+  const sockets: Socket<ServerEvents, ClientEvents>[] = [];
+  const apps: Awaited<ReturnType<typeof createApp>>[] = [];
+  try {
+    const makeApp = async (id: number) => {
+      const { port: _port, startupQuizId: _startupQuizId, joinOrigin: _joinOrigin, ...serverSettings } = loadGlobalSettings(file, {}).server;
+      const application = await createApp({
+        storage: { load: async () => ({ id, title: 'Quiz', questions: [
+          { id: 'one', type: 'text', mode: 'typed', fixedPoints: 100, question: 'Question', answer: 'Answer' },
+        ] }) },
+        passcode: 'host-passcode', serveClient: false, serverSettings,
+        saveShowMissingAnswerGroup: (enabled) => saveShowMissingAnswerGroup(file, enabled),
+      });
+      apps.push(application);
+      await new Promise<void>((resolve) => application.httpServer.listen(0, '127.0.0.1', resolve));
+      return application;
+    };
+    const first = await makeApp(1);
+    const address = first.httpServer.address();
+    assert.ok(address && typeof address !== 'string');
+    const host: Socket<ServerEvents, ClientEvents> = io(`http://127.0.0.1:${address.port}`, {
+      auth: { role: 'host', passcode: 'host-passcode' }, autoConnect: false, reconnection: false,
+    });
+    sockets.push(host);
+    await new Promise<void>((resolve) => { host.once('session:snapshot', () => resolve()); host.connect(); });
+    const result = await host.timeout(5000).emitWithAck('host:command', {
+      id: randomUUID(), revision: first.engine.revision, action: { type: 'setShowMissingAnswerGroup', enabled: true },
+    });
+    assert.equal(result.ok, true);
+    assert.equal(first.engine.snapshot().serverSettings.showMissingAnswerGroup, true);
+    assert.equal(loadGlobalSettings(file, {}).server.showMissingAnswerGroup, true);
+    const second = await makeApp(2);
+    assert.equal(second.engine.snapshot().serverSettings.showMissingAnswerGroup, true);
+  } finally {
+    for (const socket of sockets) socket.disconnect();
+    for (const app of apps) await app.close();
+    rmSync(directory, { recursive: true });
+  }
+});
 
 test('correct buzzer answer broadcasts immediately, then resumes media before advancing', async (t) => {
   let time = 0;
@@ -181,7 +228,7 @@ test('server interval broadcasts typed auto-close, next-round countdowns and fre
       { id: 'two', type: 'text', mode: 'typed', fixedPoints: 400, timerSeconds: 2,
         question: 'FUTURE CLUE', answer: 'FUTURE SECRET' },
     ] }) },
-    passcode: 'test-host-passcode', serveClient: false,
+    passcode: 'test-host-passcode', serveClient: false, serverSettings: { showMissingAnswerGroup: true },
   });
   const sockets: Socket<ServerEvents, ClientEvents>[] = [];
   const publicStates: Snapshot[] = [];
@@ -346,7 +393,7 @@ test('mixed review groups broadcast only the current group and retain private ho
   const application = await createApp({ storage: { load: async () => ({ id: 1, title: 'Groups', questions: [
     { id: 'one', type: 'text', mode: 'typed', fixedPoints: 250, timerSeconds: 30, question: 'Clue', answer: 'SECRET' },
     { id: 'two', type: 'text', mode: 'buzzer', question: 'FUTURE CLUE', answer: 'FUTURE SECRET' },
-  ] }) }, passcode: 'host-passcode', serveClient: false });
+  ] }) }, passcode: 'host-passcode', serveClient: false, serverSettings: { showMissingAnswerGroup: true } });
   const sockets: Socket<ServerEvents, ClientEvents>[] = [];
   function waitFor(socket: Socket<ServerEvents, ClientEvents>, predicate: (state: Snapshot) => boolean) {
     return new Promise<Snapshot>((resolve, reject) => {
@@ -458,7 +505,7 @@ test('server nickname and player limits are advertised and enforced, including r
       return socket;
     };
     const info = await (await fetch(`${url}/api/info`)).json();
-    assert.deepEqual(info.serverSettings, { maxPlayerNameLength: 32, maxPlayers: 1, requireAdminPasscode: true, typeBuzzAnnouncementSeconds: 3,
+    assert.deepEqual(info.serverSettings, { maxPlayerNameLength: 32, maxPlayers: 1, requireAdminPasscode: true, showMissingAnswerGroup: false, typeBuzzAnnouncementSeconds: 3,
       countdownSound: '/media/sounds/countdown-beep.wav',
       reviewCorrectSound: '/media/sounds/countdown-beep.wav', reviewWrongSound: '/media/sounds/countdown-beep.wav', endMusic: null });
     assert.deepEqual(application.engine.snapshot().serverSettings, info.serverSettings);

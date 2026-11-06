@@ -2,9 +2,10 @@ import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { createApp } from './app.js';
 import { ArchiveQuizStorage, ArchiveQuizSettingsStorage } from './storage.js';
-import { loadGlobalSettings, loadStartupRules } from './settings.js';
+import { loadGlobalSettings, loadStartupRules, saveShowMissingAnswerGroup } from './settings.js';
 
-const settings = loadGlobalSettings(path.resolve('settings.json'));
+const settingsFile = path.resolve('settings.json');
+const settings = loadGlobalSettings(settingsFile);
 const { port, joinOrigin, startupQuizId, ...serverSettings } = settings.server;
 const passcode = serverSettings.requireAdminPasscode ? process.env.HOST_PASSCODE ?? randomBytes(6).toString('hex') : '';
 if (serverSettings.requireAdminPasscode && passcode.length < 8) throw new Error('HOST_PASSCODE must contain at least 8 characters.');
@@ -18,6 +19,7 @@ const application = await createApp({
   gameSetup: settings.gameSetup,
   settingsStorage: new ArchiveQuizSettingsStorage(storage),
   serverSettings,
+  saveShowMissingAnswerGroup: (enabled) => saveShowMissingAnswerGroup(settingsFile, enabled),
   branding: settings.branding,
   startupRules: loadStartupRules(path.resolve('startup-rules.json')),
 });

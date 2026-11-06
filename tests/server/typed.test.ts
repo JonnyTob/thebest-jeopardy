@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { io, type Socket } from 'socket.io-client';
 import { GameEngine } from '../../src/server/engine.js';
 import { createApp } from '../../src/server/app.js';
-import { quizSchema, settingsSchema, type ClientEvents, type HostAction, type ServerEvents, type Snapshot } from '../../src/shared/protocol.js';
+import { quizSchema, settingsSchema, serverSettingsSchema, type ClientEvents, type HostAction, type ServerEvents, type Snapshot } from '../../src/shared/protocol.js';
 import { START_COUNTDOWN_MS, NEXT_ROUND_MS, REVIEW_RESULT_MS, REVIEW_GROUP_MS } from '../../src/shared/game.js';
 
 const quiz = quizSchema.parse({
@@ -16,7 +16,7 @@ const quiz = quizSchema.parse({
 
 function setup() {
   let time = 0;
-  const game = new GameEngine(quiz, () => time);
+  const game = new GameEngine(quiz, () => time, serverSettingsSchema.parse({ showMissingAnswerGroup: true }));
   const alice = game.join({ name: 'Alice', avatarId: 'fox' });
   const bob = game.join({ name: 'Bob', avatarId: 'cat' });
   const carol = game.join({ name: 'Carol', avatarId: 'owl' });

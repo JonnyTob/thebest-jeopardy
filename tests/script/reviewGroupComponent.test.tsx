@@ -9,7 +9,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { GameEngine } from '../../src/server/engine.js';
 import { playerSnapshotFactory } from '../../src/server/playerSnapshot.js';
 import { REVIEW_GROUP_MS, START_COUNTDOWN_MS } from '../../src/shared/game.js';
-import type { HostAction, Snapshot } from '../../src/shared/protocol.js';
+import { serverSettingsSchema, type HostAction, type Snapshot } from '../../src/shared/protocol.js';
 import type { Session } from '../../src/client/session.js';
 import { CountdownSound } from '../../src/client/components/CountdownSound.js';
 
@@ -51,6 +51,33 @@ function wrapped(session: Session, child: ReactNode) {
   return createElement(MemoryRouter, null, createElement(SessionContext.Provider, { value: session }, child));
 }
 
+test('game setup exposes the immediate global no-answer switch and respects connection and phase', async () => {
+  const game = new GameEngine({ id: 1, title: 'Review', questions: [
+    { id: 'one', type: 'text', mode: 'typed', fixedPoints: 250, question: 'Clue', answer: 'Answer' },
+  ] });
+  const actions: HostAction[] = [];
+  const admin = createElement(AdminConsole, { logout: () => {}, requirePasscode: false, development: false });
+  let view!: ReactTestRenderer;
+  const session = makeSession(game.snapshot(true), '', actions);
+  try {
+    await act(async () => { view = create(wrapped(session, admin)); });
+    const setup = view.root.findAllByType('button').find((button) => button.children.join('') === 'Game setup')!;
+    await act(async () => { setup.props.onClick(); });
+    const toggle = () => view.root.findByProps({ type: 'checkbox' });
+    assert.equal(toggle().props.checked, false);
+    assert.equal(toggle().props.disabled, false);
+    await act(async () => { toggle().props.onChange({ target: { checked: true } }); });
+    assert.deepEqual(actions, [{ type: 'setShowMissingAnswerGroup', enabled: true }]);
+    await act(async () => { view.update(wrapped({ ...session, connected: false }, admin)); });
+    assert.equal(toggle().props.disabled, true);
+    game.command({ id: randomUUID(), revision: game.revision, action: { type: 'start' } });
+    await act(async () => { view.update(wrapped(makeSession(game.snapshot(true), '', actions), admin)); });
+    assert.equal(toggle().props.disabled, true);
+  } finally {
+    if (view) await act(async () => { view.unmount(); });
+  }
+});
+
 test('group cards show only current players and per-player points while video stays mounted through review', async () => {
   const { game, players, advance } = setup();
   const state = game.snapshot(true);
@@ -64,7 +91,8 @@ test('group cards show only current players and per-player points while video st
   const effect = () => group().findByProps({ 'aria-hidden': 'true' });
   assert.match(effect().props.className, /review-result-correct/);
   assert.equal(effect().findAllByType('span')[0].props.style.animationDuration, '4000ms');
-  assert.equal(group().findAllByType('li').length, 8);
+  assert.equal(group().findAllByType('li').length, 6);
+  assert.equal(group().findByType('h2').findByType('small').children.join(''), ' — 1 of 2');
   for (const card of group().findAllByType('li')) {
     assert.equal(card.findAllByType('svg').length, 1);
     assert.equal(card.findByType('span').children.join(''), '+250');
@@ -74,6 +102,13 @@ test('group cards show only current players and per-player points while video st
   await act(async () => { view.update(createElement(QuestionClue, { state: { ...state,
     reviewGroup: { ...state.reviewGroup!, remainingMs: 2000 } } })); });
   assert.equal(group().props.style.animationDelay, '0ms', 'updates do not restart animation');
+  advance();
+  const secondPage = game.snapshot();
+  await act(async () => { view.update(createElement(QuestionClue, { state: secondPage })); });
+  assert.equal(group().findAllByType('li').length, 2);
+  assert.equal(group().findByType('h2').findByType('small').children.join(''), ' — 2 of 2');
+  assert.match(JSON.stringify(view.toJSON()), /Player 6/);
+  assert.doesNotMatch(JSON.stringify(view.toJSON()), /Player 0/);
   advance();
   const wrong = game.snapshot();
   await act(async () => { view.update(createElement(QuestionClue, { state: { ...wrong,
@@ -114,7 +149,7 @@ test('host controls, instructions, TV sound and phone status follow the current 
   await act(async () => { button('Confirm reset').props.onClick(); });
   assert.deepEqual(actions, [{ type: 'undo' }, { type: 'reset' }]);
   assert.equal(view.root.findAllByProps({ type: 'checkbox' }).length, 0);
-  assert.match(JSON.stringify(view.toJSON()), /players with no answer in a static group/);
+  assert.doesNotMatch(JSON.stringify(view.toJSON()), /players with no answer in a static group/);
   assert.ok(view.root.findAllByType('strong').some((node) => node.children.join('') === 'Correct group on TV'));
   session = makeSession(game.snapshot(), players[0].id);
   await act(async () => { view.update(wrapped(session, createElement(PlayPage))); });
@@ -127,6 +162,10 @@ test('host controls, instructions, TV sound and phone status follow the current 
   assert.equal(sound.props.reviewCorrect, true);
   assert.match(JSON.stringify(view.toJSON()), /GROUP RESULTS/);
   assert.doesNotMatch(JSON.stringify(view.toJSON()), /Type your answer on your phone|PRIVATE ANSWER/);
+  advance();
+  session = makeSession(game.snapshot(), players[0].id);
+  await act(async () => { view.update(wrapped(session, createElement(PlayPage))); });
+  assert.match(JSON.stringify(view.toJSON()), /Correct \/ \+250 points/);
   advance();
   session = makeSession(game.snapshot(), players[8].id);
   await act(async () => { view.update(wrapped(session, createElement(PlayPage))); });
@@ -210,7 +249,7 @@ test('missing answers display as a static silent group on TV, host and phones', 
   const game = new GameEngine({ id: 1, title: 'Missing answers', questions: [
     { id: 'one', type: 'text', mode: 'typed', fixedPoints: 250, timerSeconds: 30,
       question: 'Clue', answer: 'SECRET' },
-  ] }, () => time);
+  ] }, () => time, serverSettingsSchema.parse({ showMissingAnswerGroup: true }));
   const alice = game.join({ name: 'Alice', avatarId: 'fox' });
   const bob = game.join({ name: 'Bob', avatarId: 'cat' });
   const carol = game.join({ name: 'Carol', avatarId: 'owl' });

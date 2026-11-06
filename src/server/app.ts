@@ -28,6 +28,7 @@ interface AppOptions {
   gameSetup?: Partial<Settings>;
   settingsStorage?: QuizSettingsStorage;
   serverSettings?: Partial<ServerSettings>;
+  saveShowMissingAnswerGroup?: (enabled: boolean) => void;
   branding?: Branding;
   startupRules?: StartupRules;
 }
@@ -304,6 +305,7 @@ export async function createApp(options: AppOptions) {
             options.quizMediaRoot ? '/media/quiz/' : '/media/');
         }
         const previousRevision = engine.revision;
+        const saveGlobalReviewSetting = options.saveShowMissingAnswerGroup;
         engine.command(parsed.data, settingsStorage ? (settings) => {
           try {
             settingsStorage!.save(engine.quiz.id, settings);
@@ -311,6 +313,13 @@ export async function createApp(options: AppOptions) {
             if (cause instanceof ArchiveConflictError) throw new GameError('The quiz file changed. Restart the server before saving game setup.');
             console.error('Unable to save quiz settings:', cause);
             throw new GameError('Unable to save quiz settings to disk. Setup was not changed. Check the server console.');
+          }
+        } : undefined, saveGlobalReviewSetting ? (enabled) => {
+          try {
+            saveGlobalReviewSetting(enabled);
+          } catch (cause) {
+            console.error('Unable to save global review settings:', cause);
+            throw new GameError('Unable to save global review settings. Check the server console.');
           }
         } : undefined);
         if (parsed.data.action.type === 'removePlayer') {

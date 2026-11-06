@@ -158,6 +158,7 @@ export const serverSettingsSchema = z.object({
   maxPlayerNameLength: z.number().int().min(1).max(100).default(24),
   requireAdminPasscode: z.boolean().default(true),
   maxPlayers: z.number().int().min(1).max(1000).default(12),
+  showMissingAnswerGroup: z.boolean().default(false),
   typeBuzzAnnouncementSeconds: z.number().int().min(1).max(60).default(3),
   countdownSound: localMedia.refine((value) => /\.wav$/i.test(value), 'Countdown sound must be a WAV file')
     .nullable().default('/media/sounds/countdown-beep.wav'),
@@ -195,6 +196,8 @@ export interface ReviewGroup {
   id: string;
   outcome: 'correct' | 'wrong' | 'missing';
   playerIds: string[];
+  pageIndex: number;
+  pageCount: number;
   points: number;
   pointsByPlayer?: Record<string, number>;
   /** Server-calculated time until automatic advancement; zero until the next tick. */
@@ -303,6 +306,7 @@ export const hostCommandSchema = z.object({
     z.object({ type: z.literal('adjust'), playerId: z.string(), delta: z.number().int().min(-100000).max(100000).refine((v) => v !== 0) }),
     z.object({ type: z.literal('removePlayer'), playerId: z.string() }),
     z.object({ type: z.literal('setup'), settings: settingsSchema }),
+    z.object({ type: z.literal('setShowMissingAnswerGroup'), enabled: z.boolean() }),
   ]),
 });
 export type HostCommand = z.infer<typeof hostCommandSchema>;

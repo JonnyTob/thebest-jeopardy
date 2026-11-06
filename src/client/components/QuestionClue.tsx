@@ -1,6 +1,6 @@
 import type { Player, ReviewGroup, Snapshot } from '../../shared/protocol';
 import { useRef, type CSSProperties } from 'react';
-import { REVIEW_GROUP_MS, REVIEW_RESULT_MS, BUZZ_CORRECT_ANSWER_MS } from '../../shared/game';
+import { REVIEW_GROUP_MS, REVIEW_GROUP_PAGE_SIZE, REVIEW_RESULT_MS, BUZZ_CORRECT_ANSWER_MS } from '../../shared/game';
 import { Avatar, countdownSeconds, questionTimerMs } from './Common';
 import { Media } from './Media';
 
@@ -22,7 +22,7 @@ export function QuestionClue({ state }: { state: Snapshot }) {
         && <ReviewResultAnimation key={state.reviewResultId} correct={state.review.correct} remaining={state.reviewRemainingMs} />}
       {buzzResult && <ReviewResultAnimation key={buzzResult.id} correct={buzzResult.correct} remaining={buzzResult.remainingMs}
         duration={buzzResult.correct ? BUZZ_CORRECT_ANSWER_MS : REVIEW_RESULT_MS} />}
-      {state.phase === 'REVIEW_GROUP' && state.reviewGroup && <ReviewGroupOverlay key={state.reviewGroup.id}
+      {state.phase === 'REVIEW_GROUP' && state.reviewGroup && <ReviewGroupOverlay key={`${state.reviewGroup.id}:${state.reviewGroup.pageIndex}`}
         group={state.reviewGroup} players={state.players} />}
       {state.phase === 'REVIEW' && state.review && <section className="review-overlay" aria-label="Current answer review" aria-live="polite" aria-atomic="true">
         <span className="eyebrow">ANSWER {state.reviewIndex + 1} / {state.reviewCount}</span>
@@ -60,15 +60,18 @@ function ReviewGroupOverlay({ group, players }: { group: ReviewGroup; players: P
   const delay = useRef(-Math.max(0, Math.min(REVIEW_GROUP_MS, REVIEW_GROUP_MS - group.remainingMs)));
   const correct = group.outcome === 'correct';
   const missing = group.outcome === 'missing';
-  const members = group.playerIds.flatMap((id) => players.find((player) => player.id === id) ?? []);
+  const start = group.pageIndex * REVIEW_GROUP_PAGE_SIZE;
+  const members = group.playerIds.slice(start, start + REVIEW_GROUP_PAGE_SIZE)
+    .flatMap((id) => players.find((player) => player.id === id) ?? []);
   return <section className={`review-group review-group-${group.outcome}`} aria-label="Grouped answer results"
     aria-live="polite" aria-atomic="true" style={missing ? undefined : { animationDelay: `${delay.current}ms` }}>
     {!missing && <ReviewResultAnimation correct={correct} remaining={group.remainingMs} duration={REVIEW_GROUP_MS} />}
     <header className="review-group-heading"><span className="eyebrow">{missing ? 'ANSWER REVIEW' : 'FAST APPROVAL / GROUP RESULT'}</span>
-      <h2>{correct ? 'Correct answers' : missing ? 'No answer' : 'Wrong answers'}</h2></header>
+      <h2>{correct ? 'Correct answers' : missing ? 'No answer' : 'Wrong answers'}
+        {group.pageCount > 1 && <small> — {group.pageIndex + 1} of {group.pageCount}</small>}</h2></header>
     <ul className="review-group-grid" tabIndex={0} aria-label="Players in this group">
       {members.map((player) => <li key={player.id} className="review-group-player">
-        <Avatar id={player.avatarId} /><strong>{player.name}</strong>
+        <Avatar id={player.avatarId} /><strong title={player.name}>{player.name}</strong>
         <span className={correct ? 'positive' : missing ? 'muted' : 'negative'}>+{(correct ? group.pointsByPlayer?.[player.id] ?? group.points : 0).toLocaleString()}</span>
       </li>)}
     </ul>

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { JsonQuizSettingsStorage, loadGlobalSettings } from '../../src/server/settings.js';
+import { JsonQuizSettingsStorage, loadGlobalSettings, saveShowMissingAnswerGroup } from '../../src/server/settings.js';
 import { GameEngine } from '../../src/server/engine.js';
 import { randomUUID } from 'node:crypto';
 import { hostCommandSchema, serverSettingsSchema } from '../../src/shared/protocol.js';
@@ -13,6 +13,26 @@ const defaults = {
   dropEverySeconds: 5, pointDecayDelaySeconds: 5, questionTimerSeconds: 30, lockoutSeconds: 0, maxAnswerLength: 100,
 };
 const branding = { name: 'Kaboot', logoText: 'K', tagline: 'Buzz in. Get booted.' };
+
+test('no-answer review setting is global, validated and persists without altering other settings', () => {
+  const directory = mkdtempSync(path.join(tmpdir(), 'quiz-review-setting-'));
+  const file = path.join(directory, 'settings.json');
+  const config = { branding, server: { port: 3000 }, gameSetup: defaults };
+  try {
+    writeFileSync(file, JSON.stringify(config));
+    assert.equal(loadGlobalSettings(file, {}).server.showMissingAnswerGroup, false);
+    for (const enabled of [true, false]) {
+      saveShowMissingAnswerGroup(file, enabled);
+      assert.equal(loadGlobalSettings(file, {}).server.showMissingAnswerGroup, enabled);
+      assert.deepEqual(JSON.parse(readFileSync(file, 'utf8')), { ...config, server: { ...config.server, showMissingAnswerGroup: enabled } });
+    }
+    writeFileSync(file, '{invalid');
+    assert.throws(() => saveShowMissingAnswerGroup(file, true));
+    assert.equal(readFileSync(file, 'utf8'), '{invalid');
+  } finally {
+    rmSync(directory, { recursive: true });
+  }
+});
 function withoutPointDefaults(settings: typeof defaults & { title: string }) {
   const { startPoints: _start, minimumPoints: _min, dropPoints: _drop, dropEverySeconds: _interval,
     pointDecayDelaySeconds: _delay, ...rest } = settings;
@@ -183,7 +203,7 @@ test('global sections load defaults, respect environment overrides and reject in
   const directory = mkdtempSync(path.join(tmpdir(), 'quiz-global-settings-'));
   const file = path.join(directory, 'settings.json');
   try {
-    const serverDefaults = { startupQuizId: 100001, maxPlayerNameLength: 24, requireAdminPasscode: true, maxPlayers: 12, typeBuzzAnnouncementSeconds: 3,
+    const serverDefaults = { startupQuizId: 100001, maxPlayerNameLength: 24, requireAdminPasscode: true, maxPlayers: 12, showMissingAnswerGroup: false, typeBuzzAnnouncementSeconds: 3,
       countdownSound: '/media/sounds/countdown-beep.wav',
       reviewCorrectSound: '/media/sounds/countdown-beep.wav', reviewWrongSound: '/media/sounds/countdown-beep.wav', endMusic: null };
     const config = { branding, server: { port: 3000, joinOrigin: 'http://example.com:3000' }, gameSetup: defaults };
@@ -193,7 +213,7 @@ test('global sections load defaults, respect environment overrides and reject in
       { port: 4000, joinOrigin: 'http://example.com:4000', ...serverDefaults });
     assert.equal(loadGlobalSettings(file, { QUIZ_ID: '100002' }).server.startupQuizId, 100002);
     assert.throws(() => loadGlobalSettings(file, { QUIZ_ID: '0' }), /Unable to load global settings/);
-    const customServer = { ...config.server, startupQuizId: 100001, maxPlayerNameLength: 32, requireAdminPasscode: false, maxPlayers: 20, typeBuzzAnnouncementSeconds: 7,
+    const customServer = { ...config.server, startupQuizId: 100001, maxPlayerNameLength: 32, requireAdminPasscode: false, maxPlayers: 20, showMissingAnswerGroup: true, typeBuzzAnnouncementSeconds: 7,
       countdownSound: '/media/custom/countdown.wav',
       reviewCorrectSound: '/media/custom/correct.wav', reviewWrongSound: '/media/custom/wrong.wav', endMusic: '/media/custom/end.mp3' };
     writeFileSync(file, JSON.stringify({ ...config, server: customServer }));
