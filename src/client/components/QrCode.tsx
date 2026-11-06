@@ -6,7 +6,7 @@ export function useQrCode(value: string) {
   useEffect(() => {
     if (!value) return;
     let active = true;
-    void QRCode.toDataURL(value, { width: 512, margin: 4, color: { dark: '#211035', light: '#ffffff' } })
+    void QRCode.toDataURL(value, { width: 512, margin: 4, color: { dark: '#132425', light: '#ffffff' } })
       .then((image) => { if (active) setResult({ value, image, error: false }); })
       .catch(() => { if (active) setResult({ value, image: '', error: true }); });
     return () => { active = false; };

@@ -121,7 +121,7 @@ function Playback({ state, question }: { state: Snapshot; question: PublicQuesti
         if (audio) audio.analyser.getByteFrequencyData(values);
         for (let i = 0; i < 40; i++) {
           const height = audio && !mediaRef.current?.paused ? Math.max(4, values[i] / 255 * 180) : 4;
-          context.fillStyle = i % 3 === 0 ? '#ec65b8' : '#ffe27c';
+          context.fillStyle = i % 3 === 0 ? '#68dcc1' : '#ffe17a';
           context.fillRect(i * 15 + 3, (220 - height) / 2, 9, height);
         }
       }

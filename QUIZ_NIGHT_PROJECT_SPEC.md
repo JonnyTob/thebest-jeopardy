@@ -23,7 +23,7 @@ Quiz Night is a locally hosted, multimedia, multiplayer buzzer quiz. One Windows
 
 ## 3. Public TV design — BASELINE
 
-**The latest public TV mockup is the layout baseline**, including its alternate **purple / gold / magenta game-show color scheme**. The earlier navy/blue/gold palette remains an optional theme. The structure, not any particular illustrative image or score, is canonical.
+**The latest public TV mockup is the layout baseline.** The active color scheme is **Emerald Slate**: dark slate surfaces, emerald accents, and gold highlights. The structure, not any particular illustrative image or score, is canonical.
 
 ### 3.1 Fixed three-region layout (16:9)
 
@@ -236,7 +236,7 @@ Suggested events: `player:join`, `player:buzz`, `host:questionStart`, `host:clue
 
 **Design baseline agreed:** New sequential quiz, three separate views, verbal gamemaster-judged answers, no automatic scoring, server-arbitrated buzzes, media/reveal pause on buzz, wrong-player lockout, **dynamic clue-time point value rather than an answer timer**, integrated image reveals and audio visualizer, headline/media/point bar inside clue panel, **one-row top-player TV leaderboard**, complete admin player list, consistent avatar selection.
 
-**Proposed defaults to validate in playtests:** 500→400→300→200→100 over 20 seconds; symmetric ±frozen value; minimum 100 thereafter; top 8 visible on TV; tile reveal and spectrum visualizer for POC; purple/gold/magenta as alternate theme alongside navy/gold.
+**Proposed defaults to validate in playtests:** 500→400→300→200→100 over 20 seconds; symmetric ±frozen value; minimum 100 thereafter; top 8 visible on TV; tile reveal and spectrum visualizer for POC; Emerald Slate with gold highlights.
 
 **Open choices:** Exact point curve/duration; whether wrong penalties should always be symmetric or optionally reduced; how often to update leaderboard ordering between questions; maximum recommended total players; whether to add an explicit host-controlled `Pass` with no penalty; reveal defaults per question type; avatar asset licensing.
 
