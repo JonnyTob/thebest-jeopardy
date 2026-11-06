@@ -17,6 +17,7 @@ export function playerSnapshotFactory(publicState: Snapshot, hostState: Snapshot
     const points = playerId ? group?.pointsByPlayer?.[playerId] : undefined;
     return {
       ...publicState,
+      wifi: null,
       playerCount,
       playerRank: publicState.phase === 'GAME_FINISHED' ? 0 : playerId ? ranks.get(playerId) ?? 0 : 0,
       players: player ? [player] : [],

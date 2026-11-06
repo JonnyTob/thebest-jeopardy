@@ -173,7 +173,8 @@ None of the server-only options can be saved in a per-quiz override file.
    Keep `/admin` on the laptop.
 2. Connect phones to the same Wi-Fi. Allow the server port through the laptop's
    firewall; disable wireless client isolation if devices cannot reach each other.
-3. Share the **LAN** `/play` address or QR code shown in the lobby. `localhost`
+3. Share the **LAN** `/play` address or join QR code shown in the welcome
+   screen's published Wi-Fi panel or in the lobby. `localhost`
    on a phone refers to the phone, not the laptop. If the laptop has multiple
    network interfaces, select the Wi-Fi/LAN address rather than a VPN or virtual
    adapter. For remote VS Code environments, use an address reachable by players.
@@ -183,6 +184,32 @@ None of the server-only options can be saved in a per-quiz override file.
 4. Only the TV renders audio/video. If autoplay is blocked, use its
    **Enable TV playback/audio** button; the host can pause the clue while doing so.
    Use one active TV playback tab to avoid duplicate audio.
+
+### Starting the show
+
+The TV starts on a welcome screen with player names and a live joined count.
+Players can join throughout the startup sequence. In **Live game**,
+the host can enter a Wi-Fi network and optional password and select **Publish
+Wi-Fi details** to show them, the game-join QR code and the game-join address
+together on the TV; **Hide Wi-Fi details** removes the panel. Players connect
+to the displayed Wi-Fi network manually, then scan the QR code or enter the
+address to join the game. The QR code follows the LAN address selected by the
+host and does not connect phones to Wi-Fi.
+They are kept in memory only, cleared when advancing or restarting, and are not
+sent to player phones. **Anyone viewing the TV or its display connection can
+see published credentials**, so use a guest network and a trusted private LAN.
+The application uses HTTP, not encrypted transport.
+
+Select **Show rules**, then **Show lobby**. The steps advance only when the host
+chooses and do not go backward. The existing lobby and **Start quiz** button
+follow; starting the quiz then runs the existing countdown and, when applicable,
+the Type + buzz introduction. Direct integrations using the existing host
+`start` command can still start immediately for backward compatibility.
+
+Edit [startup-rules.json](./startup-rules.json) to change the global rules shown
+on the TV. Supply a title (1-100 characters) and 1-8 rule strings (up to 180
+characters each), then restart the server. Invalid or missing rules files stop
+startup with an error. Rules apply to every quiz and are not saved per quiz.
 
 Use a trusted private LAN, not an exposed public internet deployment: this POC
 uses HTTP without TLS. The host passcode and player reconnect tokens are bearer
@@ -544,7 +571,7 @@ seconds. After its result hold, the final ruling advances via the
 three-second next-round countdown (or finishes the quiz). A wrong or missing
 typed answer earns zero, unlike the negative penalty for a wrong buzzer answer.
 Clip endings do not close questions; typed submission deadlines do.
-The `players` helper only joins players; it does not submit typed answers.
+The `players` helper can optionally simulate typed answers and buzzing with `--play`.
 
 All referenced media is bundled and works offline: the original rocket image,
 an original ringed-planet illustration, a synthesized WAV (three ascending notes,
@@ -649,9 +676,32 @@ An audio clue can use:
   "media": "media/your-audio.mp3",
   "answer": "Your private answer",
   "visualizer": { "enabled": true, "style": "spectrum" },
-  "playback": { "startSeconds": 0, "endSeconds": 20 }
+  "playback": {
+    "startSeconds": 15,
+    "durationSeconds": 8,
+    "loop": { "increaseSeconds": 2 }
+  }
 }
 ```
+
+For audio, set the start and duration in the quiz editor. Leave duration blank
+to play to the file's end. **Loop audio** repeats from the same start, adding
+the configured increase to each repeat: the example plays 15–23, then 15–25,
+then 15–27 seconds. An increase of zero repeats the same segment. Each repeat
+is capped at the end of the file. The duration must be at least 0.1 seconds and
+the increase cannot be negative.
+
+Loops follow the server's media clock and pause with the clue. Restarting media
+starts again with the initial duration. When a looping clue closes, the current
+repeat finishes; advancing the question can interrupt it. After a correct buzz,
+the existing finish/skip controls apply. Looping requires a readable audio file
+whose duration the server can determine; the host receives an error before
+starting if this is unavailable or the start is beyond the file. Audio preview
+in the editor remains a silent placeholder.
+
+Existing audio `playback.endSeconds` settings continue to work; the editor shows
+their equivalent duration and converts them when playback settings are edited.
+Video retains its start/end controls and does not loop.
 
 For a video, set `type` to `video` and use a browser-compatible local video file.
 Only use media you have permission to use. The sample illustration and avatar
@@ -689,6 +739,11 @@ This joins **12 randomly named players with random avatars** and keeps them
 online while you inspect `/display` and `/admin`. Names adapt to the server's
 nickname length limit; collisions with existing players are retried. The TV shows the top eight by default;
 admin lists every player.
+
+Players join at independent random times within a window of **0.5 seconds per
+player**. For example, 10 players are scheduled over 0-5 seconds, and the
+default 12 over 0-6 seconds. Network delays can make individual joins take longer.
+This applies to both layout testing and `--play`.
 
 To change the count or target server:
 
@@ -728,7 +783,7 @@ answers, and no simulated player speaks aloud.
 `--play` changes real game state and scores and uses player slots. Use an
 isolated test session rather than a live quiz. Ctrl+C stops the helper and
 disconnects its players but does not remove them or their scores. Without
-`--play`, the original layout-only behavior remains unchanged.
+`--play`, players join for layout testing only.
 
 ### Player snapshot load probe
 

@@ -64,6 +64,8 @@ export function AdminConsole({ logout, requirePasscode, development, passcode = 
   }
   const [confirm, setConfirm] = useState(false);
   const [confirmRestart, setConfirmRestart] = useState(false);
+  const [wifiNetwork, setWifiNetwork] = useState('');
+  const [wifiPassword, setWifiPassword] = useState('');
   const active = state?.players.find((p) => p.id === state.activePlayerId);
   const isOpen = state?.phase === 'QUESTION_OPEN';
   const answering = state?.phase === 'ANSWERING';
@@ -109,8 +111,29 @@ export function AdminConsole({ logout, requirePasscode, development, passcode = 
               `Question ${state.questionIndex + 1} of ${state.questionCount} / ${buzzerLabel(state).toLowerCase()}`}</p></div>
           <div className={`phase-pill ${answering ? 'amber' : ''}`}>{state.phase === 'LOBBY' ? 'WAITING FOR PLAYERS' : state.phase.replaceAll('_', ' ')}</div></section>
         {state.phase === 'LOBBY' ? <section className="panel lobby-controls"><JoinLink editable />
-          <div><h2>Ready when you are.</h2><p>Open the TV display, get everyone on the same Wi-Fi, then start the first clue.</p>
-            <button className="primary wide" disabled={disabled} onClick={() => { void command({ type: 'start' }); }}>Start quiz</button></div></section>
+          <div><span className="eyebrow">STARTUP / {state.startupStep === 'welcome' ? '1' : state.startupStep === 'rules' ? '2' : '3'} OF 3</span>
+            <h2>{state.startupStep === 'welcome' ? 'Welcome screen on TV' : state.startupStep === 'rules' ? 'Rules on TV' : 'Lobby on TV'}</h2>
+            <p>{state.players.length} joined / {state.players.filter((player) => player.connected).length} connected</p>
+            {state.startupStep === 'welcome' && <form onSubmit={(event) => {
+              event.preventDefault();
+              void command({ type: 'showWifi', network: wifiNetwork, password: wifiPassword }).then((ok) => {
+                if (ok) setWifiPassword('');
+              });
+            }}>
+              <p>Publish Wi-Fi details on the TV for everyone to see. Details are kept only for this session.</p>
+              <label>Wi-Fi network<input required maxLength={100} value={wifiNetwork}
+                onChange={(event) => setWifiNetwork(event.target.value)} /></label>
+              <label>Wi-Fi password (optional)<input type="password" autoComplete="off" maxLength={100} value={wifiPassword}
+                onChange={(event) => setWifiPassword(event.target.value)} /></label>
+              <div className="ruling-buttons"><button disabled={disabled || !wifiNetwork.trim()}>Publish Wi-Fi details</button>
+                {state.wifi && <button type="button" disabled={disabled} onClick={() => { void command({ type: 'hideWifi' }); }}>Hide Wi-Fi details</button>}</div>
+              {state.wifi && <p role="status">Wi-Fi details are visible on the TV.</p>}
+            </form>}
+            {state.startupStep === 'rules' && <p>{state.startupRules.title}: {state.startupRules.rules.join(' ')}</p>}
+            {state.startupStep === 'lobby'
+              ? <button className="primary wide" disabled={disabled} onClick={() => { void command({ type: 'start' }); }}>Start quiz</button>
+              : <button className="primary wide" disabled={disabled} onClick={() => { void command({ type: 'nextStartup' }); }}>
+                {state.startupStep === 'welcome' ? 'Show rules' : 'Show lobby'}</button>}</div></section>
           : state.phase === 'STARTING' ? <section className="panel" role="status">
             <h2>{startCountdownText(state.startCountdownMs ?? 0)}</h2>
             <p>Watch the TV. The first question, media and answering open after the four-second countdown.</p>

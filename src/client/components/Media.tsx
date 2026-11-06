@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { PublicQuestion, Snapshot } from '../../shared/protocol';
 import { tileOrder } from '../../shared/game';
+import { audioLoopSegment, playbackEnd } from '../../shared/playback';
 
 export function Media({ state, preview = false }: { state: Snapshot; preview?: boolean }) {
   const question = state.question;
@@ -42,6 +43,7 @@ function Playback({ state, question }: { state: Snapshot; question: PublicQuesti
   const [ready, setReady] = useState(false);
   const [visualizerReady, setVisualizerReady] = useState(false);
   const lastMediaVersion = useRef(-1);
+  const lastLoopIndex = useRef(-1);
 
   function enableVisualizer() {
     if (question.type !== 'audio' || question.visualizer?.enabled === false || !mediaRef.current) return;
@@ -78,20 +80,33 @@ function Playback({ state, question }: { state: Snapshot; question: PublicQuesti
   useEffect(() => {
     const media = mediaRef.current;
     if (!media || !ready) return;
-    const end = Math.min(question.playback?.endSeconds ?? Infinity, Number.isFinite(media.duration) ? media.duration : Infinity);
-    const target = Math.min(state.mediaPositionSeconds, end);
+    const playback = question.playback;
+    const looping = question.type === 'audio' && !!playback?.loop;
+    const duration = state.mediaDurationSeconds;
+    if (looping && (!duration || duration <= (playback?.startSeconds ?? 0))) {
+      media.pause();
+      setError('Unable to synchronize looping audio: the media duration is unavailable.');
+      return;
+    }
+    const segment = looping && playback && duration ? audioLoopSegment(playback,
+      Math.max(0, state.mediaPositionSeconds - (playback.startSeconds ?? 0)), duration,
+      state.mediaFinishRemainingMs === 0 || (!state.displayClockRunning && state.phase !== 'QUESTION_OPEN')) : null;
+    const end = Math.min(segment?.end ?? playbackEnd(playback), Number.isFinite(media.duration) ? media.duration : Infinity);
+    const target = Math.min(segment?.position ?? state.mediaPositionSeconds, end);
     const finishEnd = state.phase === 'MEDIA_FINISH' && state.mediaFinishRemainingMs !== null
-      ? state.mediaPositionSeconds + state.mediaFinishRemainingMs / 1000 : Infinity;
-    if (state.mediaVersion !== lastMediaVersion.current || Math.abs(media.currentTime - target) > 0.8
+      ? target + state.mediaFinishRemainingMs / 1000 : Infinity;
+    if (state.mediaVersion !== lastMediaVersion.current || (segment && segment.index !== lastLoopIndex.current)
+      || Math.abs(media.currentTime - target) > 0.8
       || (!state.displayClockRunning && Math.abs(media.currentTime - target) > 0.01)) media.currentTime = target;
     lastMediaVersion.current = state.mediaVersion;
+    lastLoopIndex.current = segment?.index ?? -1;
     if (media.currentTime > Math.min(end, finishEnd)) media.currentTime = Math.min(end, finishEnd);
     const atEnd = target >= end || media.currentTime >= Math.min(end, finishEnd);
     setEnded(atEnd);
     if (state.displayClockRunning && !atEnd) {
       if (media.paused && !needsUnlock) play();
     } else media.pause();
-  }, [state.mediaPositionSeconds, state.displayClockRunning, state.mediaVersion, state.phase, state.mediaFinishRemainingMs, ready, question.playback?.endSeconds, needsUnlock]);
+  }, [state.mediaPositionSeconds, state.mediaDurationSeconds, state.displayClockRunning, state.mediaVersion, state.phase, state.mediaFinishRemainingMs, ready, question.playback, question.type, needsUnlock]);
 
   useEffect(() => {
     if (question.type !== 'audio') return;
@@ -137,9 +152,15 @@ function Playback({ state, question }: { state: Snapshot; question: PublicQuesti
     onPlay: enableVisualizer,
     onTimeUpdate: () => {
       const media = mediaRef.current;
+      const playback = question.playback;
+      const duration = state.mediaDurationSeconds;
+      const segment = question.type === 'audio' && playback?.loop && duration
+        && duration > (playback.startSeconds ?? 0)
+        ? audioLoopSegment(playback, Math.max(0, state.mediaPositionSeconds - (playback.startSeconds ?? 0)), duration,
+          state.mediaFinishRemainingMs === 0 || (!state.displayClockRunning && state.phase !== 'QUESTION_OPEN')) : null;
       const finishEnd = state.phase === 'MEDIA_FINISH' && state.mediaFinishRemainingMs !== null
-        ? state.mediaPositionSeconds + state.mediaFinishRemainingMs / 1000 : Infinity;
-      const end = Math.min(question.playback?.endSeconds ?? Infinity, finishEnd);
+        ? (segment?.position ?? state.mediaPositionSeconds) + state.mediaFinishRemainingMs / 1000 : Infinity;
+      const end = Math.min(segment?.end ?? playbackEnd(playback), finishEnd);
       if (media && media.currentTime >= end) {
         media.pause();
         if (media.currentTime > end) media.currentTime = end;

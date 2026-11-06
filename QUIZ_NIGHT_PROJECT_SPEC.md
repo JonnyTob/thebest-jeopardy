@@ -127,7 +127,7 @@ For zoom, replace `reveal` with e.g. `{ "effect": "zoom", "durationSeconds": 20,
 
 ### 5.2 Audio-only questions — built-in music visualizer
 
-Play audio **only in the TV browser**. Use the browser **Web Audio API** (`AnalyserNode`) to render a real-time Canvas/SVG visualizer; Node.js need not analyze the audio. Visual styles: **spectrum bars** (POC), waveform, pulsing rings (later). Visualizer is decorative, not a clue spoiler. Freeze or clearly pause visualization on buzz; resume on wrong. Allow optional playback segment (`startSeconds`, `endSeconds`) without modifying the source file. Handle browser autoplay restrictions with a host-initiated playback/unlock step.
+Play audio **only in the TV browser**. Use the browser **Web Audio API** (`AnalyserNode`) to render a real-time Canvas/SVG visualizer; Node.js need not analyze the audio. Visual styles: **spectrum bars** (POC), waveform, pulsing rings (later). Visualizer is decorative, not a clue spoiler. Freeze or clearly pause visualization on buzz; resume on wrong. Allow an optional start and duration, plus progressive looping that increases each repeat up to the file end; retain compatibility with existing `endSeconds` clips. Handle browser autoplay restrictions with a host-initiated playback/unlock step.
 
 ```json
 {
@@ -138,7 +138,7 @@ Play audio **only in the TV browser**. Use the browser **Web Audio API** (`Analy
   "media": "/media/music12.mp3",
   "answer": "A-ha — Take On Me",
   "visualizer": { "enabled": true, "style": "spectrum" },
-  "playback": { "startSeconds": 15, "endSeconds": 45 }
+  "playback": { "startSeconds": 15, "durationSeconds": 30, "loop": { "increaseSeconds": 2 } }
 }
 ```
 

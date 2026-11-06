@@ -157,10 +157,19 @@ export function QuizEditor({ passcode, onDirtyChange, gameState, quizId }: { pas
   }
   function changeType(type: ArchiveQuestion['type']) {
     const { text, media, reveal, playback, visualizer, ...rest } = question;
+    const videoPlayback = playback && { startSeconds: playback.startSeconds,
+      endSeconds: playback.durationSeconds === undefined ? playback.endSeconds
+        : (playback.startSeconds ?? 0) + playback.durationSeconds };
     updateQuestion({ ...rest, type, text: type === 'text' ? text : undefined,
       media: type !== 'text' ? media : undefined, reveal: type === 'image' ? reveal : undefined,
-      playback: type === 'audio' || type === 'video' ? playback : undefined,
+      playback: type === 'audio' ? playback : type === 'video' ? videoPlayback : undefined,
       visualizer: type === 'audio' ? visualizer : undefined });
+  }
+  function audioPlayback() {
+    const playback = question.playback;
+    return { ...playback, endSeconds: undefined,
+      durationSeconds: playback?.durationSeconds ?? (playback?.endSeconds === undefined
+        ? undefined : playback.endSeconds - (playback.startSeconds ?? 0)) };
   }
   function addQuestion(copy: boolean) {
     const next: ArchiveQuestion = copy && question ? { ...structuredClone(question), id: commandId() }
@@ -249,7 +258,22 @@ export function QuizEditor({ passcode, onDirtyChange, gameState, quizId }: { pas
           {question.type === 'image' && <><label>Reveal effect (optional)<select value={question.reveal?.effect ?? 'static'} onChange={(event) => updateQuestion({ reveal: { ...question.reveal, effect: event.target.value === 'tiles' ? 'tiles' : 'static' } })}><option value="static">Static</option><option value="tiles">Tiles</option></select>
             <small>Choose whether the image appears at once or is revealed in tiles.</small></label>
             {question.reveal?.effect === 'tiles' && ([['durationSeconds', 'Reveal duration (seconds)', 'Default: 20 seconds.'], ['columns', 'Tile columns', 'Default: 8 columns.'], ['rows', 'Tile rows', 'Default: 6 rows.'], ['seed', 'Reveal seed', 'Default: 814; the same seed repeats the tile order.']] as const).map(([field, label, help]) => <label key={field}>{label} (optional)<input type="number" value={question.reveal?.[field] ?? ''} placeholder="Default" onChange={(event) => updateQuestion({ reveal: { ...question.reveal, [field]: event.target.value === '' ? undefined : Number(event.target.value) } })} /><small>{help}</small></label>)}</>}
-          {(question.type === 'audio' || question.type === 'video') && ([['startSeconds', 'Playback start (seconds)', 'Leave blank to start at the beginning.'], ['endSeconds', 'Playback end (seconds)', 'Leave blank to play to the end.']] as const).map(([field, label, help]) => <label key={field}>{label} (optional)<input type="number" step="any" value={question.playback?.[field] ?? ''} onChange={(event) => updateQuestion({ playback: { ...question.playback, [field]: event.target.value === '' ? undefined : Number(event.target.value) } })} /><small>{help}</small></label>)}
+          {(question.type === 'audio' || question.type === 'video') && <label>Playback start (seconds) (optional)<input type="number" min={0} step="any" value={question.playback?.startSeconds ?? ''}
+            onChange={(event) => updateQuestion({ playback: { ...(question.type === 'audio' ? audioPlayback() : question.playback),
+              startSeconds: event.target.value === '' ? undefined : Number(event.target.value) } })} /><small>Leave blank to start at the beginning.</small></label>}
+          {question.type === 'video' && <label>Playback end (seconds) (optional)<input type="number" step="any" value={question.playback?.endSeconds ?? ''}
+            onChange={(event) => updateQuestion({ playback: { ...question.playback, endSeconds: event.target.value === '' ? undefined : Number(event.target.value) } })} /><small>Leave blank to play to the end.</small></label>}
+          {question.type === 'audio' && <><label>Playback duration (seconds) (optional)<input type="number" min={0.1} step="any"
+            value={audioPlayback().durationSeconds ?? ''} onChange={(event) => updateQuestion({ playback: { ...audioPlayback(),
+              durationSeconds: event.target.value === '' ? undefined : Number(event.target.value) } })} />
+            <small>Leave blank to play to the end. Looping requires a duration of at least 0.1 seconds.</small></label>
+            <label className="editor-question-enabled"><input type="checkbox" checked={!!question.playback?.loop}
+              onChange={(event) => updateQuestion({ playback: { ...audioPlayback(),
+                loop: event.target.checked ? { increaseSeconds: 0 } : undefined } })} /> Loop audio</label>
+            {question.playback?.loop && <label>Increase per loop (seconds)<input type="number" min={0} step="any"
+              value={question.playback.loop.increaseSeconds} onChange={(event) => updateQuestion({ playback: { ...audioPlayback(),
+                loop: { increaseSeconds: event.target.value === '' ? NaN : Number(event.target.value) } } })} />
+              <small>Each repeat is longer by this amount, up to the end of the file. Use 0 for equal-length loops.</small></label>}</>}
           {question.type === 'audio' && <label className="editor-question-enabled"><input type="checkbox" checked={question.visualizer?.enabled ?? false} onChange={(event) => updateQuestion({ visualizer: { enabled: event.target.checked, style: 'spectrum' } })} /> Show audio visualizer (optional)</label>}
         <label className="editor-question-enabled"><input type="checkbox" checked={question.enabled !== false}
           onChange={(event) => updateQuestion({ enabled: event.target.checked })} /> Include question in quiz</label>

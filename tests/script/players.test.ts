@@ -26,6 +26,113 @@ test('player helper defaults, overrides and validation', () => {
   assert.throws(() => parsePlayerOptions(['--unknown']), /Unknown option/);
 });
 
+test('ten players join independently across a five-second window', { timeout: 10000 }, async (t) => {
+  const application = await createApp({
+    storage: { load: async () => ({ id: 1, title: 'Join timing', questions: [
+      { id: 'one', type: 'text', mode: 'buzzer', question: 'Clue', answer: 'Answer' },
+    ] }) },
+    passcode: 'test-host-passcode', serveClient: false,
+  });
+  let sockets: Awaited<ReturnType<typeof joinLayoutPlayers>> = [];
+  const joinTimes: number[] = [];
+  const join = application.engine.join.bind(application.engine);
+  t.mock.method(application.engine, 'join', (input: Parameters<typeof join>[0]) => {
+    const player = join(input);
+    joinTimes.push(Date.now());
+    return player;
+  });
+  try {
+    await new Promise<void>((resolve) => application.httpServer.listen(0, '127.0.0.1', resolve));
+    const address = application.httpServer.address();
+    assert.ok(address && typeof address !== 'string');
+    const values = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.999];
+    let index = 0;
+    sockets = await joinLayoutPlayers({ count: 10, url: `http://127.0.0.1:${address.port}` }, undefined,
+      { random: () => values[index++] });
+    assert.equal(index, 10);
+    assert.equal(joinTimes.length, 10);
+    assert.ok(joinTimes[1] - joinTimes[0] >= 300, 'joins are not immediate');
+    assert.ok(joinTimes[9] - joinTimes[0] >= 4800, 'the final join is scheduled near five seconds');
+    assert.ok(joinTimes[9] - joinTimes[0] < 7000, 'delays are relative to one start, not cumulative');
+  } finally {
+    for (const socket of sockets) socket.disconnect();
+    await application.close();
+  }
+});
+
+test('cancelling while players are joining disconnects arrivals and cancels pending joins', { timeout: 7000 }, async () => {
+  const application = await createApp({
+    storage: { load: async () => ({ id: 1, title: 'Cancel joining', questions: [
+      { id: 'one', type: 'text', mode: 'buzzer', question: 'Clue', answer: 'Answer' },
+    ] }) },
+    passcode: 'test-host-passcode', serveClient: false,
+  });
+  const controller = new AbortController();
+  try {
+    await new Promise<void>((resolve) => application.httpServer.listen(0, '127.0.0.1', resolve));
+    const address = application.httpServer.address();
+    assert.ok(address && typeof address !== 'string');
+    let index = 0;
+    const joining = joinLayoutPlayers({ count: 4, url: `http://127.0.0.1:${address.port}` }, undefined,
+      { signal: controller.signal, random: () => index++ === 0 ? 0 : 0.9 });
+    const deadline = Date.now() + 2000;
+    while (application.engine.players.size === 0 && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    assert.equal(application.engine.players.size, 1);
+    controller.abort();
+    await assert.rejects(joining, { name: 'AbortError' });
+    await new Promise((resolve) => setTimeout(resolve, 1900));
+    assert.equal(application.engine.players.size, 1);
+    assert.ok([...application.engine.players.values()].every((player) => !player.connected));
+  } finally {
+    controller.abort();
+    await application.close();
+  }
+});
+
+test('active players can answer while the rest of the batch is still joining', { timeout: 7000 }, async (t) => {
+  let time = 0;
+  t.mock.method(performance, 'now', () => time);
+  const application = await createApp({
+    storage: { load: async () => ({ id: 1, title: 'Early participation', questions: [
+      { id: 'one', type: 'text', mode: 'typed', question: 'Clue', answer: 'Answer', fixedPoints: 100, timerSeconds: 10 },
+    ] }) },
+    passcode: 'test-host-passcode', serveClient: false,
+  });
+  const simulator = createPlayerSimulator({ random: () => 0, log: () => {} });
+  const controller = new AbortController();
+  const waitFor = async (predicate: () => boolean) => {
+    const deadline = Date.now() + 2000;
+    while (!predicate()) {
+      if (Date.now() >= deadline) throw new Error('Timed out waiting for an early simulated player.');
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+  };
+  try {
+    await new Promise<void>((resolve) => application.httpServer.listen(0, '127.0.0.1', resolve));
+    const address = application.httpServer.address();
+    assert.ok(address && typeof address !== 'string');
+    let index = 0;
+    simulator.start();
+    const joining = joinLayoutPlayers({ count: 10, url: `http://127.0.0.1:${address.port}` }, simulator.attach,
+      { signal: controller.signal, random: () => index++ === 0 ? 0 : 0.99 });
+    await waitFor(() => application.engine.players.size === 1);
+    application.engine.command({ id: randomUUID(), revision: application.engine.revision, action: { type: 'start' } });
+    time += 4000;
+    await waitFor(() => application.engine.snapshot().phase === 'QUESTION_OPEN');
+    time += 1600;
+    await waitFor(() => application.engine.snapshot().submissionCount === 1);
+    assert.equal(application.engine.players.size, 1);
+    controller.abort();
+    await assert.rejects(joining, { name: 'AbortError' });
+  } finally {
+    controller.abort();
+    simulator.stop();
+    await application.close();
+  }
+});
+
 test('active players use real sockets while the host controls all three modes', { timeout: 15000 }, async (t) => {
     let time = 0;
     t.mock.method(performance, 'now', () => time);
@@ -195,6 +302,45 @@ test('short nickname limits retry collisions and reject impossible batch sizes',
     assert.ok(names.includes('z'));
   } finally {
     for (const socket of sockets) socket.disconnect();
+    await application.close();
+  }
+});
+
+test('CLI Ctrl+C cancels a batch while players are still joining', { timeout: 10000 }, async () => {
+  const application = await createApp({
+    storage: { load: async () => ({ id: 1, title: 'Interrupted joins', questions: [
+      { id: 'one', type: 'text', mode: 'buzzer', question: 'Clue', answer: 'Answer' },
+    ] }) },
+    passcode: 'test-host-passcode', serveClient: false,
+  });
+  await new Promise<void>((resolve) => application.httpServer.listen(0, '127.0.0.1', resolve));
+  const address = application.httpServer.address();
+  assert.ok(address && typeof address !== 'string');
+  const child = spawn(process.execPath, [
+    '--import', 'tsx', 'script/players.ts', '--count', '20', '--url', `http://127.0.0.1:${address.port}`,
+  ], { stdio: ['ignore', 'pipe', 'pipe'] });
+  const exited = once(child, 'exit');
+  let errors = '';
+  child.stderr.on('data', (chunk: Buffer) => { errors += chunk.toString(); });
+  try {
+    const deadline = Date.now() + 5000;
+    while (application.engine.players.size === 0 && child.exitCode === null && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    const joined = application.engine.players.size;
+    assert.ok(joined > 0 && joined < 20, `Expected a partial batch, got ${joined}: ${errors}`);
+    child.kill('SIGINT');
+    const [code] = await exited;
+    assert.equal(code, 0, errors);
+    const afterExit = application.engine.players.size;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    assert.equal(application.engine.players.size, afterExit);
+    assert.ok([...application.engine.players.values()].every((player) => !player.connected));
+  } finally {
+    if (child.exitCode === null && child.signalCode === null) {
+      child.kill('SIGTERM');
+      await exited;
+    }
     await application.close();
   }
 });

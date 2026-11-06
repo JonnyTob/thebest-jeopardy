@@ -5,7 +5,7 @@ import { readFile, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import express from 'express';
 import { Server } from 'socket.io';
-import { brandingSchema, createJoinSchema, hostCommandSchema, serverSettingsSchema, settingsSchema, type Branding, type ClientEvents, type ServerEvents, type Settings, type ServerSettings } from '../shared/protocol.js';
+import { brandingSchema, createJoinSchema, hostCommandSchema, serverSettingsSchema, settingsSchema, startupRulesSchema, type Branding, type ClientEvents, type ServerEvents, type Settings, type ServerSettings, type StartupRules } from '../shared/protocol.js';
 import { GameEngine, GameError } from './engine.js';
 import { playerSnapshotFactory } from './playerSnapshot.js';
 import { ArchiveConflictError, ArchiveQuizSettingsStorage, ArchiveQuizStorage, QuizLibrary, type QuizStorage } from './storage.js';
@@ -29,6 +29,7 @@ interface AppOptions {
   settingsStorage?: QuizSettingsStorage;
   serverSettings?: Partial<ServerSettings>;
   branding?: Branding;
+  startupRules?: StartupRules;
 }
 
 export async function createApp(options: AppOptions) {
@@ -53,7 +54,7 @@ export async function createApp(options: AppOptions) {
   const mediaDurations = await probeMediaDurations(quiz,
     options.quizMediaRoot ?? path.resolve(options.production ? 'dist/client/media' : 'src/public/media'),
     options.quizMediaRoot ? '/media/quiz/' : '/media/');
-  const engine = new GameEngine(quiz, undefined, serverSettings, mediaDurations);
+  const engine = new GameEngine(quiz, undefined, serverSettings, mediaDurations, options.startupRules && startupRulesSchema.parse(options.startupRules));
   engine.settings = settingsSchema.parse({
     ...engine.settings,
     ...options.gameSetup,

@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { brandingSchema, serverSettingsSchema, settingsSchema, type Settings } from '../shared/protocol.js';
+import { brandingSchema, serverSettingsSchema, settingsSchema, startupRulesSchema, type Settings } from '../shared/protocol.js';
 import { gameSetupOverridesSchema } from '../shared/quizArchive.js';
 
 const serverSchema = z.object({
@@ -36,6 +36,14 @@ export function loadGlobalSettings(file: string, env: NodeJS.ProcessEnv = proces
     return { ...settings, server };
   } catch (cause) {
     throw new Error(`Unable to load global settings from ${file}: ${cause instanceof Error ? cause.message : String(cause)}`, { cause });
+  }
+}
+
+export function loadStartupRules(file: string) {
+  try {
+    return startupRulesSchema.parse(JSON.parse(readFileSync(file, 'utf8')));
+  } catch (cause) {
+    throw new Error(`Unable to load startup rules from ${file}: ${cause instanceof Error ? cause.message : String(cause)}`, { cause });
   }
 }
 

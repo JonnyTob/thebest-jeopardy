@@ -1,7 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { buzzerPointsAt, wrongBuzzPenalty, rankPlayers, START_COUNTDOWN_MS, NEXT_ROUND_MS, REVIEW_RESULT_MS, REVIEW_GROUP_MS, BUZZ_RESULT_MS, BUZZ_CORRECT_ANSWER_MS } from '../shared/game.js';
-import { serverSettingsSchema, type HostCommand, type JoinRequest, type Phase, type Player, type Quiz, type ScoreEvent, type Settings, type Snapshot, type ServerSettings, type TypedReview } from '../shared/protocol.js';
+import { serverSettingsSchema, type HostCommand, type JoinRequest, type Phase, type Player, type Quiz, type ScoreEvent, type Settings, type Snapshot, type ServerSettings, type TypedReview, type StartupRules, type StartupStep, type WifiInfo } from '../shared/protocol.js';
+import { defaultStartupRules } from '../shared/startup.js';
+import { audioLoopSegment, playbackEnd } from '../shared/playback.js';
 
 export class GameError extends Error {}
 
@@ -62,10 +64,13 @@ export class GameEngine {
   private mediaFinishDurationMs: number | null = null;
   private mediaFinishElapsedMs = 0;
   private clue: ClueState = emptyClue();
+  private startupStep: StartupStep = 'welcome';
+  private wifi: WifiInfo | null = null;
 
   constructor(public quiz: Quiz, private readonly now: () => number = () => performance.now(),
     readonly serverSettings: ServerSettings = serverSettingsSchema.parse({}),
-    private mediaDurations: Readonly<Record<string, number>> = {}) {
+    private mediaDurations: Readonly<Record<string, number>> = {},
+    private readonly startupRules: StartupRules = defaultStartupRules) {
     this.settings = { title: quiz.title, leaderboardCount: 8, startPoints: 500,
       minimumPoints: 100, dropPoints: 100, dropEverySeconds: 5, pointDecayDelaySeconds: 5, questionTimerSeconds: 30,
       lockoutSeconds: 0, maxAnswerLength: 100 };
@@ -223,7 +228,11 @@ export class GameEngine {
     if (question?.type !== 'audio' && question?.type !== 'video') return 0;
     const duration = question.media ? this.mediaDurations[question.media] : undefined;
     const natural = duration !== undefined && Number.isFinite(duration) && duration > 0 ? duration : Infinity;
-    const end = Math.min(question.playback?.endSeconds ?? Infinity, natural);
+    if (question.type === 'audio' && question.playback?.loop) {
+      if (!Number.isFinite(natural)) return null;
+      return audioLoopSegment(question.playback, position, natural, true).remaining * 1000;
+    }
+    const end = Math.min(playbackEnd(question.playback), natural);
     return Number.isFinite(end) ? Math.max(0, (end - (question.playback?.startSeconds ?? 0) - position) * 1000) : null;
   }
 
@@ -355,7 +364,8 @@ export class GameEngine {
     this.clue.paused = false;
     this.clue.activePlayerId = null;
     this.clue.pointsAtBuzz = null;
-    if (closingOpenQuestion && this.quiz.questions[this.clue.questionIndex]?.type === 'video') {
+    const question = this.quiz.questions[this.clue.questionIndex];
+    if (closingOpenQuestion && (question?.type === 'video' || (question?.type === 'audio' && question.playback?.loop))) {
       const remaining = this.remainingPlaybackMs();
       if (remaining === null || remaining > 0) {
         this.mediaFinishAt = this.now();
@@ -444,6 +454,20 @@ export class GameEngine {
       'Wait for the review group before taking that action.');
     const action = command.action;
     switch (action.type) {
+      case 'showWifi':
+        this.require(this.clue.phase === 'LOBBY' && this.startupStep === 'welcome', 'Show Wi-Fi details on the welcome screen.');
+        this.require(action.network.trim().length > 0 && action.network.trim().length <= 100 && action.password.length <= 100, 'Enter a valid Wi-Fi network name and password.');
+        this.wifi = { network: action.network.trim(), password: action.password };
+        break;
+      case 'hideWifi':
+        this.require(this.clue.phase === 'LOBBY' && this.startupStep === 'welcome', 'Hide Wi-Fi details on the welcome screen.');
+        this.wifi = null;
+        break;
+      case 'nextStartup':
+        this.require(this.clue.phase === 'LOBBY' && this.startupStep !== 'lobby', 'The startup sequence is already complete.');
+        this.startupStep = this.startupStep === 'welcome' ? 'rules' : 'lobby';
+        this.wifi = null;
+        break;
       case 'setup':
         this.require(this.clue.phase === 'LOBBY', 'Setup can only change in the lobby.');
         {
@@ -457,6 +481,13 @@ export class GameEngine {
       case 'start':
         this.require(this.clue.phase === 'LOBBY', 'The game has already started.');
         this.require(this.quiz.questions.length > 0, 'No questions are enabled. Enable at least one question in the quiz editor and reload the quiz.');
+        for (const question of this.quiz.questions) {
+          if (question.type !== 'audio' || !question.playback?.loop) continue;
+          const duration = question.media ? this.mediaDurations[question.media] : undefined;
+          this.require(duration !== undefined && Number.isFinite(duration) && duration > (question.playback.startSeconds ?? 0),
+            `Cannot loop audio for "${question.question}": check that the media is readable and playback starts before the end of the file.`);
+        }
+        this.wifi = null;
         if (this.quiz.questions[0].mode === 'type-and-buzz') {
           this.clue.phase = 'TYPE_BUZZ_INTRO';
           this.typeBuzzIntroAt = this.now();
@@ -536,6 +567,8 @@ export class GameEngine {
         this.buzzResult = null;
         this.clearMediaFinish();
         this.clue = emptyClue();
+        this.startupStep = 'welcome';
+        this.wifi = null;
         break;
       case 'restartMedia':
         this.require(this.clue.phase === 'QUESTION_OPEN' || this.clue.phase === 'MEDIA_FINISH', 'Restart media while the question is open or finishing.');
@@ -640,6 +673,7 @@ export class GameEngine {
     } : null;
     return {
       revision: this.revision, quizId: this.quiz.id, settings: { ...this.settings }, phase: this.clue.phase,
+      startupStep: this.startupStep, startupRules: structuredClone(this.startupRules), wifi: this.wifi ? { ...this.wifi } : null,
       startCountdownMs: this.startCountdownAt === null ? null
         : Math.max(0, START_COUNTDOWN_MS - (now - this.startCountdownAt)),
       nextRoundCountdownMs: this.nextRoundAt === null ? null
@@ -672,6 +706,7 @@ export class GameEngine {
       mediaFinishNeedsSkip: this.clue.phase === 'MEDIA_FINISH' && this.mediaFinishDurationMs === null,
       revealProgress: Math.min(1, Math.max(0, displayElapsed / 1000 + this.clue.mediaOffsetSeconds) / (question?.reveal?.durationSeconds ?? 20)),
       mediaPositionSeconds: (question?.playback?.startSeconds ?? 0) + Math.max(0, displayElapsed / 1000 + this.clue.mediaOffsetSeconds),
+      mediaDurationSeconds: question?.media ? this.mediaDurations[question.media] ?? null : null,
       mediaVersion: this.clue.mediaVersion,
       canUndo: host && this.history.length > 0,
       scoreEvents: host ? structuredClone(this.scoreEvents) : [],

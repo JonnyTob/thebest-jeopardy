@@ -153,3 +153,73 @@ test('undo during or after the correct answer hold restores the frozen ruling', 
     assert.equal(s.game.snapshot().phase, 'ANSWERING');
   }
 });
+
+test('progressive audio pauses and finishes its current loop after a correct answer', () => {
+  const question: Question = { ...audio, timerSeconds: 60,
+    playback: { startSeconds: 15, durationSeconds: 8, loop: { increaseSeconds: 2 } } };
+  const s = setup(question, { '/media/a.mp3': 27 });
+  s.advance(9000);
+  s.send({ type: 'pause' });
+  s.advance(10000);
+  assert.equal(s.game.snapshot().mediaPositionSeconds, 24);
+  s.send({ type: 'resume' });
+  s.game.buzz(s.player.id);
+  s.send({ type: 'judge', correct: true });
+  s.advance(BUZZ_CORRECT_ANSWER_MS);
+  s.game.tick();
+  assert.equal(s.game.snapshot().phase, 'MEDIA_FINISH');
+  assert.equal(s.game.snapshot().mediaFinishRemainingMs, 9000);
+  assert.equal(s.game.snapshot().mediaDurationSeconds, 27);
+  s.advance(8999); s.game.tick();
+  assert.equal(s.game.snapshot().phase, 'MEDIA_FINISH');
+  s.advance(1); s.game.tick();
+  assert.equal(s.game.snapshot().phase, 'NEXT_ROUND');
+});
+
+test('looping audio closes at the current iteration boundary, supports restart and needs readable media', () => {
+  const question: Question = { ...audio, timerSeconds: 60,
+    playback: { startSeconds: 15, durationSeconds: 8, loop: { increaseSeconds: 2 } } };
+  const s = setup(question, { '/media/a.mp3': 27 });
+  s.advance(9000);
+  s.send({ type: 'restartMedia' });
+  assert.equal(s.game.snapshot().mediaPositionSeconds, 15);
+  s.advance(4000);
+  s.send({ type: 'close' });
+  assert.equal(s.game.snapshot().mediaFinishRemainingMs, 4000);
+  s.advance(4000); s.game.tick();
+  assert.equal(s.game.snapshot().phase, 'QUESTION_CLOSED');
+  assert.equal(s.game.snapshot().displayClockRunning, false);
+  for (const durations of [{}, { '/media/a.mp3': 15 }]) {
+    const game = new GameEngine({ id: 1, title: 'Bad media', questions: [question] }, () => 0, undefined, durations);
+    assert.throws(() => game.command({ id: randomUUID(), revision: game.revision, action: { type: 'start' } }), /Cannot loop audio/);
+    assert.equal(game.snapshot().phase, 'LOBBY');
+  }
+});
+
+test('non-looping audio duration retains the existing clip-finish behavior', () => {
+  const s = setup({ ...audio, playback: { startSeconds: 3, durationSeconds: 4 } }, { '/media/a.mp3': 20 });
+  s.advance(1000);
+  s.game.buzz(s.player.id); s.send({ type: 'judge', correct: true });
+  s.advance(BUZZ_CORRECT_ANSWER_MS); s.game.tick();
+  assert.equal(s.game.snapshot().mediaFinishRemainingMs, 3000);
+});
+
+test('a correct buzz exactly at a loop boundary does not play an extra repeat', () => {
+  const s = setup({ ...audio, timerSeconds: 60,
+    playback: { startSeconds: 15, durationSeconds: 8, loop: { increaseSeconds: 2 } } }, { '/media/a.mp3': 27 });
+  s.advance(18000);
+  s.game.buzz(s.player.id); s.send({ type: 'judge', correct: true });
+  s.advance(BUZZ_CORRECT_ANSWER_MS); s.game.tick();
+  assert.equal(s.game.snapshot().phase, 'NEXT_ROUND');
+});
+
+test('typed audio completes its current repeat after submissions close', () => {
+  const s = setup({ ...audio, mode: 'typed', fixedPoints: 250, timerSeconds: 60,
+    playback: { startSeconds: 15, durationSeconds: 8, loop: { increaseSeconds: 2 } } }, { '/media/a.mp3': 27 });
+  s.advance(9000); s.send({ type: 'close' });
+  assert.equal(s.game.snapshot().phase, 'QUESTION_CLOSED');
+  assert.equal(s.game.snapshot().mediaFinishRemainingMs, 9000);
+  s.advance(9000); s.game.tick();
+  assert.equal(s.game.snapshot().displayClockRunning, false);
+  assert.equal(s.game.snapshot().phase, 'QUESTION_CLOSED');
+});

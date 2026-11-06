@@ -25,15 +25,25 @@
 * A-ha take on my synth (video)
 * Foreigner What is love Live Video
 * Def leppard - hysteria
+* Billy Idol - White Wedding
+* Summer of 69 - Brian Adams - loop 
 
 ## POP/ROCK - 90s
 * Sabotage Beastie Boys - cover clip (buzzer)
 * Prodegy - picture of singer Firestarter (picture reveal)
 * The Cranberries - Zombie
+* November Rain - Guns Roses
+* Zoombie The Granberries
+* Send me an angel - scorpions
+* Under the bridge: Red hot chili pepper
+* Queen - The show must go on
+* Ozzi Ossbourbe -Mama Iam coming home
+* Pearl Jam - Alive
 
 ## Post 2000 MIX
 * Captain Jack Sparrow
 * Picture of volleyball - cast away
+* Swedish House Mafia - DOnt you worry child loop
 
 ## NOT DECIDED
 * Lov og rett i L.A - ckip

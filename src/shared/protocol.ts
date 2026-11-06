@@ -23,8 +23,16 @@ const revealSchema = z.strictObject({
 const playbackDefinitionSchema = z.strictObject({
   startSeconds: z.number().min(0).optional(),
   endSeconds: z.number().positive().optional(),
-}).refine((p) => p.endSeconds === undefined || p.endSeconds > (p.startSeconds ?? 0),
-  { message: 'Playback end must be after start', path: ['endSeconds'] });
+  durationSeconds: z.number().min(0.1).optional(),
+  loop: z.strictObject({ increaseSeconds: z.number().min(0) }).optional(),
+}).superRefine((p, context) => {
+  if (p.endSeconds !== undefined && p.endSeconds <= (p.startSeconds ?? 0))
+    context.addIssue({ code: 'custom', path: ['endSeconds'], message: 'Playback end must be after start' });
+  if (p.endSeconds !== undefined && p.durationSeconds !== undefined)
+    context.addIssue({ code: 'custom', path: ['durationSeconds'], message: 'Use either playback duration or end, not both' });
+  if (p.loop && p.durationSeconds === undefined)
+    context.addIssue({ code: 'custom', path: ['durationSeconds'], message: 'A duration is required for looping audio' });
+});
 
 export const questionPointDecaySchema = z.strictObject({
   startPoints: z.number().int().min(1).max(10000),
@@ -106,6 +114,9 @@ export const questionDefinitionSchema = z.strictObject({
   if (question.type !== 'audio' && question.type !== 'video' && question.playback !== undefined) {
     context.addIssue({ code: 'custom', path: ['playback'], message: 'playback is only allowed for audio and video questions' });
   }
+  if (question.type !== 'audio' && (question.playback?.durationSeconds !== undefined || question.playback?.loop !== undefined)) {
+    context.addIssue({ code: 'custom', path: ['playback'], message: 'Playback duration and looping are only allowed for audio questions' });
+  }
 });
 export const questionSchema = questionDefinitionSchema.transform(({ reveal, playback, ...question }) => ({
   ...question,
@@ -157,6 +168,13 @@ export const serverSettingsSchema = z.object({
   endMusic: localMedia.refine((value) => /\.(wav|mp3|ogg|m4a)$/i.test(value), 'End music must be a WAV, MP3, OGG or M4A file').nullable().default(null),
 }).strict();
 export type ServerSettings = z.infer<typeof serverSettingsSchema>;
+export const startupRulesSchema = z.object({
+  title: z.string().trim().min(1).max(100),
+  rules: z.array(z.string().trim().min(1).max(180)).min(1).max(8),
+}).strict();
+export type StartupRules = z.infer<typeof startupRulesSchema>;
+export type StartupStep = 'welcome' | 'rules' | 'lobby';
+export interface WifiInfo { network: string; password: string }
 export type Phase = 'LOBBY' | 'STARTING' | 'NEXT_ROUND' | 'TYPE_BUZZ_INTRO' | 'QUESTION_OPEN' | 'ANSWERING' | 'BUZZ_RESULT' | 'MEDIA_FINISH' | 'QUESTION_CLOSED' | 'REVIEW_GROUP' | 'REVIEW' | 'REVIEW_COMPLETE' | 'ANSWER_REVEALED' | 'GAME_FINISHED';
 export interface BuzzResult {
   id: string;
@@ -203,6 +221,9 @@ export interface Snapshot {
   settings: Settings;
   serverSettings: ServerSettings;
   phase: Phase;
+  startupStep: StartupStep;
+  startupRules: StartupRules;
+  wifi: WifiInfo | null;
   startCountdownMs: number | null;
   nextRoundCountdownMs: number | null;
   typeBuzzIntroMs?: number | null;
@@ -236,6 +257,8 @@ export interface Snapshot {
   mediaFinishNeedsSkip: boolean;
   revealProgress: number;
   mediaPositionSeconds: number;
+  /** Server-probed media duration, used to synchronize capped audio loops. */
+  mediaDurationSeconds?: number | null;
   mediaVersion: number;
   canUndo: boolean;
   scoreEvents: ScoreEvent[];
@@ -272,7 +295,8 @@ export const hostCommandSchema = z.object({
   id: z.string().uuid(),
   revision: z.number().int().nonnegative(),
   action: z.discriminatedUnion('type', [
-    z.object({ type: z.enum(['start', 'pause', 'resume', 'close', 'reveal', 'next', 'reset', 'restartQuiz', 'restartMedia', 'skipMedia', 'undo', 'startReview', 'nextReview']) }),
+    z.object({ type: z.enum(['start', 'nextStartup', 'hideWifi', 'pause', 'resume', 'close', 'reveal', 'next', 'reset', 'restartQuiz', 'restartMedia', 'skipMedia', 'undo', 'startReview', 'nextReview']) }),
+    z.object({ type: z.literal('showWifi'), network: z.string().trim().min(1).max(100), password: z.string().max(100) }),
     z.object({ type: z.literal('judge'), correct: z.boolean() }),
     z.object({ type: z.literal('judgeReview'), correct: z.boolean() }),
     z.object({ type: z.literal('judgeSubmission'), playerId: z.string().uuid(), correct: z.boolean() }),

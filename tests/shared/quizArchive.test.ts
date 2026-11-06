@@ -16,6 +16,21 @@ function archive(entry: unknown = question()) {
   return { schemaVersion: 1, quiz: { id: 42, title: 'Quiz' }, questions: [entry] };
 }
 
+test('audio duration and progressive loops validate without breaking legacy playback', () => {
+  const entry = question('audio');
+  const playback = { startSeconds: 15, durationSeconds: 8, loop: { increaseSeconds: 2 } };
+  const parsed = quizArchiveSchema.parse(archive({ ...entry, playback }));
+  assert.deepEqual(toRuntimeQuiz(parsed).questions[0].playback, playback);
+  for (const invalid of [
+    { durationSeconds: 0 }, { durationSeconds: 0.01 }, { durationSeconds: 8, endSeconds: 10 },
+    { loop: { increaseSeconds: 2 } }, { durationSeconds: 8, loop: { increaseSeconds: -1 } },
+    { durationSeconds: 8, loop: { increaseSeconds: 2, typo: true } },
+  ]) assert.equal(archiveQuestionSchema.safeParse({ ...entry, playback: invalid }).success, false);
+  assert.equal(archiveQuestionSchema.safeParse({ ...entry, playback: { durationSeconds: 8, loop: { increaseSeconds: 0 } } }).success, true);
+  assert.equal(archiveQuestionSchema.safeParse({ ...question('video'), playback }).success, false);
+  assert.equal(archiveQuestionSchema.safeParse({ ...entry, playback: { startSeconds: 3, endSeconds: 7 } }).success, true);
+});
+
 test('buzzer question point decay overrides are validated and survive runtime conversion', () => {
   const pointDecay = { startPoints: 800, minimumPoints: 200, dropPoints: 75, dropEverySeconds: 3, pointDecayDelaySeconds: 4 };
   const parsed = quizArchiveSchema.parse(archive({ ...question(), pointDecay }));

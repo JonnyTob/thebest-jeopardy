@@ -4,6 +4,7 @@ import { QuestionClue } from '../components/QuestionClue';
 import { QuizCover } from '../components/QuizCover';
 import { CountdownSound } from '../components/CountdownSound';
 import { FinalResults } from '../components/FinalResults';
+import { branding } from '../branding';
 import { buzzerPointMode, REVIEW_GROUP_MS, REVIEW_RESULT_MS, startCountdownText } from '../../shared/game';
 import type { Snapshot } from '../../shared/protocol';
 
@@ -32,6 +33,37 @@ export function DisplayScreen({ state, connected, receivedAt, preview = false }:
   const combined = state.question?.mode === 'type-and-buzz';
   const intro = state.phase === 'TYPE_BUZZ_INTRO';
   const group = state.phase === 'REVIEW_GROUP' ? state.reviewGroup : null;
+
+  if (!preview && lobby && state.startupStep !== 'lobby') return <main className="tv-shell startup-screen">
+    <header className="tv-header"><Brand /><QuizName title={state.settings.title} id={state.quizId} />
+      <span className="question-counter">{state.startupStep === 'welcome' ? 'WELCOME' : 'HOW TO PLAY'}</span></header>
+    {!connected && <div className="tv-offline" role="alert">Connection lost. Waiting to reconnect.</div>}
+    <div className="tv-errors"><SessionError /></div>
+    <section className="startup-layout">
+      <div className="panel startup-main">
+        {state.startupStep === 'welcome' ? <><span className="eyebrow">WELCOME TO {branding.name.toUpperCase()}</span>
+          <h1>Bring everyone into the game.</h1>
+          <p>Play together on the big screen, answer on your phone, and buzz in for your moment.</p>
+          <strong>{branding.tagline}</strong>
+          {state.wifi && <section className="startup-wifi" aria-label="Wi-Fi details">
+            <div><span className="eyebrow">CONNECT TO WI-FI</span>
+              <p>Network: <strong>{state.wifi.network}</strong></p>
+              {state.wifi.password && <p>Password: <strong>{state.wifi.password}</strong></p>}</div>
+            <div className="startup-wifi-join">
+              <JoinLink compact minimal />
+            </div>
+          </section>}</> : <><span className="eyebrow">BEFORE WE BEGIN</span>
+          <h1>{state.startupRules.title}</h1>
+          <ol className="startup-rules">{state.startupRules.rules.map((rule, index) => <li key={index}>{rule}</li>)}</ol></>}
+      </div>
+      <aside className="panel startup-players"><span className="eyebrow">PLAYERS JOINING</span>
+        <div className="startup-count" role="status" aria-live="polite">{state.players.length} <small>joined</small></div>
+        <p>{state.players.filter((player) => player.connected).length} connected</p>
+        <ul>{state.players.map((player) => <li key={player.id}><Avatar id={player.avatarId} />
+          <span>{player.name}</span>{!player.connected && <small>offline</small>}</li>)}</ul>
+      </aside>
+    </section>
+  </main>;
 
   if (finished) return <main className="tv-shell final-screen">
     {!preview && <CountdownSound sound={state.serverSettings.countdownSound}

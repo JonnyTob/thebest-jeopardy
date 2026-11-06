@@ -26,6 +26,7 @@ export function PlayPage() {
   let status = 'Waiting for the host';
   let detail = 'The next question is on its way.';
   if (!connected) { status = 'Reconnecting'; detail = 'Your score and place are saved on the server.'; }
+  else if (state?.phase === 'LOBBY') { status = 'You are in!'; detail = 'Watch the TV while the host prepares the quiz.'; }
   else if (state?.phase === 'STARTING') { status = 'Game starting!'; detail = 'Watch the TV countdown. Answering opens when the first question appears.'; }
   else if (state?.phase === 'NEXT_ROUND') { status = `Next round: ${nextRoundCountdownText(state.nextRoundCountdownMs)}`; detail = 'Watch the TV. Buzzing opens when the next question appears.'; }
   else if (state?.phase === 'TYPE_BUZZ_INTRO') { status = 'Type + buzz'; detail = 'Type for smaller points or buzz for more. A correct buzz replaces your typed award; a wrong buzz loses points. Typing closes on the first buzz.'; }

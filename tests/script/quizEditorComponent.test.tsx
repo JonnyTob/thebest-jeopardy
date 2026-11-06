@@ -226,6 +226,44 @@ test('changing clue types does not prompt and clears only incompatible fields', 
   }
 });
 
+test('audio editor converts legacy end to duration and saves progressive loop settings', async () => {
+  const originalFetch = globalThis.fetch;
+  const originalWindow = globalThis.window;
+  const archive: QuizArchive = { schemaVersion: 1, quiz: { id: 42, title: 'Quiz' }, questions: [{
+    id: 'c1283d6f-bdd5-4d28-99c1-f2b344406394', type: 'audio', mode: 'buzzer',
+    question: 'Listen', answer: 'Answer', media: 'media/music.mp3', playback: { startSeconds: 3, endSeconds: 7 },
+  }] };
+  const saves: QuizArchive[] = [];
+  Object.assign(globalThis, { window: { addEventListener() {}, removeEventListener() {} },
+    fetch: async (url: string, init?: RequestInit) => {
+      if (url.endsWith('/media')) return Response.json({ files: ['media/music.mp3'], loadedReferences: [] });
+      if (init?.method === 'PUT') {
+        saves.push((JSON.parse(String(init.body)) as { archive: QuizArchive }).archive);
+        return Response.json({ revision: 'new' });
+      }
+      return Response.json({ archive, revision: 'original' });
+    } });
+  let view!: ReactTestRenderer;
+  try {
+    const gameState = new GameEngine(toRuntimeQuiz(archive)).snapshot(true);
+    await act(async () => { view = create(createElement(MemoryRouter, null, createElement(QuizEditor, {
+      passcode: 'host', gameState, onDirtyChange() {},
+    }))); });
+    const field = (text: string) => view.root.findAllByType('label')
+      .find((label) => label.children[0] === text)!.findByType('input');
+    assert.equal(field('Playback duration (seconds) (optional)').props.value, 4);
+    const loop = view.root.findAllByType('input').find((input) =>
+      input.props.type === 'checkbox' && input.parent?.children.includes(' Loop audio'))!;
+    await act(async () => { loop.props.onChange({ target: { checked: true } }); });
+    await act(async () => { field('Increase per loop (seconds)').props.onChange({ target: { value: '2' } }); });
+    await act(async () => { view.root.findAllByType('button').find((button) => button.children.join('') === 'Save quiz')!.props.onClick(); });
+    assert.deepEqual(saves[0].questions[0].playback, { startSeconds: 3, durationSeconds: 4, loop: { increaseSeconds: 2 } });
+  } finally {
+    if (view) await act(async () => { view.unmount(); });
+    Object.assign(globalThis, { fetch: originalFetch, window: originalWindow });
+  }
+});
+
 test('media picker and library search, page, preview, upload and protect references', async () => {
   const originalFetch = globalThis.fetch;
   const originalWindow = globalThis.window;

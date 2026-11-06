@@ -192,6 +192,43 @@ test('audio resumes after the result and a pending play is paused if disconnecte
   }
 });
 
+test('looping audio seeks to the synchronized start and stops at the current loop boundary', async () => {
+  const previousFrame = globalThis.requestAnimationFrame;
+  const previousCancel = globalThis.cancelAnimationFrame;
+  Object.assign(globalThis, { requestAnimationFrame: () => 1, cancelAnimationFrame: () => {} });
+  const media = { ...makeMedia(), duration: 27 };
+  const state: Snapshot = { ...base, phase: 'QUESTION_OPEN', clockRunning: true, displayClockRunning: true,
+    mediaPositionSeconds: 15, mediaDurationSeconds: 27, mediaFinishRemainingMs: null,
+    question: { ...base.question!, type: 'audio', visualizer: { enabled: false, style: 'spectrum' },
+      playback: { startSeconds: 15, durationSeconds: 8, loop: { increaseSeconds: 2 } } } };
+  let view!: ReactTestRenderer;
+  try {
+    await act(async () => { view = create(createElement(Media, { state }),
+      { createNodeMock: (element) => element.type === 'canvas' ? { getContext: () => null } : media }); });
+    const audio = view.root.findByType('audio');
+    await act(async () => { audio.props.onLoadedMetadata(); });
+    assert.equal(media.currentTime, 15);
+    assert.equal(media.paused, false);
+    media.currentTime = 23.1;
+    await act(async () => { audio.props.onTimeUpdate(); });
+    assert.equal(media.currentTime, 23);
+    assert.equal(media.paused, true);
+    await act(async () => { view.update(createElement(Media, { state: { ...state, mediaPositionSeconds: 23 } })); });
+    assert.equal(media.currentTime, 15);
+    assert.equal(media.paused, false);
+    await act(async () => { view.update(createElement(Media, { state: { ...state, phase: 'MEDIA_FINISH',
+      clockRunning: false, mediaPositionSeconds: 24, mediaFinishRemainingMs: 9000 } })); });
+    assert.equal(media.currentTime, 16);
+    await act(async () => { view.update(createElement(Media, { state: { ...state, phase: 'MEDIA_FINISH',
+      clockRunning: false, displayClockRunning: false, mediaPositionSeconds: 33, mediaFinishRemainingMs: 0 } })); });
+    assert.equal(media.currentTime, 25);
+    assert.equal(media.paused, true);
+  } finally {
+    if (view) await act(async () => { view.unmount(); });
+    Object.assign(globalThis, { requestAnimationFrame: previousFrame, cancelAnimationFrame: previousCancel });
+  }
+});
+
 test('host can skip or restart unknown media but cannot adjust scores or remove players; phone buzz is closed', async () => {
   const player = { id: 'alice', name: 'Alice', avatarId: 'fox' as const, score: 500, connected: true, joinedOrder: 0 };
   const state = { ...base, players: [player], leaderboardIds: [player.id], activePlayerId: player.id,

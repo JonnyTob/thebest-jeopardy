@@ -1,10 +1,10 @@
 import { useContext, useEffect, useState } from 'react';
-import QRCode from 'qrcode';
 import { Link } from 'react-router-dom';
 import { pointSettingsFor, valueWindowMs } from '../../shared/game';
 import type { AvatarId, Snapshot } from '../../shared/protocol';
 import { SessionContext, useSession } from '../session';
 import { branding } from '../branding';
+import { useQrCode } from './QrCode';
 
 const animalColors: Record<AvatarId, string> = {
   fox: '#f69246', cat: '#f7c955', bear: '#ba835b', panda: '#eee7fa', frog: '#65d7a1', owl: '#b49aef',
@@ -104,12 +104,14 @@ export function PointBar({ state }: { state: Snapshot }) {
   </div>;
 }
 
-export function JoinLink({ compact = false, editable = false }: { compact?: boolean; editable?: boolean }) {
+export function JoinLink({ compact = false, editable = false, minimal = false }: {
+  compact?: boolean; editable?: boolean; minimal?: boolean;
+}) {
   const session = useContext(SessionContext);
   const [urls, setUrls] = useState<string[]>([]);
   const [fallbackUrl, setFallbackUrl] = useState('');
   const url = session?.joinUrl ?? fallbackUrl;
-  const [qr, setQr] = useState('');
+  const { image: qr, error: qrError } = useQrCode(url);
   const [error, setError] = useState('');
   useEffect(() => {
     const controller = new AbortController();
@@ -126,24 +128,16 @@ export function JoinLink({ compact = false, editable = false }: { compact?: bool
     });
     return () => controller.abort();
   }, []);
-  useEffect(() => {
-    setQr('');
-    if (!url) return;
-    let active = true;
-    void QRCode.toDataURL(url, { width: 512, margin: 4, color: { dark: '#211035', light: '#ffffff' } })
-      .then((image) => { if (active) setQr(image); })
-      .catch((cause: unknown) => { if (active) setError(`Unable to generate QR code: ${String(cause)}`); });
-    return () => { active = false; };
-  }, [url]);
   return <div className={`join-link ${compact ? 'compact' : ''}`}>
     {qr && <img src={qr} alt={`QR code to join at ${url}`} />}
-    <div><span className="eyebrow">EVERYONE'S INVITED</span><h3>Join from your phone</h3>
-      <p>Same Wi-Fi. Pick an avatar. Get ready to buzz.</p>
+    <div>{!minimal && <span className="eyebrow">EVERYONE'S INVITED</span>}<h3>Join from your phone</h3>
+      {!minimal && <p>Same Wi-Fi. Pick an avatar. Get ready to buzz.</p>}
       {urls.length > 1 && !compact && editable && <label>LAN address<select value={url} disabled={!session?.connected || session.pending} onChange={(event) => { void session?.selectJoinUrl?.(event.target.value); }}>
         {[...new Set([...urls, ...(url ? [url] : [])])].map((address) => <option key={address}>{address}</option>)}
       </select></label>}
       <a className="join-url" href={url || '/play'}>{url || 'Loading join address...'}</a>
       {error && <p className="error-text" role="alert">{error}</p>}
+      {qrError && <p className="error-text" role="alert">Unable to generate join QR code. Use the join address.</p>}
     </div>
   </div>;
 }

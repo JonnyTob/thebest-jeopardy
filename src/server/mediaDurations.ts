@@ -13,7 +13,7 @@ export async function probeMediaDurations(quiz: Quiz, mediaRoot: string, prefix 
     .filter((question) => question.type === 'audio' || question.type === 'video')
     .map((question) => question.media).filter((value): value is string => !!value));
   for (const media of paths) {
-    if (!media.startsWith(prefix) || !/^\/media\/[a-zA-Z0-9_./-]+$/.test(media) || media.includes('..') || !/\.(wav|mp3|mp4)$/i.test(media)) continue;
+    if (!media.startsWith(prefix) || !/^\/media\/[a-zA-Z0-9_./-]+$/.test(media) || media.includes('..') || !/\.(wav|mp3|ogg|mp4)$/i.test(media)) continue;
     try {
       const file = await realpath(path.resolve(root, media.slice(prefix.length)));
       const relative = path.relative(root, file);

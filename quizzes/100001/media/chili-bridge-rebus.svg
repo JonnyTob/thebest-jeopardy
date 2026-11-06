@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
+  <defs>
+    <linearGradient id="background" x2="0" y2="1">
+      <stop stop-color="#f0f6fb"/>
+      <stop offset="1" stop-color="#dae7f1"/>
+    </linearGradient>
+    <linearGradient id="pepper" x1="0" x2="1" y2="1">
+      <stop stop-color="#ff7561"/>
+      <stop offset=".42" stop-color="#e63736"/>
+      <stop offset="1" stop-color="#a91f32"/>
+    </linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="170%">
+      <feGaussianBlur stdDeviation="13"/>
+    </filter>
+    <g id="chili">
+      <path d="M-24-145 C-23-177 -8-189 5-202 C-6-177 6-160 11-147" fill="none" stroke="#4e8668" stroke-width="16" stroke-linecap="round"/>
+      <path d="M-45-148 Q-31-164-10-157 Q6-166 26-150 L39-135 L14-135 L-1-122 L-16-135 L-43-132 Z" fill="#6ca985" stroke="#4e8668" stroke-width="4" stroke-linejoin="round"/>
+      <path d="M-39-135 C-79-103 -67-26 -34 51 C-11 104 25 145 77 161 C43 125 35 89 36 42 C39-27 53-95 20-132 Q-8-145-39-135Z" fill="url(#pepper)" stroke="#ae2e39" stroke-width="5" stroke-linejoin="round"/>
+      <path d="M-29-111 C-47-82 -39-30 -21 10" fill="none" stroke="#ffc7b6" stroke-width="9" stroke-linecap="round" opacity=".8"/>
+    </g>
+  </defs>
+  <rect width="1920" height="1080" fill="url(#background)"/>
+
+  <g fill="#8da5b5" opacity=".23" filter="url(#shadow)">
+    <rect x="80" y="252" width="510" height="600" rx="32"/>
+    <rect x="705" y="252" width="510" height="600" rx="32"/>
+    <rect x="1330" y="252" width="510" height="600" rx="32"/>
+  </g>
+  <g fill="#fff">
+    <rect x="80" y="240" width="510" height="600" rx="32"/>
+    <rect x="705" y="240" width="510" height="600" rx="32"/>
+    <rect x="1330" y="240" width="510" height="600" rx="32"/>
+  </g>
+  <g fill="none" stroke="#24394d" stroke-width="15" stroke-linecap="round">
+    <path d="M620 540h54 M647 513v54"/>
+    <path d="M1245 540h54 M1272 513v54"/>
+  </g>
+
+  <!-- Three bright peppers and warm heat marks. -->
+  <circle cx="335" cy="535" r="205" fill="#f3f8f8"/>
+  <ellipse cx="335" cy="738" rx="163" ry="15" fill="#e1ebef"/>
+  <path d="M206 407 Q190 389 200 369 M223 397 Q213 377 225 356 M452 401 Q463 382 455 363 M470 416 Q486 399 481 379" fill="none" stroke="#f4b879" stroke-width="7" stroke-linecap="round"/>
+  <g transform="translate(236 548) rotate(-25) scale(.8)"><use href="#chili"/></g>
+  <g transform="translate(421 551) rotate(25) scale(.8)"><use href="#chili"/></g>
+  <g transform="translate(329 551) rotate(-5)"><use href="#chili"/></g>
+
+  <!-- Four musicians suggest a band without using portraits or logos. -->
+  <g transform="translate(625 0)">
+  <circle cx="960" cy="533" r="202" fill="#eef5f8"/>
+  <ellipse cx="961" cy="740" rx="185" ry="15" fill="#e1ebef"/>
+  <g fill="#24394d" stroke="#24394d" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="809" cy="452" r="23"/>
+    <path d="M799 482 Q810 474 820 483 L833 550 L818 566 L823 695 M800 566 L790 695" fill="none" stroke-width="16"/>
+    <path d="M801 489 L780 540 L794 556 M821 490 L842 462 L855 441" fill="none" stroke-width="12"/>
+    <path d="M853 438 L868 438 M861 442 L861 715 M844 716 L878 716" fill="none" stroke-width="7"/>
+    <circle cx="903" cy="447" r="23"/>
+    <path d="M893 481 Q903 475 914 482 L926 554 L913 567 L919 695 M894 568 L884 695" fill="none" stroke-width="16"/>
+    <path d="M894 490 L875 533 L896 553 M913 490 L927 519 L950 497" fill="none" stroke-width="12"/>
+    <path d="M896 538 C878 534 866 548 870 565 C875 582 896 589 910 578 C925 568 920 549 907 543Z" fill="#638097" stroke-width="5"/>
+    <path d="M908 550 L950 510" fill="none" stroke-width="10"/>
+    <circle cx="1001" cy="447" r="23"/>
+    <path d="M991 481 Q1002 475 1013 482 L1024 554 L1012 567 L1018 695 M992 568 L983 695" fill="none" stroke-width="16"/>
+    <path d="M992 490 L974 532 L990 552 M1013 490 L1027 519 L1051 498" fill="none" stroke-width="12"/>
+    <path d="M991 540 C974 534 961 549 967 566 C972 584 992 588 1007 578 C1020 566 1016 549 1003 543Z" fill="#638097" stroke-width="5"/>
+    <path d="M1004 550 L1050 510" fill="none" stroke-width="10"/>
+    <circle cx="1104" cy="478" r="23"/>
+    <path d="M1092 511 Q1104 503 1116 512 L1128 570 L1082 570 Z" stroke-width="4"/>
+    <path d="M1091 520 L1071 550 L1055 531 M1117 521 L1133 548 L1151 524" fill="none" stroke-width="11"/>
+    <path d="M1055 531 L1047 511 M1151 524 L1161 503" fill="none" stroke-width="5"/>
+    <rect x="1067" y="579" width="29" height="33" fill="#a5becb" stroke-width="4"/>
+    <rect x="1112" y="579" width="29" height="33" fill="#a5becb" stroke-width="4"/>
+    <circle cx="1104" cy="661" r="56" fill="#6c879c" stroke-width="7"/>
+    <circle cx="1104" cy="661" r="43" fill="#e1ebf0" stroke-width="4"/>
+    <path d="M1041 578h47 M1127 575h51 M1065 579v113 M1153 577v115" fill="none" stroke-width="5"/>
+    <path d="M1041 578 Q1064 565 1088 578 Q1064 585 1041 578 M1127 575 Q1152 562 1178 575 Q1152 583 1127 575" fill="#e2bb70" stroke-width="4"/>
+  </g>
+  </g>
+
+  <!-- A downward arrow points into the passage beneath the bridge. -->
+  <g transform="translate(-625 0)">
+  <circle cx="1585" cy="530" r="205" fill="#edf5f8"/>
+  <path d="M1377 663 Q1480 651 1585 660 T1793 660 L1793 728 Q1586 746 1377 728Z" fill="#c6d6d7"/>
+  <g fill="#d0dce3">
+    <path d="M1398 535v-73h30v-25h35v98z"/>
+    <path d="M1465 535v-98h30v-33h25v131z"/>
+    <path d="M1647 535v-86h36v-28h29v114z"/>
+    <path d="M1713 535v-65h24v-25h30v90z"/>
+  </g>
+  <g fill="#aabecb">
+    <path d="M1410 475h8v12h-8z M1440 462h8v12h-8z M1477 454h8v12h-8z M1497 428h8v12h-8z M1660 467h8v12h-8z M1692 449h8v12h-8z M1725 485h8v12h-8z"/>
+  </g>
+  <path d="M1389 522 H1781 V551 H1389Z" fill="#aabcc7" stroke="#718a9a" stroke-width="5"/>
+  <path d="M1389 551 H1781 V674 H1737 C1712 561 1458 561 1435 674 H1389Z" fill="#d8e2e7" stroke="#718a9a" stroke-width="6" stroke-linejoin="round"/>
+  <path d="M1390 522 H1780 M1403 504v18 M1442 504v18 M1481 504v18 M1520 504v18 M1559 504v18 M1598 504v18 M1637 504v18 M1676 504v18 M1715 504v18 M1754 504v18 M1390 505h390" fill="none" stroke="#718a9a" stroke-width="5" stroke-linecap="round"/>
+  <path d="M1585 552v76 M1568 611l17 17 17-17" fill="none" stroke="#fff8e5" stroke-width="17" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M1585 552v76 M1568 611l17 17 17-17" fill="none" stroke="#bf7c2d" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M1460 706h78 M1632 706h78" fill="none" stroke="#edf4f2" stroke-width="5" stroke-linecap="round"/>
+  </g>
+
+</svg>

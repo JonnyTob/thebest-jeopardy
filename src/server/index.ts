@@ -2,7 +2,7 @@ import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { createApp } from './app.js';
 import { ArchiveQuizStorage, ArchiveQuizSettingsStorage } from './storage.js';
-import { loadGlobalSettings } from './settings.js';
+import { loadGlobalSettings, loadStartupRules } from './settings.js';
 
 const settings = loadGlobalSettings(path.resolve('settings.json'));
 const { port, joinOrigin, startupQuizId, ...serverSettings } = settings.server;
@@ -19,6 +19,7 @@ const application = await createApp({
   settingsStorage: new ArchiveQuizSettingsStorage(storage),
   serverSettings,
   branding: settings.branding,
+  startupRules: loadStartupRules(path.resolve('startup-rules.json')),
 });
 application.httpServer.on('error', (error) => {
   console.error(`Unable to start ${settings.branding.name}:`, error);
