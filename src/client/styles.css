@@ -196,9 +196,10 @@ td:last-child, th:last-child { padding-right: 0; }
 .editor-question-disabled { flex: none; padding: 2px 6px; border-radius: 6px; color: #ffd3d3; background: #712d38; font-size: .65rem; white-space: nowrap; }
 .editor-question-enabled { display: flex; align-items: center; gap: 8px; }
 .editor-fields input[type="checkbox"] { width: auto; }
-.editor-optional { display: grid; gap: 16px; border-top: 1px solid #4a6964; padding-top: 16px; }
-.editor-optional h3 { margin: 0; }
-.editor-optional label small { color: var(--muted); font-size: .8rem; font-weight: normal; line-height: 1.4; }
+.editor-section { display: grid; gap: 16px; border-top: 1px solid #4a6964; padding-top: 16px; min-width: 0; }
+.editor-subsection { display: grid; gap: 16px; min-width: 0; }
+.editor-section h3, .editor-section h4 { margin: 0; }
+.editor-section label small { color: var(--muted); font-size: .8rem; font-weight: normal; line-height: 1.4; }
 .editor-media-field { display: grid; gap: 8px; min-width: 0; }
 .editor-media-field span, .media-browser-details strong { overflow-wrap: anywhere; }
 .editor-video-duration { color: var(--muted); font-size: .9rem; white-space: nowrap; }
@@ -504,6 +505,9 @@ td:last-child, th:last-child { padding-right: 0; }
 .game-start-content { position: relative; width: 100%; padding: 24px; text-align: center; }
 .game-start-content .eyebrow { font-size: clamp(.8rem, 1.6vw, 2rem); color: var(--gold); letter-spacing: .22em; }
 .game-start-content > p { margin: 20px 0 0; font-size: clamp(.8rem, 1.5vw, 1.8rem); }
+.type-buzz-intro .game-start-content > p { margin: clamp(8px, 1.5vh, 16px) 0 0; color: #f2f7ed; font-size: clamp(1.65rem, 3vw, 2.25rem); font-weight: 700; line-height: 1.2; }
+.type-buzz-intro .game-start-content > .type-buzz-highlight { color: var(--gold); }
+.type-buzz-countdown { display: block; margin-top: clamp(8px, 1.5vh, 16px); font-size: clamp(1.65rem, 3vw, 2.25rem); }
 .game-start-number { display: block; font-size: min(42vh, 36vw); font-weight: 950; line-height: 1.2; color: #fff4d4; text-shadow: 0 0 70px #edbe5866, 0 12px 0 #4a6964; animation: game-start-pop .65s ease-out both; }
 .game-start-number.game-start-go { font-size: min(27vh, 14vw); color: var(--gold); white-space: nowrap; }
 .game-start-ring { position: absolute; width: min(78vw, 85vh); aspect-ratio: 1; border: 2px solid #edbe5833; border-radius: 50%; box-shadow: 0 0 0 30px #68dcc10a, 0 0 0 65px #68dcc10a, inset 0 0 80px #68dcc122; }

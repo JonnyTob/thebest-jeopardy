@@ -246,15 +246,25 @@ export function QuizEditor({ passcode, onDirtyChange, gameState, quizId }: { pas
           }}>Delete question</button></div>
       </div>{question ? <div className="editor-fields"><div className="editor-question-heading"><h2>Question {selected + 1}</h2>
         <button className="small primary" ref={previewButton} type="button" onClick={openPreview}>Preview question</button></div>
+        <section className="editor-section" aria-labelledby="editor-question-details"><h3 id="editor-question-details">Question details</h3>
         <label>Mode<select value={question.mode} onChange={(event) => {
           const mode = event.target.value as ArchiveQuestion['mode'];
           updateQuestion({ mode, fixedPoints: mode === 'typed' ? 250 : mode === 'type-and-buzz' ? 100 : undefined,
             buzzPoints: mode === 'type-and-buzz' ? 500 : undefined, typingSeconds: mode === 'type-and-buzz' ? 10 : undefined,
             pointMode: undefined, pointDecay: undefined });
         }}><option value="buzzer">Buzzer</option><option value="typed">Typed</option><option value="type-and-buzz">Type + buzz</option></select></label>
-        <label>Clue type<select value={question.type} onChange={(event) => changeType(event.target.value as ArchiveQuestion['type'])}>
-          <option value="text">Text</option><option value="image">Image</option><option value="audio">Audio</option><option value="video">Video</option></select></label>
-        {question.type !== 'text' && mediaField('Clue media', question.media, question.type, question.id, () => updateQuestion({ media: undefined }))}
+        <label className="editor-question-enabled"><input type="checkbox" checked={question.enabled !== false}
+          onChange={(event) => updateQuestion({ enabled: event.target.checked })} /> Include question in quiz</label>
+        <label>Question<textarea rows={1} value={question.question} onChange={(event) => updateQuestion({ question: event.target.value })} /></label>
+        <label>Answer<textarea rows={1} value={question.answer} onChange={(event) => updateQuestion({ answer: event.target.value })} /></label>
+        <label>Keyword (optional)<input value={question.keyword ?? ''} onChange={(event) => updateQuestion({ keyword: event.target.value || undefined })} />
+          <small>A short name for finding this question in the editor.</small></label>
+        <section className="editor-subsection" aria-labelledby="editor-clue"><h4 id="editor-clue">Clue content and playback</h4>
+          <label>Clue type<select value={question.type} onChange={(event) => changeType(event.target.value as ArchiveQuestion['type'])}>
+            <option value="text">Text</option><option value="image">Image</option><option value="audio">Audio</option><option value="video">Video</option></select></label>
+          {question.type === 'text' && <label>Clue text (optional)<textarea rows={1} value={question.text ?? ''} onChange={(event) => updateQuestion({ text: event.target.value || undefined })} />
+            <small>Additional text displayed below the question.</small></label>}
+          {question.type !== 'text' && mediaField('Clue media', question.media, question.type, question.id, () => updateQuestion({ media: undefined }))}
           {question.type === 'image' && <><label>Reveal effect (optional)<select value={question.reveal?.effect ?? 'static'} onChange={(event) => updateQuestion({ reveal: { ...question.reveal, effect: event.target.value === 'tiles' ? 'tiles' : 'static' } })}><option value="static">Static</option><option value="tiles">Tiles</option></select>
             <small>Choose whether the image appears at once or is revealed in tiles.</small></label>
             {question.reveal?.effect === 'tiles' && ([['durationSeconds', 'Reveal duration (seconds)', 'Default: 20 seconds.'], ['columns', 'Tile columns', 'Default: 8 columns.'], ['rows', 'Tile rows', 'Default: 6 rows.'], ['seed', 'Reveal seed', 'Default: 814; the same seed repeats the tile order.']] as const).map(([field, label, help]) => <label key={field}>{label} (optional)<input type="number" value={question.reveal?.[field] ?? ''} placeholder="Default" onChange={(event) => updateQuestion({ reveal: { ...question.reveal, [field]: event.target.value === '' ? undefined : Number(event.target.value) } })} /><small>{help}</small></label>)}</>}
@@ -275,13 +285,16 @@ export function QuizEditor({ passcode, onDirtyChange, gameState, quizId }: { pas
                 loop: { increaseSeconds: event.target.value === '' ? NaN : Number(event.target.value) } } })} />
               <small>Each repeat is longer by this amount, up to the end of the file. Use 0 for equal-length loops.</small></label>}</>}
           {question.type === 'audio' && <label className="editor-question-enabled"><input type="checkbox" checked={question.visualizer?.enabled ?? false} onChange={(event) => updateQuestion({ visualizer: { enabled: event.target.checked, style: 'spectrum' } })} /> Show audio visualizer (optional)</label>}
-        <label className="editor-question-enabled"><input type="checkbox" checked={question.enabled !== false}
-          onChange={(event) => updateQuestion({ enabled: event.target.checked })} /> Include question in quiz</label>
-        <label>Question<textarea rows={1} value={question.question} onChange={(event) => updateQuestion({ question: event.target.value })} /></label>
-        <label>Answer<textarea rows={1} value={question.answer} onChange={(event) => updateQuestion({ answer: event.target.value })} /></label>
-        {(question.mode === 'type-and-buzz' || (question.mode === 'typed' && question.pointMode !== 'decay')) && <label>{question.mode === 'type-and-buzz' ? 'Typed answer points' : 'Fixed points'}<input type="number" min={1} max={10000} value={Number.isNaN(question.fixedPoints) ? '' : question.fixedPoints ?? ''} onChange={(event) => updateQuestion({ fixedPoints: event.target.value === '' ? NaN : Number(event.target.value) })} /></label>}
+        </section></section>
+        <section className="editor-section" aria-labelledby="editor-timing"><h3 id="editor-timing">Timing</h3>
+        <label>{question.mode === 'type-and-buzz' ? 'Buzzer countdown (seconds) (optional)' : 'Timer countdown (seconds) (optional)'}<input type="number" min={1} max={3600} placeholder={`Inherit global (${archive.gameSetup?.questionTimerSeconds ?? globalSettings?.questionTimerSeconds ?? gameState.settings.questionTimerSeconds}s)`}
+          value={question.timerSeconds ?? ''} onChange={(event) => updateQuestion({ timerSeconds: event.target.value === '' ? undefined : Number(event.target.value) })} />
+          <small>Leave blank to use the quiz's default countdown.</small></label>
         {question.mode === 'type-and-buzz' && <label>Initial typing window (seconds)<input type="number" min={1} max={3600} value={Number.isNaN(question.typingSeconds) ? '' : question.typingSeconds ?? ''} onChange={(event) => updateQuestion({ typingSeconds: event.target.value === '' ? NaN : Number(event.target.value) })} /></label>}
-        {<div className="editor-optional"><h3>{question.mode === 'typed' ? 'Answer points' : 'Buzzer points'}</h3>
+        </section>
+        <section className="editor-section" aria-labelledby="editor-scoring"><h3 id="editor-scoring">Scoring</h3>
+          {question.mode === 'type-and-buzz' && <label>Typed answer points<input type="number" min={1} max={10000} value={Number.isNaN(question.fixedPoints) ? '' : question.fixedPoints ?? ''} onChange={(event) => updateQuestion({ fixedPoints: event.target.value === '' ? NaN : Number(event.target.value) })} /></label>}
+          <h4>{question.mode === 'typed' ? 'Answer points' : 'Buzzer points'}</h4>
           <label>Point type<select value={question.pointMode ?? (question.mode === 'buzzer' ? 'decay' : 'fixed')} onChange={(event) => {
             const inherited = { ...(globalSettings ?? gameState.settings), ...archive.gameSetup };
             if (event.target.value === 'fixed') {
@@ -294,7 +307,8 @@ export function QuizEditor({ passcode, onDirtyChange, gameState, quizId }: { pas
             }
           }}><option value="fixed">Fixed points</option><option value="decay">Decaying points</option></select></label>
           {(question.pointMode ?? (question.mode === 'buzzer' ? 'decay' : 'fixed')) === 'fixed'
-            ? question.mode === 'typed' ? null : <label>Buzzer points for a correct answer<input type="number" min={1} max={10000} value={Number.isNaN(question.buzzPoints) ? '' : question.buzzPoints ?? ''} onChange={(event) => updateQuestion({ buzzPoints: event.target.value === '' ? NaN : Number(event.target.value) })} /></label>
+            ? question.mode === 'typed' ? <label>Fixed points<input type="number" min={1} max={10000} value={Number.isNaN(question.fixedPoints) ? '' : question.fixedPoints ?? ''} onChange={(event) => updateQuestion({ fixedPoints: event.target.value === '' ? NaN : Number(event.target.value) })} /></label>
+              : <label>Buzzer points for a correct answer<input type="number" min={1} max={10000} value={Number.isNaN(question.buzzPoints) ? '' : question.buzzPoints ?? ''} onChange={(event) => updateQuestion({ buzzPoints: event.target.value === '' ? NaN : Number(event.target.value) })} /></label>
             : <>
           {!question.pointDecay && <small>Showing the quiz's default values. Editing a value saves all five settings for this question.</small>}
           {([['startPoints', 'Starting points', 1, 10000], ['minimumPoints', 'Minimum points', 1, 10000],
@@ -303,17 +317,7 @@ export function QuizEditor({ passcode, onDirtyChange, gameState, quizId }: { pas
             <label key={field}>{label}<input type="number" min={min} max={max} step={field === 'dropEverySeconds' ? 'any' : 1} value={Number.isNaN(decayPoints[field]) ? '' : decayPoints[field]}
               onChange={(event) => updateQuestion({ pointDecay: { ...decayPoints, [field]: event.target.value === '' ? NaN : Number(event.target.value) } })} /></label>)}
           </>}
-        </div>}
-        <div className="editor-optional"><h3>Optional settings</h3>
-          <label>Keyword (optional)<input value={question.keyword ?? ''} onChange={(event) => updateQuestion({ keyword: event.target.value || undefined })} />
-            <small>A short name for finding this question in the editor.</small></label>
-          {question.type === 'text' && <label>Clue text (optional)<textarea rows={1} value={question.text ?? ''} onChange={(event) => updateQuestion({ text: event.target.value || undefined })} />
-            <small>Additional text displayed below the question.</small></label>}
-          <label>{question.mode === 'type-and-buzz' ? 'Buzzer countdown (seconds) (optional)' : 'Timer countdown (seconds) (optional)'}<input type="number" min={1} max={3600} placeholder={`Inherit global (${archive.gameSetup?.questionTimerSeconds ?? globalSettings?.questionTimerSeconds ?? gameState.settings.questionTimerSeconds}s)`}
-            value={question.timerSeconds ?? ''} onChange={(event) => updateQuestion({ timerSeconds: event.target.value === '' ? undefined : Number(event.target.value) })} />
-            <small>Leave blank to use the quiz's default countdown.</small></label>
-
-        </div>
+        </section>
       </div> : <p>Add a question to start building this quiz.</p>}</div>
       {preview && <QuestionPreview preview={preview} generation={preview.generation} gameState={gameState} quizId={quizId}
         onRefresh={openPreview} error={previewError} onClose={() => { setPreview(null); setPreviewError(''); previewButton.current?.focus(); }} />}

@@ -143,12 +143,14 @@ export function DisplayScreen({ state, connected, receivedAt, preview = false }:
         <p>{connected ? 'Eyes on the screen. Get ready to play.' : 'Connection lost. Waiting to reconnect...'}</p>
       </div>
     </div>}
-    {intro && <div className="game-start-overlay" role="status" aria-live="polite">
+    {intro && <div className="game-start-overlay type-buzz-intro" role="status" aria-live="polite">
       <div className="game-start-ring" aria-hidden="true" /><div className="game-start-content">
-        <span className="eyebrow">TYPE + BUZZ</span><h1>BIGGER STAKES. BIGGER REWARDS.</h1>
-        <p>Type before the first buzz for {state.question?.fixedPoints} points.</p>
-        <p>Buzz for {state.currentPoints} points{buzzerPointMode(state.question) === 'decay' ? ' to start' : ''}. Wrong buzz loses half; a correct buzz replaces your typed award.</p>
-        <strong>{Math.ceil((state.typeBuzzIntroMs ?? 0) / 1000)}</strong>
+        <span className="eyebrow">TYPE + BUZZ</span><h1>BIGGER STAKES - BIGGER REWARDS</h1>
+        {/* <p>Type before the first buzz.</p> --> */}
+        <p className="type-buzz-highlight">First correct buzz earn the most points!</p>
+        <p style={{ marginTop: '2em' }}>But wrong buzz loses half.</p>
+        <p>Type your answear to play safe earning less points.</p>
+        <strong className="type-buzz-countdown">{Math.ceil((state.typeBuzzIntroMs ?? 0) / 1000)}</strong>
       </div>
     </div>}
   </main>;

@@ -423,8 +423,12 @@ is rejected if the saved quiz changed after the library was loaded; reopen the
 library to review its latest state. Another host's unsaved edits cannot be detected.
 
 The editor adds, duplicates, removes and reorders questions and manages quiz-local
-media. The question list labels each question as **Buzzer**, **Typed**, or **Type + buzz**. Clear
-**Include question in quiz** to opt a question out without deleting it; opted-out
+media. The question list labels each question as **Buzzer**, **Typed**, or **Type + buzz**.
+The selected question keeps a consistent section order: **Question details**,
+**Timing**, then **Scoring**. Within Question details, **Clue content and
+playback** groups the clue type with its text, image, audio or video options.
+Mode-specific timing and scoring controls appear in their respective sections.
+Clear **Include question in quiz** to opt a question out without deleting it; opted-out
 questions are marked in the list and remain editable and previewable. Questions
 are included by default. As with other edits, the saved selection takes effect
 after the quiz is reloaded. You can save with every question opted out, but

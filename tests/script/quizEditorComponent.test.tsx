@@ -12,6 +12,8 @@ const previousDocument = globalThis.document;
 Object.assign(globalThis, { document: { getElementById: () => ({ textContent: '{}' }) } });
 const { QuizEditor } = await import('../../src/client/components/QuizEditor.js');
 const { QuestionPreview, previewSnapshot } = await import('../../src/client/components/QuestionPreview.js');
+const { DisplayScreen } = await import('../../src/client/pages/DisplayPage.js');
+const { SessionContext } = await import('../../src/client/session.js');
 Object.assign(globalThis, { document: previousDocument });
 
 test('editor handles drafts, validation, question IDs, reordering and conflict feedback', async () => {
@@ -169,6 +171,87 @@ test('editor handles drafts, validation, question IDs, reordering and conflict f
     let warned = false;
     listeners.get('beforeunload')?.({ preventDefault: () => { warned = true; } } as Event);
     assert.equal(warned, true);
+  } finally {
+    if (view) await act(async () => { view.unmount(); });
+    Object.assign(globalThis, { fetch: originalFetch, window: originalWindow });
+  }
+});
+
+test('question fields stay grouped and ordered across modes and clue types', async () => {
+  const originalFetch = globalThis.fetch;
+  const originalWindow = globalThis.window;
+  const archive: QuizArchive = { schemaVersion: 1, quiz: { id: 42, title: 'Quiz' }, questions: [{
+    id: 'c1283d6f-bdd5-4d28-99c1-f2b344406394', type: 'text', mode: 'buzzer',
+    question: 'Question', answer: 'Answer', keyword: 'Keyword', timerSeconds: 30,
+  }] };
+  Object.assign(globalThis, { window: { addEventListener() {}, removeEventListener() {} },
+    fetch: async (url: string) => url.endsWith('/media')
+      ? Response.json({ files: [], loadedReferences: [] })
+      : Response.json({ archive, revision: 'original' }) });
+  let view!: ReactTestRenderer;
+  try {
+    const gameState = new GameEngine(toRuntimeQuiz(archive)).snapshot(true);
+    await act(async () => { view = create(createElement(MemoryRouter, null, createElement(QuizEditor, {
+      passcode: 'host', gameState, onDirtyChange() {},
+    }))); });
+    const field = (name: string) => view.root.findAllByType('label').find((label) => label.children[0] === name)!;
+    const select = (name: string, value: string) => act(async () => {
+      field(name).findByType('select').props.onChange({ target: { value } });
+    });
+    const sections = () => view.root.findByProps({ className: 'editor-fields' }).findAllByType('section');
+    const section = (id: string) => sections().find((item) => item.props['aria-labelledby'] === id)!;
+    const labels = (id: string) => section(id).findAllByType('label')
+      .map((label) => label.children.filter((child): child is string => typeof child === 'string').join('').trim());
+
+    for (const mode of ['buzzer', 'typed', 'type-and-buzz']) {
+      await select('Mode', mode);
+      for (const type of ['text', 'image', 'audio', 'video']) {
+        await select('Clue type', type);
+        assert.deepEqual(sections().map((item) => item.props['aria-labelledby']),
+          ['editor-question-details', 'editor-clue', 'editor-timing', 'editor-scoring']);
+        assert.equal(section('editor-clue').parent, section('editor-question-details'));
+        assert.equal(section('editor-clue').findByType('h4').children.join(''), 'Clue content and playback');
+        assert.deepEqual(labels('editor-question-details').slice(0, 6),
+          ['Mode', 'Include question in quiz', 'Question', 'Answer', 'Keyword (optional)', 'Clue type']);
+        assert.equal(labels('editor-clue')[0], 'Clue type');
+        assert.deepEqual(labels('editor-timing'), mode === 'type-and-buzz'
+          ? ['Buzzer countdown (seconds) (optional)', 'Initial typing window (seconds)']
+          : ['Timer countdown (seconds) (optional)']);
+        assert.equal(field('Question').findByType('textarea').props.value, 'Question');
+        assert.equal(field('Answer').findByType('textarea').props.value, 'Answer');
+        assert.equal(field('Keyword (optional)').findByType('input').props.value, 'Keyword');
+        assert.equal(field(mode === 'type-and-buzz' ? 'Buzzer countdown (seconds) (optional)' : 'Timer countdown (seconds) (optional)')
+          .findByType('input').props.value, 30);
+
+        assert.ok(labels('editor-scoring').includes('Point type'));
+        assert.equal(labels('editor-scoring').includes('Typed answer points'), mode === 'type-and-buzz');
+        assert.equal(section('editor-clue').findAllByProps({ className: 'editor-media-field' }).length, type === 'text' ? 0 : 1);
+        assert.equal(labels('editor-clue').includes('Clue text (optional)'), type === 'text');
+        assert.equal(labels('editor-clue').includes('Reveal effect (optional)'), type === 'image');
+        assert.equal(labels('editor-clue').includes('Playback start (seconds) (optional)'), type === 'audio' || type === 'video');
+        assert.equal(labels('editor-clue').includes('Playback duration (seconds) (optional)'), type === 'audio');
+        assert.equal(labels('editor-clue').includes('Loop audio'), type === 'audio');
+        assert.equal(labels('editor-clue').includes('Show audio visualizer (optional)'), type === 'audio');
+        assert.equal(labels('editor-clue').includes('Playback end (seconds) (optional)'), type === 'video');
+
+        if (type === 'image') {
+          await select('Reveal effect (optional)', 'tiles');
+          assert.ok(labels('editor-clue').includes('Tile columns (optional)'));
+          assert.ok(labels('editor-clue').includes('Tile rows (optional)'));
+        }
+        if (type === 'audio') {
+          const loop = section('editor-clue').findAllByType('label').find((label) => label.children.includes(' Loop audio'))!;
+          await act(async () => { loop.findByType('input').props.onChange({ target: { checked: true } }); });
+          assert.ok(labels('editor-clue').includes('Increase per loop (seconds)'));
+        }
+        for (const points of ['fixed', 'decay']) {
+          await select('Point type', points);
+          assert.equal(labels('editor-scoring').includes('Starting points'), points === 'decay');
+          assert.equal(labels('editor-scoring').includes('Fixed points'), points === 'fixed' && mode === 'typed');
+          assert.equal(labels('editor-scoring').includes('Buzzer points for a correct answer'), points === 'fixed' && mode !== 'typed');
+        }
+      }
+    }
   } finally {
     if (view) await act(async () => { view.unmount(); });
     Object.assign(globalThis, { fetch: originalFetch, window: originalWindow });
@@ -413,6 +496,36 @@ test('media picker and library search, page, preview, upload and protect referen
   } finally {
     if (view) await act(async () => { view.unmount(); });
     Object.assign(globalThis, { fetch: originalFetch, window: originalWindow });
+  }
+});
+
+test('type and buzz intro uses the same point-independent rules on TV and preview', () => {
+  for (const scoring of [
+    { pointMode: 'fixed' as const, buzzPoints: 863 },
+    { pointMode: 'decay' as const, pointDecay: {
+      startPoints: 863, minimumPoints: 50, dropPoints: 10, dropEverySeconds: 1, pointDecayDelaySeconds: 0,
+    } },
+  ]) {
+    const question = { id: 'one', type: 'text' as const, mode: 'type-and-buzz' as const,
+      question: 'Clue', answer: 'Answer', fixedPoints: 137, typingSeconds: 10, ...scoring };
+    const game = new GameEngine({ id: 42, title: 'Quiz', questions: [question] });
+    game.command({ id: 'start', revision: game.revision, action: { type: 'start' } });
+    const live = game.snapshot();
+    const preview = previewSnapshot(live, { question, settings: live.settings, index: 0, count: 1 }, 0);
+    for (const [state, isPreview] of [[live, false], [preview, true]] as const) {
+      const session = { state, connected: true, receivedAt: 0, playerId: null, error: null, pending: false,
+        clearError() {}, command: async () => true, join: async () => true, buzz: async () => true, submitAnswer: async () => true };
+      let view!: ReactTestRenderer;
+      act(() => { view = create(createElement(MemoryRouter, null, createElement(SessionContext.Provider, { value: session },
+        createElement(DisplayScreen, { state, connected: true, receivedAt: 0, preview: isPreview })))); });
+      const intro = view.root.findByProps({ className: 'game-start-overlay type-buzz-intro' });
+      assert.deepEqual(intro.findAllByType('p').map((item) => item.children.join('')), [
+        'Type before the first buzz.', 'First correct buzz can earn the most points!',
+        'Wrong buzz loses half.', 'Correct buzz replaces your typed points.',
+      ]);
+      assert.doesNotMatch(intro.findAllByType('p').map((item) => item.children.join('')).join(' '), /137|863/);
+      act(() => { view.unmount(); });
+    }
   }
 });
 
