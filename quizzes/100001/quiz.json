@@ -52,11 +52,11 @@
       "pointDecay": {
         "startPoints": 500,
         "minimumPoints": 200,
-        "dropPoints": 20,
-        "dropEverySeconds": 5,
+        "dropPoints": 25,
+        "dropEverySeconds": 4,
         "pointDecayDelaySeconds": 0
       },
-      "timerSeconds": 20,
+      "timerSeconds": 23,
       "media": "media/Michael-Jackson-Pic_mod-9328.png",
       "answer": "MJ"
     },
